@@ -1,10 +1,13 @@
 
 import { useState } from 'react';
 import { MenuItem, Menu } from '../types/client';
+import { supabase } from '../integrations/supabase/client';
+import { useToast } from '@/components/ui/use-toast';
 
 export const useMenuAI = () => {
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { toast } = useToast();
 
   const generateMenu = async (
     clientId: string,
@@ -16,58 +19,47 @@ export const useMenuAI = () => {
     setError(null);
 
     try {
-      // Simulate AI menu generation
-      await new Promise(resolve => setTimeout(resolve, 2000));
-
-      const mockItems: MenuItem[] = [
-        {
-          id: '1',
-          name: 'Frango Grelhado com Quinoa',
-          category: 'protein',
-          nutritionalInfo: { calories: 450, protein: 35, carbs: 25, fat: 12 },
-          cost: 8.50,
-          restrictions: []
-        },
-        {
-          id: '2',
-          name: 'Salmão com Batata Doce',
-          category: 'protein',
-          nutritionalInfo: { calories: 520, protein: 38, carbs: 30, fat: 18 },
-          cost: 12.00,
-          restrictions: []
-        },
-        {
-          id: '3',
-          name: 'Salada Vegana Completa',
-          category: 'vegetable',
-          nutritionalInfo: { calories: 320, protein: 15, carbs: 28, fat: 16 },
-          cost: 6.50,
-          restrictions: ['vegan', 'gluten-free']
+      console.log('Generating menu with GPT Assistant...');
+      
+      const { data, error: functionError } = await supabase.functions.invoke('gpt-assistant', {
+        body: {
+          action: 'generateMenu',
+          clientId,
+          budget,
+          restrictions,
+          preferences
         }
-      ];
+      });
 
-      const filteredItems = restrictions.includes('vegan') 
-        ? mockItems.filter(item => item.restrictions.includes('vegan'))
-        : mockItems;
+      if (functionError) {
+        console.error('Function error:', functionError);
+        throw new Error(functionError.message || 'Erro ao gerar cardápio');
+      }
 
-      const menu: Menu = {
-        id: Date.now().toString(),
-        clientId,
-        name: `Cardápio ${new Date().toLocaleDateString()}`,
-        week: new Date().toISOString().split('T')[0],
-        items: filteredItems,
-        totalCost: filteredItems.reduce((sum, item) => sum + item.cost, 0),
-        createdAt: new Date().toISOString(),
-        versions: {
-          nutritionist: filteredItems,
-          kitchen: filteredItems.map(item => ({ ...item, name: `${item.name} (Preparo: 20min)` })),
-          client: filteredItems.map(item => ({ ...item, name: item.name.split(' ')[0] + ' Especial' }))
-        }
-      };
+      if (!data.success) {
+        throw new Error(data.error || 'Erro na geração do cardápio');
+      }
 
-      return menu;
+      console.log('Menu generated successfully:', data.menu);
+      
+      toast({
+        title: "Cardápio Gerado!",
+        description: "Cardápio criado com sucesso usando IA",
+      });
+
+      return data.menu;
+
     } catch (err) {
-      setError('Erro ao gerar cardápio. Tente novamente.');
+      console.error('Error generating menu:', err);
+      const errorMessage = err instanceof Error ? err.message : 'Erro ao gerar cardápio. Tente novamente.';
+      setError(errorMessage);
+      
+      toast({
+        title: "Erro na Geração",
+        description: errorMessage,
+        variant: "destructive"
+      });
+
       return null;
     } finally {
       setIsGenerating(false);
@@ -76,14 +68,92 @@ export const useMenuAI = () => {
 
   const editMenuWithNLP = async (menuId: string, command: string): Promise<boolean> => {
     setIsGenerating(true);
+    setError(null);
     
     try {
-      // Simulate NLP processing
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      console.log(`Processing command: ${command} for menu ${menuId}`);
+      console.log(`Processing NLP command: ${command}`);
+      
+      const { data, error: functionError } = await supabase.functions.invoke('gpt-assistant', {
+        body: {
+          action: 'editMenu',
+          menuId,
+          command
+        }
+      });
+
+      if (functionError) {
+        throw new Error(functionError.message || 'Erro ao processar comando');
+      }
+
+      if (!data.success) {
+        throw new Error(data.error || 'Erro no processamento');
+      }
+
+      console.log('Command processed successfully:', data.response);
+      
+      toast({
+        title: "Comando Processado!",
+        description: "Modificação aplicada com sucesso",
+      });
+
       return true;
+
     } catch (err) {
-      setError('Erro ao processar comando. Tente novamente.');
+      console.error('Error processing NLP command:', err);
+      const errorMessage = err instanceof Error ? err.message : 'Erro ao processar comando. Tente novamente.';
+      setError(errorMessage);
+      
+      toast({
+        title: "Erro no Processamento",
+        description: errorMessage,
+        variant: "destructive"
+      });
+
+      return false;
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  const syncLegacyData = async (operation: 'all' | 'produtos' | 'receitas' | 'clientes' = 'all'): Promise<boolean> => {
+    setIsGenerating(true);
+    setError(null);
+
+    try {
+      console.log(`Starting sync operation: ${operation}`);
+      
+      const { data, error: functionError } = await supabase.functions.invoke('sync-legacy-db', {
+        body: { operation }
+      });
+
+      if (functionError) {
+        throw new Error(functionError.message || 'Erro na sincronização');
+      }
+
+      if (!data.success) {
+        throw new Error(data.error || 'Erro na sincronização');
+      }
+
+      console.log('Sync completed:', data);
+      
+      toast({
+        title: "Sincronização Concluída!",
+        description: `${data.processedRecords} registros processados em ${data.executionTime}`,
+      });
+
+      return true;
+
+    } catch (err) {
+      console.error('Error syncing legacy data:', err);
+      const errorMessage = err instanceof Error ? err.message : 'Erro na sincronização. Tente novamente.';
+      setError(errorMessage);
+      
+      toast({
+        title: "Erro na Sincronização",
+        description: errorMessage,
+        variant: "destructive"
+      });
+
       return false;
     } finally {
       setIsGenerating(false);
@@ -93,6 +163,7 @@ export const useMenuAI = () => {
   return {
     generateMenu,
     editMenuWithNLP,
+    syncLegacyData,
     isGenerating,
     error
   };
