@@ -6,7 +6,8 @@ import {
   ShoppingCart, 
   BarChart3, 
   Settings,
-  Brain
+  Brain,
+  Network
 } from 'lucide-react';
 
 const Sidebar = () => {
@@ -15,6 +16,7 @@ const Sidebar = () => {
     { path: '/cardapios', icon: ChefHat, label: 'Cardápios' },
     { path: '/compras', icon: ShoppingCart, label: 'Lista de Compras' },
     { path: '/relatorios', icon: BarChart3, label: 'Relatórios' },
+    { path: '/arquitetura', icon: Network, label: 'Arquitetura' },
     { path: '/configuracoes', icon: Settings, label: 'Configurações' }
   ];
 
