@@ -47,5 +47,8 @@ verify_jwt = false
 [functions.sync-legacy-db]
 verify_jwt = false
 
+[functions.discover-legacy-schema]
+verify_jwt = false
+
 [edge-runtime]
 inspector_port = 8083
