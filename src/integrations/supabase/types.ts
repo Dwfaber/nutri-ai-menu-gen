@@ -14,7 +14,168 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      contratos_corporativos: {
+        Row: {
+          ativo: boolean
+          cliente_id_legado: string
+          created_at: string
+          custo_maximo_refeicao: number
+          id: string
+          nome_empresa: string
+          periodicidade: string
+          restricoes_alimentares: string[] | null
+          sync_at: string
+          total_funcionarios: number
+          total_refeicoes_mes: number
+        }
+        Insert: {
+          ativo?: boolean
+          cliente_id_legado: string
+          created_at?: string
+          custo_maximo_refeicao?: number
+          id?: string
+          nome_empresa: string
+          periodicidade?: string
+          restricoes_alimentares?: string[] | null
+          sync_at?: string
+          total_funcionarios?: number
+          total_refeicoes_mes?: number
+        }
+        Update: {
+          ativo?: boolean
+          cliente_id_legado?: string
+          created_at?: string
+          custo_maximo_refeicao?: number
+          id?: string
+          nome_empresa?: string
+          periodicidade?: string
+          restricoes_alimentares?: string[] | null
+          sync_at?: string
+          total_funcionarios?: number
+          total_refeicoes_mes?: number
+        }
+        Relationships: []
+      }
+      produtos_legado: {
+        Row: {
+          categoria: string
+          created_at: string
+          disponivel: boolean
+          id: string
+          nome: string
+          peso_unitario: number
+          preco_unitario: number
+          produto_id_legado: string
+          sync_at: string
+          unidade: string
+        }
+        Insert: {
+          categoria: string
+          created_at?: string
+          disponivel?: boolean
+          id?: string
+          nome: string
+          peso_unitario?: number
+          preco_unitario?: number
+          produto_id_legado: string
+          sync_at?: string
+          unidade: string
+        }
+        Update: {
+          categoria?: string
+          created_at?: string
+          disponivel?: boolean
+          id?: string
+          nome?: string
+          peso_unitario?: number
+          preco_unitario?: number
+          produto_id_legado?: string
+          sync_at?: string
+          unidade?: string
+        }
+        Relationships: []
+      }
+      receitas_legado: {
+        Row: {
+          categoria_receita: string | null
+          created_at: string
+          custo_total: number | null
+          id: string
+          ingredientes: Json
+          modo_preparo: string | null
+          nome_receita: string
+          porcoes: number | null
+          receita_id_legado: string
+          sync_at: string
+          tempo_preparo: number | null
+        }
+        Insert: {
+          categoria_receita?: string | null
+          created_at?: string
+          custo_total?: number | null
+          id?: string
+          ingredientes?: Json
+          modo_preparo?: string | null
+          nome_receita: string
+          porcoes?: number | null
+          receita_id_legado: string
+          sync_at?: string
+          tempo_preparo?: number | null
+        }
+        Update: {
+          categoria_receita?: string | null
+          created_at?: string
+          custo_total?: number | null
+          id?: string
+          ingredientes?: Json
+          modo_preparo?: string | null
+          nome_receita?: string
+          porcoes?: number | null
+          receita_id_legado?: string
+          sync_at?: string
+          tempo_preparo?: number | null
+        }
+        Relationships: []
+      }
+      sync_logs: {
+        Row: {
+          created_at: string
+          detalhes: Json | null
+          erro_msg: string | null
+          id: string
+          operacao: string
+          registros_processados: number | null
+          status: string
+          tabela_destino: string
+          tempo_execucao_ms: number | null
+          ultima_sync: string
+        }
+        Insert: {
+          created_at?: string
+          detalhes?: Json | null
+          erro_msg?: string | null
+          id?: string
+          operacao?: string
+          registros_processados?: number | null
+          status?: string
+          tabela_destino: string
+          tempo_execucao_ms?: number | null
+          ultima_sync?: string
+        }
+        Update: {
+          created_at?: string
+          detalhes?: Json | null
+          erro_msg?: string | null
+          id?: string
+          operacao?: string
+          registros_processados?: number | null
+          status?: string
+          tabela_destino?: string
+          tempo_execucao_ms?: number | null
+          ultima_sync?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
