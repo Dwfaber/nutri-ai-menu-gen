@@ -1,3 +1,4 @@
+
 import { useState } from 'react';
 import { Plus, Search, Filter, Database } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -15,49 +16,15 @@ const Cardapios = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [generatedMenu, setGeneratedMenu] = useState<Menu | null>(null);
+  const [menus, setMenus] = useState<Menu[]>([]);
+  const [clients, setClients] = useState<Client[]>([]);
   const { generateMenu, editMenuWithNLP, isGenerating, error } = useMenuAI();
-
-  // Mock data
-  const mockMenus: Menu[] = [
-    {
-      id: '1',
-      clientId: '1',
-      name: 'Cardápio Semanal - Tech Corp',
-      week: '2024-01-15',
-      items: [],
-      totalCost: 2450.00,
-      createdAt: '2024-01-10',
-      versions: { nutritionist: [], kitchen: [], client: [] }
-    },
-    {
-      id: '2',
-      clientId: '2',
-      name: 'Cardápio Especial - StartupXYZ',
-      week: '2024-01-15',
-      items: [],
-      totalCost: 1890.50,
-      createdAt: '2024-01-12',
-      versions: { nutritionist: [], kitchen: [], client: [] }
-    }
-  ];
-
-  const mockClients: Client[] = [
-    {
-      id: '1',
-      name: 'Tech Corp',
-      budget: 5000,
-      employees: 150,
-      restrictions: ['vegetarian-options'],
-      active: true,
-      contractStart: '2024-01-01',
-      contractEnd: '2024-12-31'
-    }
-  ];
 
   const handleCreateMenu = async (clientId: string, budget: number, restrictions: string[], preferences?: string) => {
     const menu = await generateMenu(clientId, budget, restrictions, preferences);
     if (menu) {
       setGeneratedMenu(menu);
+      setMenus([...menus, menu]);
       setShowCreateForm(false);
     }
   };
@@ -78,6 +45,7 @@ const Cardapios = () => {
         <Button 
           onClick={() => setShowCreateForm(true)}
           className="bg-green-600 hover:bg-green-700"
+          disabled={clients.length === 0}
         >
           <Plus className="w-4 h-4 mr-2" />
           Novo Cardápio
@@ -107,7 +75,7 @@ const Cardapios = () => {
             </Button>
           </div>
 
-          {showCreateForm && (
+          {showCreateForm && clients.length > 0 && (
             <Card>
               <CardHeader>
                 <CardTitle>Criar Novo Cardápio com IA</CardTitle>
@@ -118,7 +86,7 @@ const Cardapios = () => {
                     Cliente
                   </label>
                   <select className="w-full p-2 border border-gray-300 rounded-md">
-                    {mockClients.map(client => (
+                    {clients.map(client => (
                       <option key={client.id} value={client.id}>
                         {client.name} - R$ {client.budget}
                       </option>
@@ -156,7 +124,7 @@ const Cardapios = () => {
 
                 <div className="flex space-x-2">
                   <Button 
-                    onClick={() => handleCreateMenu('1', 15.00, ['vegetarian-options'], 'comida caseira')}
+                    onClick={() => handleCreateMenu(clients[0]?.id || '', 15.00, ['vegetarian-options'], 'comida caseira')}
                     disabled={isGenerating}
                     className="bg-green-600 hover:bg-green-700"
                   >
@@ -199,46 +167,68 @@ const Cardapios = () => {
             </Card>
           )}
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {mockMenus.map((menu) => (
-              <Card key={menu.id} className="hover:shadow-md transition-shadow cursor-pointer">
-                <CardHeader>
-                  <div className="flex justify-between items-start">
-                    <CardTitle className="text-lg">{menu.name}</CardTitle>
-                    <Badge variant="outline" className="text-green-600">
-                      Ativo
-                    </Badge>
-                  </div>
-                  <p className="text-sm text-gray-600">
-                    Semana de {new Date(menu.week).toLocaleDateString()}
-                  </p>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-3">
-                    <div className="flex justify-between items-center">
-                      <span className="text-sm text-gray-600">Custo Total</span>
-                      <span className="font-medium">R$ {menu.totalCost.toFixed(2)}</span>
+          {menus.length === 0 && !generatedMenu && (
+            <Card>
+              <CardContent className="p-8 text-center text-gray-500">
+                <Database className="w-12 h-12 mx-auto mb-4 text-gray-300" />
+                <p className="text-lg font-medium mb-2">Nenhum cardápio encontrado</p>
+                <p className="text-sm mb-4">
+                  {clients.length === 0 
+                    ? 'Sincronize os dados do sistema legado para começar' 
+                    : 'Crie seu primeiro cardápio com IA'
+                  }
+                </p>
+                {clients.length === 0 && (
+                  <Button variant="outline" onClick={() => window.location.hash = '#sync'}>
+                    Ir para Sincronização
+                  </Button>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          {menus.length > 0 && (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {menus.map((menu) => (
+                <Card key={menu.id} className="hover:shadow-md transition-shadow cursor-pointer">
+                  <CardHeader>
+                    <div className="flex justify-between items-start">
+                      <CardTitle className="text-lg">{menu.name}</CardTitle>
+                      <Badge variant="outline" className="text-green-600">
+                        Ativo
+                      </Badge>
                     </div>
-                    <div className="flex justify-between items-center">
-                      <span className="text-sm text-gray-600">Criado em</span>
-                      <span className="text-sm">{new Date(menu.createdAt).toLocaleDateString()}</span>
+                    <p className="text-sm text-gray-600">
+                      Semana de {new Date(menu.week).toLocaleDateString()}
+                    </p>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-3">
+                      <div className="flex justify-between items-center">
+                        <span className="text-sm text-gray-600">Custo Total</span>
+                        <span className="font-medium">R$ {menu.totalCost.toFixed(2)}</span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-sm text-gray-600">Criado em</span>
+                        <span className="text-sm">{new Date(menu.createdAt).toLocaleDateString()}</span>
+                      </div>
+                      <div className="flex space-x-2 pt-2">
+                        <Button variant="outline" size="sm">
+                          Editar
+                        </Button>
+                        <Button variant="outline" size="sm">
+                          Exportar
+                        </Button>
+                        <Button variant="outline" size="sm">
+                          Duplicar
+                        </Button>
+                      </div>
                     </div>
-                    <div className="flex space-x-2 pt-2">
-                      <Button variant="outline" size="sm">
-                        Editar
-                      </Button>
-                      <Button variant="outline" size="sm">
-                        Exportar
-                      </Button>
-                      <Button variant="outline" size="sm">
-                        Duplicar
-                      </Button>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
         </TabsContent>
         
         <TabsContent value="sync">

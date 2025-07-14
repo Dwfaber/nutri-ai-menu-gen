@@ -12,45 +12,10 @@ import { ShoppingListItem } from '../types/client';
 
 const Compras = () => {
   const [searchTerm, setSearchTerm] = useState('');
-  
-  // Mock data - será substituído por dados reais
-  const mockShoppingItems: ShoppingListItem[] = [
-    {
-      ingredient: 'Frango Peito s/ Osso',
-      quantity: 25,
-      unit: 'kg',
-      cost: 312.50,
-      supplier: 'Distribuidora São Paulo',
-      alternatives: ['Frango Inteiro', 'Frango Coxa']
-    },
-    {
-      ingredient: 'Arroz Integral',
-      quantity: 15,
-      unit: 'kg',
-      cost: 72.00,
-      supplier: 'Distribuidora São Paulo',
-      alternatives: ['Arroz Branco', 'Arroz Parboilizado']
-    },
-    {
-      ingredient: 'Brócolis Congelado',
-      quantity: 8,
-      unit: 'kg',
-      cost: 71.20,
-      supplier: 'Verde Campo Ltda',
-      alternatives: ['Brócolis Fresh', 'Couve-flor']
-    },
-    {
-      ingredient: 'Óleo de Girassol',
-      quantity: 2,
-      unit: 'l',
-      cost: 18.90,
-      supplier: 'Verde Campo Ltda',
-      alternatives: ['Óleo de Soja', 'Óleo de Canola']
-    }
-  ];
+  const [shoppingItems, setShoppingItems] = useState<ShoppingListItem[]>([]);
 
   // Agrupar por fornecedor
-  const groupedBySupplier = mockShoppingItems.reduce((acc, item) => {
+  const groupedBySupplier = shoppingItems.reduce((acc, item) => {
     if (!acc[item.supplier]) {
       acc[item.supplier] = [];
     }
@@ -58,7 +23,7 @@ const Compras = () => {
     return acc;
   }, {} as Record<string, ShoppingListItem[]>);
 
-  const totalCost = mockShoppingItems.reduce((sum, item) => sum + item.cost, 0);
+  const totalCost = shoppingItems.reduce((sum, item) => sum + item.cost, 0);
 
   const handleItemUpdate = (item: ShoppingListItem) => {
     console.log('Item updated:', item);
@@ -93,7 +58,7 @@ const Compras = () => {
                   <ShoppingCart className="w-5 h-5 text-green-600" />
                   <div>
                     <p className="text-sm font-medium text-gray-600">Total de Itens</p>
-                    <p className="text-2xl font-bold">{mockShoppingItems.length}</p>
+                    <p className="text-2xl font-bold">{shoppingItems.length}</p>
                   </div>
                 </div>
               </CardContent>
@@ -122,7 +87,7 @@ const Compras = () => {
                 <div>
                   <p className="text-sm font-medium text-gray-600">Status</p>
                   <Badge variant="outline" className="mt-1 text-amber-600">
-                    Pendente
+                    {shoppingItems.length > 0 ? 'Ativo' : 'Vazio'}
                   </Badge>
                 </div>
               </CardContent>
@@ -149,37 +114,49 @@ const Compras = () => {
           {/* Lista agrupada por fornecedor */}
           <div className="space-y-4">
             <h3 className="text-lg font-semibold">Lista de Compras por Fornecedor</h3>
-            {Object.entries(groupedBySupplier).map(([supplier, items]) => (
-              <SupplierGroup
-                key={supplier}
-                supplier={supplier}
-                items={items}
-                onItemUpdate={handleItemUpdate}
-              />
-            ))}
+            {Object.keys(groupedBySupplier).length === 0 ? (
+              <Card>
+                <CardContent className="p-8 text-center text-gray-500">
+                  <ShoppingCart className="w-12 h-12 mx-auto mb-4 text-gray-300" />
+                  <p className="text-lg font-medium mb-2">Nenhum item na lista de compras</p>
+                  <p className="text-sm">Use a aba "Adaptação do Sistema" para sincronizar dados do sistema legado</p>
+                </CardContent>
+              </Card>
+            ) : (
+              Object.entries(groupedBySupplier).map(([supplier, items]) => (
+                <SupplierGroup
+                  key={supplier}
+                  supplier={supplier}
+                  items={items}
+                  onItemUpdate={handleItemUpdate}
+                />
+              ))
+            )}
           </div>
 
           {/* Ações */}
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex justify-between items-center">
-                <div>
-                  <h4 className="font-medium">Finalizar Compras</h4>
-                  <p className="text-sm text-gray-600">
-                    Total: R$ {totalCost.toFixed(2)} | {mockShoppingItems.length} itens
-                  </p>
+          {shoppingItems.length > 0 && (
+            <Card>
+              <CardContent className="p-4">
+                <div className="flex justify-between items-center">
+                  <div>
+                    <h4 className="font-medium">Finalizar Compras</h4>
+                    <p className="text-sm text-gray-600">
+                      Total: R$ {totalCost.toFixed(2)} | {shoppingItems.length} itens
+                    </p>
+                  </div>
+                  <div className="space-x-2">
+                    <Button variant="outline">
+                      Exportar PDF
+                    </Button>
+                    <Button className="bg-green-600 hover:bg-green-700">
+                      Enviar para Fornecedores
+                    </Button>
+                  </div>
                 </div>
-                <div className="space-x-2">
-                  <Button variant="outline">
-                    Exportar PDF
-                  </Button>
-                  <Button className="bg-green-600 hover:bg-green-700">
-                    Enviar para Fornecedores
-                  </Button>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+          )}
         </TabsContent>
         
         <TabsContent value="adaptation">
