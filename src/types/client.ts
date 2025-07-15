@@ -48,6 +48,31 @@ export interface ShoppingListItem {
   alternatives?: string[];
 }
 
+export interface DatabaseShoppingList {
+  id: string;
+  menu_id: string;
+  client_name: string;
+  status: 'pending' | 'budget_ok' | 'budget_exceeded' | 'finalized';
+  budget_predicted: number;
+  cost_actual: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DatabaseShoppingListItem {
+  id: string;
+  shopping_list_id: string;
+  product_id_legado: string;
+  product_name: string;
+  category: string;
+  quantity: number;
+  unit: string;
+  unit_price: number;
+  total_price: number;
+  available: boolean;
+  created_at: string;
+}
+
 export interface Report {
   id: string;
   clientId: string;

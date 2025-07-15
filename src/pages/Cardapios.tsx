@@ -1,12 +1,12 @@
-
-import { useState } from 'react';
-import { Plus, Search, Filter, Database } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Plus, Search, Filter, Database, ShoppingCart, DollarSign } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useMenuAI } from '../hooks/useMenuAI';
+import { useShoppingList } from '../hooks/useShoppingList';
 import { Client, Menu } from '../types/client';
 import SyncMonitor from '../components/SyncMonitor/SyncMonitor';
 import NLPInput from '../components/MenuGenerator/NLPInput';
@@ -18,7 +18,26 @@ const Cardapios = () => {
   const [generatedMenu, setGeneratedMenu] = useState<Menu | null>(null);
   const [menus, setMenus] = useState<Menu[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
+  const [selectedMenuForShopping, setSelectedMenuForShopping] = useState<string | null>(null);
+  
   const { generateMenu, editMenuWithNLP, isGenerating, error } = useMenuAI();
+  const { createFromMenu, isLoading: isCreatingList } = useShoppingList();
+
+  useEffect(() => {
+    // Mock clients data - in real implementation, fetch from Supabase
+    setClients([
+      {
+        id: 'client-1',
+        name: 'Empresa ABC Ltda',
+        budget: 18.50,
+        employees: 150,
+        restrictions: ['vegetarian-options'],
+        active: true,
+        contractStart: '2025-01-01',
+        contractEnd: '2025-12-31'
+      }
+    ]);
+  }, []);
 
   const handleCreateMenu = async (clientId: string, budget: number, restrictions: string[], preferences?: string) => {
     const menu = await generateMenu(clientId, budget, restrictions, preferences);
@@ -32,6 +51,43 @@ const Cardapios = () => {
   const handleNLPCommand = async (command: string) => {
     if (generatedMenu) {
       await editMenuWithNLP(generatedMenu.id, command);
+    }
+  };
+
+  const handleGenerateShoppingList = async (menu: Menu) => {
+    setSelectedMenuForShopping(menu.id);
+    
+    const client = clients.find(c => c.id === menu.clientId);
+    if (!client) {
+      console.error('Client not found for menu');
+      return;
+    }
+
+    await createFromMenu(menu.id, client.name, menu.totalCost);
+    setSelectedMenuForShopping(null);
+  };
+
+  const getBudgetStatus = (menu: Menu) => {
+    const client = clients.find(c => c.id === menu.clientId);
+    if (!client) return 'unknown';
+    
+    const budgetPercentage = (menu.totalCost / client.budget) * 100;
+    
+    if (budgetPercentage <= 90) return 'good';
+    if (budgetPercentage <= 100) return 'warning';
+    return 'exceeded';
+  };
+
+  const getBudgetBadge = (status: string) => {
+    switch (status) {
+      case 'good':
+        return <Badge className="bg-green-100 text-green-800">Dentro do Orçamento</Badge>;
+      case 'warning':
+        return <Badge className="bg-yellow-100 text-yellow-800">Próximo do Limite</Badge>;
+      case 'exceeded':
+        return <Badge className="bg-red-100 text-red-800">Orçamento Excedido</Badge>;
+      default:
+        return <Badge variant="outline">Status Desconhecido</Badge>;
     }
   };
 
@@ -148,7 +204,26 @@ const Cardapios = () => {
           {generatedMenu && (
             <Card>
               <CardHeader>
-                <CardTitle>Cardápio Gerado - {generatedMenu.name}</CardTitle>
+                <div className="flex justify-between items-start">
+                  <div>
+                    <CardTitle>Cardápio Gerado - {generatedMenu.name}</CardTitle>
+                    <div className="flex items-center space-x-2 mt-2">
+                      {getBudgetBadge(getBudgetStatus(generatedMenu))}
+                      <Badge variant="outline" className="text-green-600">
+                        <DollarSign className="w-3 h-3 mr-1" />
+                        R$ {generatedMenu.totalCost.toFixed(2)}
+                      </Badge>
+                    </div>
+                  </div>
+                  <Button
+                    onClick={() => handleGenerateShoppingList(generatedMenu)}
+                    disabled={isCreatingList || selectedMenuForShopping === generatedMenu.id}
+                    className="bg-blue-600 hover:bg-blue-700"
+                  >
+                    <ShoppingCart className="w-4 h-4 mr-2" />
+                    {selectedMenuForShopping === generatedMenu.id ? 'Gerando Lista...' : 'Gerar Lista de Compras'}
+                  </Button>
+                </div>
               </CardHeader>
               <CardContent className="space-y-6">
                 <PreviewTabs menu={generatedMenu} />
@@ -189,44 +264,58 @@ const Cardapios = () => {
 
           {menus.length > 0 && (
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {menus.map((menu) => (
-                <Card key={menu.id} className="hover:shadow-md transition-shadow cursor-pointer">
-                  <CardHeader>
-                    <div className="flex justify-between items-start">
-                      <CardTitle className="text-lg">{menu.name}</CardTitle>
-                      <Badge variant="outline" className="text-green-600">
-                        Ativo
-                      </Badge>
-                    </div>
-                    <p className="text-sm text-gray-600">
-                      Semana de {new Date(menu.week).toLocaleDateString()}
-                    </p>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-3">
-                      <div className="flex justify-between items-center">
-                        <span className="text-sm text-gray-600">Custo Total</span>
-                        <span className="font-medium">R$ {menu.totalCost.toFixed(2)}</span>
-                      </div>
-                      <div className="flex justify-between items-center">
-                        <span className="text-sm text-gray-600">Criado em</span>
-                        <span className="text-sm">{new Date(menu.createdAt).toLocaleDateString()}</span>
-                      </div>
-                      <div className="flex space-x-2 pt-2">
-                        <Button variant="outline" size="sm">
-                          Editar
-                        </Button>
-                        <Button variant="outline" size="sm">
-                          Exportar
-                        </Button>
-                        <Button variant="outline" size="sm">
-                          Duplicar
+              {menus.map((menu) => {
+                const budgetStatus = getBudgetStatus(menu);
+                return (
+                  <Card key={menu.id} className="hover:shadow-md transition-shadow">
+                    <CardHeader>
+                      <div className="flex justify-between items-start">
+                        <div className="flex-1">
+                          <CardTitle className="text-lg">{menu.name}</CardTitle>
+                          <p className="text-sm text-gray-600 mb-2">
+                            Semana de {new Date(menu.week).toLocaleDateString()}
+                          </p>
+                          <div className="flex items-center space-x-2">
+                            {getBudgetBadge(budgetStatus)}
+                          </div>
+                        </div>
+                        <Button
+                          size="sm"
+                          onClick={() => handleGenerateShoppingList(menu)}
+                          disabled={isCreatingList || selectedMenuForShopping === menu.id}
+                          className="bg-blue-600 hover:bg-blue-700"
+                        >
+                          <ShoppingCart className="w-3 h-3 mr-1" />
+                          {selectedMenuForShopping === menu.id ? 'Gerando...' : 'Lista'}
                         </Button>
                       </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-3">
+                        <div className="flex justify-between items-center">
+                          <span className="text-sm text-gray-600">Custo Total</span>
+                          <span className="font-medium">R$ {menu.totalCost.toFixed(2)}</span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span className="text-sm text-gray-600">Criado em</span>
+                          <span className="text-sm">{new Date(menu.createdAt).toLocaleDateString()}</span>
+                        </div>
+                        <div className="flex space-x-2 pt-2">
+                          <Button variant="outline" size="sm">
+                            Editar
+                          </Button>
+                          <Button variant="outline" size="sm">
+                            Exportar
+                          </Button>
+                          <Button variant="outline" size="sm">
+                            Duplicar
+                          </Button>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })}
             </div>
           )}
         </TabsContent>

@@ -137,6 +137,89 @@ export type Database = {
         }
         Relationships: []
       }
+      shopping_list_items: {
+        Row: {
+          available: boolean
+          category: string
+          created_at: string
+          id: string
+          product_id_legado: string
+          product_name: string
+          quantity: number
+          shopping_list_id: string
+          total_price: number
+          unit: string
+          unit_price: number
+        }
+        Insert: {
+          available?: boolean
+          category: string
+          created_at?: string
+          id?: string
+          product_id_legado: string
+          product_name: string
+          quantity: number
+          shopping_list_id: string
+          total_price?: number
+          unit: string
+          unit_price?: number
+        }
+        Update: {
+          available?: boolean
+          category?: string
+          created_at?: string
+          id?: string
+          product_id_legado?: string
+          product_name?: string
+          quantity?: number
+          shopping_list_id?: string
+          total_price?: number
+          unit?: string
+          unit_price?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "shopping_list_items_shopping_list_id_fkey"
+            columns: ["shopping_list_id"]
+            isOneToOne: false
+            referencedRelation: "shopping_lists"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      shopping_lists: {
+        Row: {
+          budget_predicted: number
+          client_name: string
+          cost_actual: number | null
+          created_at: string
+          id: string
+          menu_id: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          budget_predicted?: number
+          client_name: string
+          cost_actual?: number | null
+          created_at?: string
+          id?: string
+          menu_id: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          budget_predicted?: number
+          client_name?: string
+          cost_actual?: number | null
+          created_at?: string
+          id?: string
+          menu_id?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       sync_logs: {
         Row: {
           created_at: string
