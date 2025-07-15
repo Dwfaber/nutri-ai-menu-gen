@@ -123,11 +123,24 @@ export const useShoppingList = () => {
 
   const updateItemQuantity = async (itemId: string, quantity: number) => {
     try {
+      // First get the current item to calculate the new total
+      const { data: currentItem, error: fetchError } = await supabase
+        .from('shopping_list_items')
+        .select('unit_price')
+        .eq('id', itemId)
+        .single();
+
+      if (fetchError) {
+        throw fetchError;
+      }
+
+      const totalPrice = quantity * currentItem.unit_price;
+
       const { error } = await supabase
         .from('shopping_list_items')
         .update({ 
           quantity,
-          total_price: supabase.sql`quantity * unit_price`
+          total_price: totalPrice
         })
         .eq('id', itemId);
 
