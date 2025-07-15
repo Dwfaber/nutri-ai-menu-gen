@@ -3,223 +3,233 @@ import { useState } from 'react';
 import { supabase } from '../integrations/supabase/client';
 import { useToast } from '@/components/ui/use-toast';
 
-interface SchemaInfo {
-  tables: Array<{
-    name: string;
-    columns: Array<{
-      name: string;
-      type: string;
-      nullable: boolean;
-      length?: number;
-      precision?: number;
-      scale?: number;
-    }>;
-  }>;
-  relationships: Array<{
-    fromTable: string;
-    fromColumn: string;
-    toTable: string;
-    toColumn: string;
-  }>;
+interface ViewInfo {
+  name: string;
+  description: string;
+  status: 'pending' | 'synced' | 'error';
+  lastSync?: string;
+  recordCount?: number;
 }
 
-interface TableMapping {
-  [key: string]: {
-    legacyTable: string;
-    supabaseTable: string;
-    columnMapping: { [key: string]: string };
-  };
+interface LegacyViews {
+  vwCoSolicitacaoFilialCusto: ViewInfo;
+  vwCoSolicitacaoProdutoListagem: ViewInfo;
+  vwCpReceita: ViewInfo;
+  vwCpReceitaProduto: ViewInfo;
+  vwEstProdutoBase: ViewInfo;
+  vwOrFiliaisAtiva: ViewInfo;
 }
 
-interface CodeAdaptation {
-  productCodeFormat: {
-    pattern: RegExp;
-    examples: string[];
-    description: string;
-  };
-  categoryMapping: { [key: string]: { name: string; group: string } };
-  unitMapping: { [key: string]: string };
-  priceCalculation: {
-    defaultMargin: number;
-    bulkDiscounts: {
-      minQuantity: number;
-      discountPercent: number;
-    };
-  };
+interface SyncProgress {
+  currentView: string;
+  totalViews: number;
+  completedViews: number;
+  isProcessing: boolean;
 }
 
 export const useLegacyAdaptation = () => {
   const [isProcessing, setIsProcessing] = useState(false);
-  const [schemaInfo, setSchemaInfo] = useState<SchemaInfo | null>(null);
-  const [tableMapping, setTableMapping] = useState<TableMapping | null>(null);
-  const [codeAdaptation, setCodeAdaptation] = useState<CodeAdaptation | null>(null);
+  const [syncProgress, setSyncProgress] = useState<SyncProgress>({
+    currentView: '',
+    totalViews: 6,
+    completedViews: 0,
+    isProcessing: false
+  });
+  
+  const [viewsStatus, setViewsStatus] = useState<LegacyViews>({
+    vwCoSolicitacaoFilialCusto: {
+      name: 'Custos por Filial',
+      description: 'Dados de custos e orçamento por filial',
+      status: 'pending'
+    },
+    vwCoSolicitacaoProdutoListagem: {
+      name: 'Produtos Solicitados',
+      description: 'Lista de produtos e solicitações',
+      status: 'pending'
+    },
+    vwCpReceita: {
+      name: 'Receitas',
+      description: 'Receitas e preparações cadastradas',
+      status: 'pending'
+    },
+    vwCpReceitaProduto: {
+      name: 'Ingredientes das Receitas',
+      description: 'Produtos utilizados em cada receita',
+      status: 'pending'
+    },
+    vwEstProdutoBase: {
+      name: 'Produtos Base',
+      description: 'Estoque e informações básicas dos produtos',
+      status: 'pending'
+    },
+    vwOrFiliaisAtiva: {
+      name: 'Filiais Ativas',
+      description: 'Filiais ativas e suas configurações',
+      status: 'pending'
+    }
+  });
+
   const { toast } = useToast();
 
-  const discoverSchema = async (): Promise<boolean> => {
-    setIsProcessing(true);
-    
+  const syncSpecificView = async (viewName: string): Promise<boolean> => {
     try {
-      console.log('Descobrindo estrutura do banco legado...');
+      console.log(`Sincronizando view: ${viewName}`);
       
-      const { data, error: functionError } = await supabase.functions.invoke('discover-legacy-schema', {
-        body: { action: 'discoverSchema' }
+      setSyncProgress(prev => ({
+        ...prev,
+        currentView: viewName,
+        isProcessing: true
+      }));
+
+      const { data, error } = await supabase.functions.invoke('sync-legacy-views', {
+        body: { viewName }
       });
 
-      if (functionError) {
-        throw new Error(functionError.message || 'Erro na descoberta do schema');
+      if (error) {
+        throw new Error(error.message);
       }
 
       if (!data.success) {
-        throw new Error(data.error || 'Erro na descoberta do schema');
+        throw new Error(data.error || 'Erro na sincronização');
       }
 
-      setSchemaInfo(data.schema);
-      
-      toast({
-        title: "Schema Descoberto!",
-        description: `${data.schema.tables.length} tabelas encontradas e mapeadas`,
-      });
+      // Atualizar status da view
+      setViewsStatus(prev => ({
+        ...prev,
+        [viewName]: {
+          ...prev[viewName as keyof LegacyViews],
+          status: 'synced',
+          lastSync: new Date().toISOString(),
+          recordCount: data.recordCount
+        }
+      }));
+
+      setSyncProgress(prev => ({
+        ...prev,
+        completedViews: prev.completedViews + 1
+      }));
 
       return true;
 
     } catch (err) {
-      console.error('Error discovering schema:', err);
-      const errorMessage = err instanceof Error ? err.message : 'Erro ao descobrir estrutura do banco.';
+      console.error(`Erro ao sincronizar ${viewName}:`, err);
       
+      setViewsStatus(prev => ({
+        ...prev,
+        [viewName]: {
+          ...prev[viewName as keyof LegacyViews],
+          status: 'error'
+        }
+      }));
+
+      const errorMessage = err instanceof Error ? err.message : 'Erro na sincronização';
       toast({
-        title: "Erro na Descoberta",
+        title: `Erro em ${viewName}`,
         description: errorMessage,
         variant: "destructive"
       });
 
       return false;
-    } finally {
-      setIsProcessing(false);
     }
   };
 
-  const mapTables = async (): Promise<boolean> => {
+  const syncAllViews = async (): Promise<boolean> => {
     setIsProcessing(true);
-    
-    try {
-      console.log('Mapeando tabelas legadas...');
-      
-      const { data, error: functionError } = await supabase.functions.invoke('discover-legacy-schema', {
-        body: { action: 'mapTables' }
-      });
-
-      if (functionError) {
-        throw new Error(functionError.message || 'Erro no mapeamento de tabelas');
-      }
-
-      if (!data.success) {
-        throw new Error(data.error || 'Erro no mapeamento');
-      }
-
-      setTableMapping(data.mapping);
-      
-      toast({
-        title: "Tabelas Mapeadas!",
-        description: "Mapeamento entre sistema legado e Supabase criado",
-      });
-
-      return true;
-
-    } catch (err) {
-      console.error('Error mapping tables:', err);
-      const errorMessage = err instanceof Error ? err.message : 'Erro ao mapear tabelas.';
-      
-      toast({
-        title: "Erro no Mapeamento",
-        description: errorMessage,
-        variant: "destructive"
-      });
-
-      return false;
-    } finally {
-      setIsProcessing(false);
-    }
-  };
-
-  const adaptCodes = async (): Promise<boolean> => {
-    setIsProcessing(true);
-    
-    try {
-      console.log('Adaptando códigos do sistema legado...');
-      
-      const { data, error: functionError } = await supabase.functions.invoke('discover-legacy-schema', {
-        body: { action: 'adaptCodes' }
-      });
-
-      if (functionError) {
-        throw new Error(functionError.message || 'Erro na adaptação de códigos');
-      }
-
-      if (!data.success) {
-        throw new Error(data.error || 'Erro na adaptação');
-      }
-
-      setCodeAdaptation(data.adaptation);
-      
-      toast({
-        title: "Códigos Adaptados!",
-        description: "Sistema configurado para seus códigos específicos",
-      });
-
-      return true;
-
-    } catch (err) {
-      console.error('Error adapting codes:', err);
-      const errorMessage = err instanceof Error ? err.message : 'Erro ao adaptar códigos.';
-      
-      toast({
-        title: "Erro na Adaptação",
-        description: errorMessage,
-        variant: "destructive"
-      });
-
-      return false;
-    } finally {
-      setIsProcessing(false);
-    }
-  };
-
-  const runFullAdaptation = async (): Promise<boolean> => {
-    const steps = [
-      { name: 'Descobrir Schema', fn: discoverSchema },
-      { name: 'Mapear Tabelas', fn: mapTables },
-      { name: 'Adaptar Códigos', fn: adaptCodes }
-    ];
-
-    for (const step of steps) {
-      console.log(`Executando: ${step.name}`);
-      const success = await step.fn();
-      if (!success) {
-        toast({
-          title: "Adaptação Interrompida",
-          description: `Erro na etapa: ${step.name}`,
-          variant: "destructive"
-        });
-        return false;
-      }
-    }
-
-    toast({
-      title: "Adaptação Completa!",
-      description: "Sistema totalmente adaptado ao seu banco legado",
+    setSyncProgress({
+      currentView: '',
+      totalViews: 6,
+      completedViews: 0,
+      isProcessing: true
     });
 
-    return true;
+    const viewNames = Object.keys(viewsStatus);
+    let allSuccess = true;
+
+    for (const viewName of viewNames) {
+      const success = await syncSpecificView(viewName);
+      if (!success) {
+        allSuccess = false;
+      }
+    }
+
+    setSyncProgress(prev => ({
+      ...prev,
+      isProcessing: false,
+      currentView: ''
+    }));
+
+    setIsProcessing(false);
+
+    if (allSuccess) {
+      toast({
+        title: "Sincronização Completa!",
+        description: "Todas as views foram sincronizadas com sucesso",
+      });
+    } else {
+      toast({
+        title: "Sincronização com Erros",
+        description: "Algumas views apresentaram problemas",
+        variant: "destructive"
+      });
+    }
+
+    return allSuccess;
+  };
+
+  const checkViewsAvailability = async (): Promise<boolean> => {
+    setIsProcessing(true);
+    
+    try {
+      const { data, error } = await supabase.functions.invoke('sync-legacy-views', {
+        body: { action: 'checkViews' }
+      });
+
+      if (error) {
+        throw new Error(error.message);
+      }
+
+      if (!data.success) {
+        throw new Error(data.error || 'Erro na verificação');
+      }
+
+      // Atualizar status das views baseado na verificação
+      const updatedViews = { ...viewsStatus };
+      Object.keys(updatedViews).forEach(viewName => {
+        const isAvailable = data.availableViews.includes(viewName);
+        updatedViews[viewName as keyof LegacyViews].status = isAvailable ? 'pending' : 'error';
+      });
+
+      setViewsStatus(updatedViews);
+
+      toast({
+        title: "Verificação Concluída",
+        description: `${data.availableViews.length} views disponíveis`,
+      });
+
+      return true;
+
+    } catch (err) {
+      console.error('Erro na verificação:', err);
+      const errorMessage = err instanceof Error ? err.message : 'Erro na verificação';
+      
+      toast({
+        title: "Erro na Verificação",
+        description: errorMessage,
+        variant: "destructive"
+      });
+
+      return false;
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   return {
-    discoverSchema,
-    mapTables,
-    adaptCodes,
-    runFullAdaptation,
+    syncSpecificView,
+    syncAllViews,
+    checkViewsAvailability,
     isProcessing,
-    schemaInfo,
-    tableMapping,
-    codeAdaptation
+    viewsStatus,
+    syncProgress
   };
 };

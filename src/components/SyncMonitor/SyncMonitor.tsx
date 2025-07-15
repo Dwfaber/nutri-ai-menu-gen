@@ -3,9 +3,9 @@ import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { RefreshCw, Database, CheckCircle, XCircle, Clock } from 'lucide-react';
+import { RefreshCw, Database, CheckCircle, XCircle, Clock, Eye } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
-import { useMenuAI } from '@/hooks/useMenuAI';
+import { useLegacyAdaptation } from '@/hooks/useLegacyAdaptation';
 
 interface SyncLog {
   id: string;
@@ -21,7 +21,7 @@ interface SyncLog {
 const SyncMonitor = () => {
   const [logs, setLogs] = useState<SyncLog[]>([]);
   const [loading, setLoading] = useState(true);
-  const { syncLegacyData, isGenerating } = useMenuAI();
+  const { syncAllViews, syncSpecificView, isProcessing } = useLegacyAdaptation();
 
   useEffect(() => {
     fetchLogs();
@@ -44,9 +44,14 @@ const SyncMonitor = () => {
     }
   };
 
-  const handleSync = async (operation: 'all' | 'produtos' | 'receitas' | 'clientes') => {
-    await syncLegacyData(operation);
-    await fetchLogs(); // Refresh logs after sync
+  const handleViewSync = async (viewName: string) => {
+    await syncSpecificView(viewName);
+    await fetchLogs();
+  };
+
+  const handleFullSync = async () => {
+    await syncAllViews();
+    await fetchLogs();
   };
 
   const getStatusIcon = (status: string) => {
@@ -75,50 +80,69 @@ const SyncMonitor = () => {
     }
   };
 
+  const viewNames = [
+    'vwCoSolicitacaoFilialCusto',
+    'vwCoSolicitacaoProdutoListagem', 
+    'vwCpReceita',
+    'vwCpReceitaProduto',
+    'vwEstProdutoBase',
+    'vwOrFiliaisAtiva'
+  ];
+
   return (
     <div className="space-y-6">
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Database className="w-5 h-5" />
-            Sincronização com Sistema Legado
+            Sincronização com Views do Sistema Legado
           </CardTitle>
+          <p className="text-sm text-gray-600">
+            Monitore e execute sincronizações das views liberadas pelo TI
+          </p>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
             <Button
-              onClick={() => handleSync('all')}
-              disabled={isGenerating}
-              className="flex items-center gap-2"
+              onClick={handleFullSync}
+              disabled={isProcessing}
+              className="flex items-center gap-2 bg-green-600 hover:bg-green-700"
             >
-              {isGenerating ? (
+              {isProcessing ? (
                 <RefreshCw className="w-4 h-4 animate-spin" />
               ) : (
                 <Database className="w-4 h-4" />
               )}
-              Sincronizar Tudo
+              Sincronizar Todas
             </Button>
-            <Button
-              variant="outline"
-              onClick={() => handleSync('produtos')}
-              disabled={isGenerating}
-            >
-              Produtos
-            </Button>
-            <Button
-              variant="outline"
-              onClick={() => handleSync('receitas')}
-              disabled={isGenerating}
-            >
-              Receitas
-            </Button>
-            <Button
-              variant="outline"
-              onClick={() => handleSync('clientes')}
-              disabled={isGenerating}
-            >
-              Clientes
-            </Button>
+            
+            {viewNames.slice(0, 3).map(viewName => (
+              <Button
+                key={viewName}
+                variant="outline"
+                onClick={() => handleViewSync(viewName)}
+                disabled={isProcessing}
+                className="text-xs"
+              >
+                <Eye className="w-3 h-3 mr-1" />
+                {viewName.replace('vw', '').slice(0, 8)}...
+              </Button>
+            ))}
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {viewNames.slice(3).map(viewName => (
+              <Button
+                key={viewName}
+                variant="outline"
+                onClick={() => handleViewSync(viewName)}
+                disabled={isProcessing}
+                className="text-xs"
+              >
+                <Eye className="w-3 h-3 mr-1" />
+                {viewName.replace('vw', '')}
+              </Button>
+            ))}
           </div>
         </CardContent>
       </Card>
@@ -159,6 +183,11 @@ const SyncMonitor = () => {
                       <div className="text-sm text-gray-600">
                         {new Date(log.created_at).toLocaleString()}
                       </div>
+                      {log.erro_msg && (
+                        <div className="text-sm text-red-600 mt-1">
+                          {log.erro_msg}
+                        </div>
+                      )}
                     </div>
                   </div>
                   <div className="flex items-center gap-3">
