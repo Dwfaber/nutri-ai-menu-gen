@@ -7,40 +7,37 @@ import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useMenuAI } from '../hooks/useMenuAI';
 import { useShoppingList } from '../hooks/useShoppingList';
+import { useClientContracts, ContractFormData } from '../hooks/useClientContracts';
 import { Client, Menu } from '../types/client';
 import SyncMonitor from '../components/SyncMonitor/SyncMonitor';
 import NLPInput from '../components/MenuGenerator/NLPInput';
 import PreviewTabs from '../components/MenuGenerator/PreviewTabs';
+import { MenuCreationForm } from '../components/MenuGenerator/MenuCreationForm';
 
 const Cardapios = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [generatedMenu, setGeneratedMenu] = useState<Menu | null>(null);
   const [menus, setMenus] = useState<Menu[]>([]);
-  const [clients, setClients] = useState<Client[]>([]);
   const [selectedMenuForShopping, setSelectedMenuForShopping] = useState<string | null>(null);
   
   const { generateMenu, editMenuWithNLP, isGenerating, error } = useMenuAI();
   const { createFromMenu, isLoading: isCreatingList } = useShoppingList();
+  const { clients, generateAIContextSummary } = useClientContracts();
 
-  useEffect(() => {
-    // Mock clients data - in real implementation, fetch from Supabase
-    setClients([
-      {
-        id: 'client-1',
-        name: 'Empresa ABC Ltda',
-        budget: 18.50,
-        employees: 150,
-        restrictions: ['vegetarian-options'],
-        active: true,
-        contractStart: '2025-01-01',
-        contractEnd: '2025-12-31'
-      }
-    ]);
-  }, []);
-
-  const handleCreateMenu = async (clientId: string, budget: number, restrictions: string[], preferences?: string) => {
-    const menu = await generateMenu(clientId, budget, restrictions, preferences);
+  const handleCreateMenu = async (formData: ContractFormData) => {
+    if (!formData.contractData) return;
+    
+    // Generate AI context summary for better menu generation
+    const aiContextSummary = generateAIContextSummary(formData);
+    
+    const menu = await generateMenu(
+      formData.clientId,
+      formData.budgetPerMeal,
+      formData.restrictions,
+      aiContextSummary
+    );
+    
     if (menu) {
       setGeneratedMenu(menu);
       setMenus([...menus, menu]);
@@ -63,7 +60,7 @@ const Cardapios = () => {
       return;
     }
 
-    await createFromMenu(menu.id, client.name, menu.totalCost);
+    await createFromMenu(menu.id, client.nome_empresa, menu.totalCost);
     setSelectedMenuForShopping(null);
   };
 
@@ -71,7 +68,7 @@ const Cardapios = () => {
     const client = clients.find(c => c.id === menu.clientId);
     if (!client) return 'unknown';
     
-    const budgetPercentage = (menu.totalCost / client.budget) * 100;
+    const budgetPercentage = (menu.totalCost / client.custo_maximo_refeicao) * 100;
     
     if (budgetPercentage <= 90) return 'good';
     if (budgetPercentage <= 100) return 'warning';
@@ -132,73 +129,12 @@ const Cardapios = () => {
           </div>
 
           {showCreateForm && clients.length > 0 && (
-            <Card>
-              <CardHeader>
-                <CardTitle>Criar Novo Cardápio com IA</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Cliente
-                  </label>
-                  <select className="w-full p-2 border border-gray-300 rounded-md">
-                    {clients.map(client => (
-                      <option key={client.id} value={client.id}>
-                        {client.name} - R$ {client.budget}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Orçamento por Refeição
-                  </label>
-                  <Input type="number" placeholder="15.00" step="0.01" />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Restrições Alimentares
-                  </label>
-                  <div className="flex flex-wrap gap-2">
-                    {['Vegano', 'Vegetariano', 'Sem Glúten', 'Sem Lactose'].map(restriction => (
-                      <label key={restriction} className="flex items-center space-x-2">
-                        <input type="checkbox" className="rounded" />
-                        <span className="text-sm">{restriction}</span>
-                      </label>
-                    ))}
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Preferências Adicionais
-                  </label>
-                  <Input placeholder="Ex: pratos regionais, comida caseira..." />
-                </div>
-
-                <div className="flex space-x-2">
-                  <Button 
-                    onClick={() => handleCreateMenu(clients[0]?.id || '', 15.00, ['vegetarian-options'], 'comida caseira')}
-                    disabled={isGenerating}
-                    className="bg-green-600 hover:bg-green-700"
-                  >
-                    {isGenerating ? 'Gerando com IA...' : 'Gerar com IA'}
-                  </Button>
-                  <Button 
-                    variant="outline" 
-                    onClick={() => setShowCreateForm(false)}
-                  >
-                    Cancelar
-                  </Button>
-                </div>
-                
-                {error && (
-                  <div className="text-red-600 text-sm">{error}</div>
-                )}
-              </CardContent>
-            </Card>
+            <MenuCreationForm
+              onSubmit={handleCreateMenu}
+              onCancel={() => setShowCreateForm(false)}
+              isGenerating={isGenerating}
+              error={error}
+            />
           )}
 
           {generatedMenu && (

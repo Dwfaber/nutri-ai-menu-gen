@@ -10,6 +10,21 @@ export interface Client {
   contractEnd: string;
 }
 
+// Database contract client interface
+export interface ContractClient {
+  id: string;
+  cliente_id_legado: string;
+  nome_empresa: string;
+  total_funcionarios: number;
+  custo_maximo_refeicao: number;
+  total_refeicoes_mes: number;
+  restricoes_alimentares: string[];
+  periodicidade: string;
+  ativo: boolean;
+  created_at: string;
+  sync_at: string;
+}
+
 export interface MenuItem {
   id: string;
   name: string;
