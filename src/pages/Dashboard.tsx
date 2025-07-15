@@ -1,7 +1,35 @@
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Users, ChefHat, DollarSign, TrendingUp, Clock, ShoppingCart } from 'lucide-react';
+import { useDashboardData } from '@/hooks/useDashboardData';
+import StatsCard from '@/components/Dashboard/StatsCard';
 
 const Dashboard = () => {
+  const { metrics, isLoading, error, refetch } = useDashboardData();
+
+  if (error) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
+          <p className="text-gray-600">Visão geral do sistema Nutr's IA</p>
+        </div>
+        <div className="flex items-center justify-center h-64">
+          <div className="text-center">
+            <p className="text-lg font-medium text-red-600">Erro ao carregar dados</p>
+            <p className="text-sm text-gray-500 mt-2">{error}</p>
+            <button 
+              onClick={refetch}
+              className="mt-4 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+            >
+              Tentar novamente
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       <div>
@@ -10,57 +38,70 @@ const Dashboard = () => {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <Card>
-          <CardContent className="p-6">
-            <div className="text-center">
-              <p className="text-sm font-medium text-gray-600">Clientes Ativos</p>
-              <p className="text-2xl font-bold text-gray-900 mt-1">--</p>
-              <p className="text-sm text-gray-500 mt-1">Aguardando sincronização</p>
-            </div>
-          </CardContent>
-        </Card>
+        <StatsCard
+          title="Clientes Ativos"
+          value={isLoading ? "--" : metrics.activeClients}
+          change={isLoading ? "Carregando..." : `${metrics.totalEmployees} funcionários`}
+          changeType="neutral"
+          icon={Users}
+        />
 
-        <Card>
-          <CardContent className="p-6">
-            <div className="text-center">
-              <p className="text-sm font-medium text-gray-600">Cardápios Gerados</p>
-              <p className="text-2xl font-bold text-gray-900 mt-1">--</p>
-              <p className="text-sm text-gray-500 mt-1">Aguardando sincronização</p>
-            </div>
-          </CardContent>
-        </Card>
+        <StatsCard
+          title="Cardápios Gerados"
+          value={isLoading ? "--" : metrics.generatedMenus}
+          change={isLoading ? "Carregando..." : `${metrics.monthlyMeals} refeições/mês`}
+          changeType="positive"
+          icon={ChefHat}
+        />
 
-        <Card>
-          <CardContent className="p-6">
-            <div className="text-center">
-              <p className="text-sm font-medium text-gray-600">Economia Total</p>
-              <p className="text-2xl font-bold text-gray-900 mt-1">R$ --</p>
-              <p className="text-sm text-gray-500 mt-1">Aguardando sincronização</p>
-            </div>
-          </CardContent>
-        </Card>
+        <StatsCard
+          title="Economia Total"
+          value={isLoading ? "R$ --" : `R$ ${metrics.totalSavings.toFixed(2)}`}
+          change={isLoading ? "Carregando..." : `Orçamento: R$ ${metrics.monthlyBudget.toFixed(2)}`}
+          changeType="positive"
+          icon={DollarSign}
+        />
 
-        <Card>
-          <CardContent className="p-6">
-            <div className="text-center">
-              <p className="text-sm font-medium text-gray-600">Taxa de Aceitação</p>
-              <p className="text-2xl font-bold text-gray-900 mt-1">--%</p>
-              <p className="text-sm text-gray-500 mt-1">Aguardando sincronização</p>
-            </div>
-          </CardContent>
-        </Card>
+        <StatsCard
+          title="Taxa de Aceitação"
+          value={isLoading ? "--%"  : `${metrics.acceptanceRate}%`}
+          change={isLoading ? "Carregando..." : `R$ ${metrics.averageMealCost.toFixed(2)} por refeição`}
+          changeType="positive"
+          icon={TrendingUp}
+        />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Card>
           <CardHeader>
-            <CardTitle>Atividade Recente</CardTitle>
+            <CardTitle className="flex items-center gap-2">
+              <Clock className="w-5 h-5" />
+              Atividade Recente
+            </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="h-64 flex items-center justify-center text-gray-500">
               <div className="text-center">
-                <p className="text-lg font-medium">Nenhuma atividade encontrada</p>
-                <p className="text-sm">Sincronize os dados para visualizar atividades recentes</p>
+                {isLoading ? (
+                  <div className="animate-pulse">
+                    <p className="text-lg font-medium">Carregando atividades...</p>
+                  </div>
+                ) : metrics.generatedMenus > 0 ? (
+                  <div className="space-y-2">
+                    <p className="text-lg font-medium">Última Sincronização</p>
+                    <p className="text-sm">
+                      {metrics.generatedMenus} cardápios processados
+                    </p>
+                    <p className="text-sm">
+                      {metrics.activeClients} clientes ativos
+                    </p>
+                  </div>
+                ) : (
+                  <div>
+                    <p className="text-lg font-medium">Nenhuma atividade encontrada</p>
+                    <p className="text-sm">Configure contratos para visualizar atividades</p>
+                  </div>
+                )}
               </div>
             </div>
           </CardContent>
@@ -68,13 +109,37 @@ const Dashboard = () => {
         
         <Card>
           <CardHeader>
-            <CardTitle>Próximas Ações</CardTitle>
+            <CardTitle className="flex items-center gap-2">
+              <ShoppingCart className="w-5 h-5" />
+              Próximas Ações
+            </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="h-64 flex items-center justify-center text-gray-500">
               <div className="text-center">
-                <p className="text-lg font-medium">Nenhuma ação pendente</p>
-                <p className="text-sm">Configure o sistema para visualizar próximas ações</p>
+                {isLoading ? (
+                  <div className="animate-pulse">
+                    <p className="text-lg font-medium">Carregando ações...</p>
+                  </div>
+                ) : metrics.activeClients > 0 ? (
+                  <div className="space-y-2">
+                    <p className="text-lg font-medium">Ações Sugeridas</p>
+                    <p className="text-sm">
+                      • Gerar cardápios para {metrics.activeClients} clientes
+                    </p>
+                    <p className="text-sm">
+                      • Revisar orçamento mensal: R$ {metrics.monthlyBudget.toFixed(2)}
+                    </p>
+                    <p className="text-sm">
+                      • Otimizar custos das {metrics.monthlyMeals} refeições
+                    </p>
+                  </div>
+                ) : (
+                  <div>
+                    <p className="text-lg font-medium">Nenhuma ação pendente</p>
+                    <p className="text-sm">Configure contratos para visualizar ações</p>
+                  </div>
+                )}
               </div>
             </div>
           </CardContent>
