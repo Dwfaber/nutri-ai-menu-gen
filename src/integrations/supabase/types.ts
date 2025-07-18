@@ -58,7 +58,7 @@ export type Database = {
       }
       produtos_legado: {
         Row: {
-          categoria: string
+          categoria: string | null
           created_at: string
           disponivel: boolean
           id: string
@@ -70,7 +70,7 @@ export type Database = {
           unidade: string
         }
         Insert: {
-          categoria: string
+          categoria?: string | null
           created_at?: string
           disponivel?: boolean
           id?: string
@@ -82,7 +82,7 @@ export type Database = {
           unidade: string
         }
         Update: {
-          categoria?: string
+          categoria?: string | null
           created_at?: string
           disponivel?: boolean
           id?: string
