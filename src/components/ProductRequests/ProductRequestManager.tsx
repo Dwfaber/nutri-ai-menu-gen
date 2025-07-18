@@ -42,7 +42,6 @@ export const ProductRequestManager = ({ menuId, clientId, onCostChange }: Produc
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingRequest, setEditingRequest] = useState<ProductRequest | null>(null);
   const [formData, setFormData] = useState<Partial<ProductRequest>>({
-    solicitacao_id: Date.now(),
     per_capita: 0,
     inteiro: false,
     arredondar_tipo: 0,
@@ -100,19 +99,17 @@ export const ProductRequestManager = ({ menuId, clientId, onCostChange }: Produc
     if (!formData.produto_id || !formData.descricao) return;
 
     const requestData = {
-      ...formData,
-      solicitacao_id: editingRequest ? editingRequest.solicitacao_id : Date.now()
-    } as ProductRequest;
+      ...formData
+    } as Omit<ProductRequest, 'criado_em' | 'solicitacao_produto_listagem_id'>;
 
-    if (editingRequest) {
-      await updateRequest(editingRequest.solicitacao_id, requestData);
+    if (editingRequest && editingRequest.solicitacao_produto_listagem_id) {
+      await updateRequest(editingRequest.solicitacao_produto_listagem_id, requestData);
       setEditingRequest(null);
     } else {
       await createRequest(requestData);
     }
 
     setFormData({
-      solicitacao_id: Date.now(),
       per_capita: 0,
       inteiro: false,
       arredondar_tipo: 0,
@@ -309,7 +306,6 @@ export const ProductRequestManager = ({ menuId, clientId, onCostChange }: Produc
                   setShowAddForm(false);
                   setEditingRequest(null);
                   setFormData({
-                    solicitacao_id: Date.now(),
                     per_capita: 0,
                     inteiro: false,
                     arredondar_tipo: 0,
@@ -368,7 +364,7 @@ export const ProductRequestManager = ({ menuId, clientId, onCostChange }: Produc
       {/* Requests List */}
       <div className="space-y-4">
         {requests.map((request) => (
-          <Card key={request.solicitacao_produto_listagem_id || request.solicitacao_id}>
+          <Card key={request.solicitacao_produto_listagem_id}>
             <CardContent className="p-4">
               <div className="flex justify-between items-start">
                 <div className="flex-1">
@@ -377,6 +373,11 @@ export const ProductRequestManager = ({ menuId, clientId, onCostChange }: Produc
                     {request.solicitacao_produto_listagem_id && (
                       <Badge variant="outline" className="text-xs">
                         ID: {request.solicitacao_produto_listagem_id}
+                      </Badge>
+                    )}
+                    {request.solicitacao_id && (
+                      <Badge variant="outline" className="text-xs">
+                        Solicitação: {request.solicitacao_id}
                       </Badge>
                     )}
                     {request.promocao && (
@@ -426,7 +427,7 @@ export const ProductRequestManager = ({ menuId, clientId, onCostChange }: Produc
                   <Button 
                     variant="outline" 
                     size="sm"
-                    onClick={() => handleDelete(request.solicitacao_id)}
+                    onClick={() => request.solicitacao_produto_listagem_id && handleDelete(request.solicitacao_produto_listagem_id)}
                     className="text-red-600 hover:text-red-700"
                   >
                     <Trash2 className="w-3 h-3" />

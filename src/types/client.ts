@@ -56,7 +56,7 @@ export interface Menu {
 
 // New interface for product requests
 export interface ProductRequest {
-  solicitacao_id: number;
+  solicitacao_id?: number; // Agora é opcional
   solicitacao_produto_listagem_id?: number;
   categoria_id?: number;
   categoria_descricao?: string;

@@ -4,7 +4,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 
 export interface ProductRequest {
-  solicitacao_id: number;
+  solicitacao_id?: number; // Agora é opcional
   solicitacao_produto_listagem_id?: number;
   categoria_id?: number;
   categoria_descricao?: string;
@@ -60,7 +60,7 @@ export const useProductRequests = () => {
     }
   };
 
-  const createRequest = async (requestData: Omit<ProductRequest, 'criado_em'>) => {
+  const createRequest = async (requestData: Omit<ProductRequest, 'criado_em' | 'solicitacao_produto_listagem_id'>) => {
     setIsLoading(true);
     setError(null);
     
@@ -106,14 +106,14 @@ export const useProductRequests = () => {
       const { data, error } = await supabase
         .from('co_solicitacao_produto_listagem')
         .update(updates)
-        .eq('solicitacao_id', id)
+        .eq('solicitacao_produto_listagem_id', id) // Usar a chave primária correta
         .select()
         .single();
 
       if (error) throw error;
       
       setRequests(requests.map(req => 
-        req.solicitacao_id === id ? { ...req, ...data } : req
+        req.solicitacao_produto_listagem_id === id ? { ...req, ...data } : req
       ));
       
       toast({
@@ -147,11 +147,11 @@ export const useProductRequests = () => {
       const { error } = await supabase
         .from('co_solicitacao_produto_listagem')
         .delete()
-        .eq('solicitacao_id', id);
+        .eq('solicitacao_produto_listagem_id', id); // Usar a chave primária correta
 
       if (error) throw error;
       
-      setRequests(requests.filter(req => req.solicitacao_id !== id));
+      setRequests(requests.filter(req => req.solicitacao_produto_listagem_id !== id));
       
       toast({
         title: "Sucesso",

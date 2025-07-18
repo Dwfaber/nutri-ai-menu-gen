@@ -33,7 +33,7 @@ export type Database = {
           produto_id: number | null
           promocao: boolean | null
           quantidade_embalagem: number | null
-          solicitacao_id: number
+          solicitacao_id: number | null
           solicitacao_produto_listagem_id: number
           unidade: string | null
         }
@@ -55,7 +55,7 @@ export type Database = {
           produto_id?: number | null
           promocao?: boolean | null
           quantidade_embalagem?: number | null
-          solicitacao_id: number
+          solicitacao_id?: number | null
           solicitacao_produto_listagem_id?: number
           unidade?: string | null
         }
@@ -77,7 +77,7 @@ export type Database = {
           produto_id?: number | null
           promocao?: boolean | null
           quantidade_embalagem?: number | null
-          solicitacao_id?: number
+          solicitacao_id?: number | null
           solicitacao_produto_listagem_id?: number
           unidade?: string | null
         }
