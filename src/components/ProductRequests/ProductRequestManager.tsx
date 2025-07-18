@@ -49,7 +49,8 @@ export const ProductRequestManager = ({ menuId, clientId, onCostChange }: Produc
     promocao: false,
     quantidade_embalagem: 1,
     apenas_valor_inteiro: false,
-    em_promocao: false
+    em_promocao: false,
+    produto_base_qtd_embalagem: 1
   });
 
   // Load available products
@@ -118,7 +119,8 @@ export const ProductRequestManager = ({ menuId, clientId, onCostChange }: Produc
       promocao: false,
       quantidade_embalagem: 1,
       apenas_valor_inteiro: false,
-      em_promocao: false
+      em_promocao: false,
+      produto_base_qtd_embalagem: 1
     });
     setShowAddForm(false);
   };
@@ -225,7 +227,7 @@ export const ProductRequestManager = ({ menuId, clientId, onCostChange }: Produc
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-3 gap-4">
               <div>
                 <Label>Quantidade por Embalagem</Label>
                 <Input
@@ -233,6 +235,15 @@ export const ProductRequestManager = ({ menuId, clientId, onCostChange }: Produc
                   step="0.01"
                   value={formData.quantidade_embalagem || ''}
                   onChange={(e) => setFormData(prev => ({ ...prev, quantidade_embalagem: parseFloat(e.target.value) }))}
+                />
+              </div>
+              <div>
+                <Label>Qtd Base por Embalagem</Label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  value={formData.produto_base_qtd_embalagem || ''}
+                  onChange={(e) => setFormData(prev => ({ ...prev, produto_base_qtd_embalagem: parseFloat(e.target.value) }))}
                 />
               </div>
               <div>
@@ -305,7 +316,8 @@ export const ProductRequestManager = ({ menuId, clientId, onCostChange }: Produc
                     promocao: false,
                     quantidade_embalagem: 1,
                     apenas_valor_inteiro: false,
-                    em_promocao: false
+                    em_promocao: false,
+                    produto_base_qtd_embalagem: 1
                   });
                 }}
               >
@@ -375,7 +387,7 @@ export const ProductRequestManager = ({ menuId, clientId, onCostChange }: Produc
                       <Badge variant="outline">{request.grupo}</Badge>
                     )}
                   </div>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                  <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-sm">
                     <div>
                       <span className="font-medium text-gray-600">Per Capita</span>
                       <p>{request.per_capita}</p>
@@ -387,6 +399,10 @@ export const ProductRequestManager = ({ menuId, clientId, onCostChange }: Produc
                     <div>
                       <span className="font-medium text-gray-600">Unidade</span>
                       <p>{request.unidade}</p>
+                    </div>
+                    <div>
+                      <span className="font-medium text-gray-600">Qtd Base Embalagem</span>
+                      <p>{request.produto_base_qtd_embalagem}</p>
                     </div>
                     <div>
                       <span className="font-medium text-gray-600">Arredondamento</span>

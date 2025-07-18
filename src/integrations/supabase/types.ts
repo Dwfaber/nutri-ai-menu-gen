@@ -29,6 +29,7 @@ export type Database = {
           preco: number | null
           preco_compra: number | null
           produto_base_id: number | null
+          produto_base_qtd_embalagem: number | null
           produto_id: number | null
           promocao: boolean | null
           quantidade_embalagem: number | null
@@ -49,6 +50,7 @@ export type Database = {
           preco?: number | null
           preco_compra?: number | null
           produto_base_id?: number | null
+          produto_base_qtd_embalagem?: number | null
           produto_id?: number | null
           promocao?: boolean | null
           quantidade_embalagem?: number | null
@@ -69,6 +71,7 @@ export type Database = {
           preco?: number | null
           preco_compra?: number | null
           produto_base_id?: number | null
+          produto_base_qtd_embalagem?: number | null
           produto_id?: number | null
           promocao?: boolean | null
           quantidade_embalagem?: number | null

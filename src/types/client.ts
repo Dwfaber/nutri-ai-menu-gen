@@ -73,6 +73,7 @@ export interface ProductRequest {
   criado_em?: string;
   apenas_valor_inteiro?: boolean;
   em_promocao?: boolean;
+  produto_base_qtd_embalagem?: number;
 }
 
 // Legacy product interface

@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
@@ -21,6 +22,7 @@ export interface ProductRequest {
   criado_em?: string;
   apenas_valor_inteiro?: boolean;
   em_promocao?: boolean;
+  produto_base_qtd_embalagem?: number;
 }
 
 export const useProductRequests = () => {
