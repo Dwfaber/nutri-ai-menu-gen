@@ -1,5 +1,6 @@
+
 import { useState, useEffect } from 'react';
-import { Calendar, AlertTriangle, DollarSign, Users, Clock, CheckCircle } from 'lucide-react';
+import { Calendar, AlertTriangle, DollarSign, Users, Clock, CheckCircle, Package } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -7,7 +8,9 @@ import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useClientContracts, ContractFormData } from '@/hooks/useClientContracts';
+import { ProductRequestManager } from '../ProductRequests/ProductRequestManager';
 
 interface MenuCreationFormProps {
   onSubmit: (formData: ContractFormData) => void;
@@ -42,6 +45,7 @@ export const MenuCreationForm = ({ onSubmit, onCancel, isGenerating, error }: Me
 
   const [contractWarnings, setContractWarnings] = useState<string[]>([]);
   const [isLoadingContract, setIsLoadingContract] = useState(false);
+  const [productCosts, setProductCosts] = useState({ total: 0, purchase: 0 });
 
   // Available restriction options
   const restrictionOptions = [
@@ -112,6 +116,10 @@ export const MenuCreationForm = ({ onSubmit, onCancel, isGenerating, error }: Me
     }));
   };
 
+  const handleProductCostChange = (totalCost: number, purchaseCost: number) => {
+    setProductCosts({ total: totalCost, purchase: purchaseCost });
+  };
+
   const handleSubmit = () => {
     onSubmit(formData);
   };
@@ -127,171 +135,213 @@ export const MenuCreationForm = ({ onSubmit, onCancel, isGenerating, error }: Me
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-6">
-        {/* Client Selection */}
-        <div>
-          <label className="block text-sm font-medium mb-2">Cliente</label>
-          <Select value={formData.clientId} onValueChange={handleClientChange}>
-            <SelectTrigger>
-              <SelectValue placeholder="Selecione um cliente..." />
-            </SelectTrigger>
-            <SelectContent>
-              {clients.map(client => (
-                <SelectItem key={client.id} value={client.id}>
-                  {client.nome_empresa} - R$ {client.custo_maximo_refeicao.toFixed(2)} 
-                  ({client.total_funcionarios} funcionários)
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-
-        {/* Contract Information */}
-        {formData.contractData && (
-          <div className="bg-gray-50 p-4 rounded-lg space-y-3">
-            <h4 className="font-medium text-sm">Informações do Contrato</h4>
-            <div className="grid grid-cols-2 gap-4 text-sm">
-              <div className="flex items-center space-x-2">
-                <Users className="w-4 h-4 text-gray-500" />
-                <span>{formData.contractData.total_funcionarios} funcionários</span>
-              </div>
-              <div className="flex items-center space-x-2">
-                <Clock className="w-4 h-4 text-gray-500" />
-                <span>Periodicidade: {formData.contractData.periodicidade}</span>
-              </div>
-              <div className="flex items-center space-x-2">
-                <DollarSign className="w-4 h-4 text-gray-500" />
-                <span>Custo máximo: R$ {formData.contractData.custo_maximo_refeicao.toFixed(2)}</span>
-              </div>
-              <div className="flex items-center space-x-2">
-                <CheckCircle className="w-4 h-4 text-green-500" />
-                <span>Status: {formData.contractData.ativo ? 'Ativo' : 'Inativo'}</span>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Contract Warnings */}
-        {contractWarnings.length > 0 && (
-          <Alert>
-            <AlertTriangle className="h-4 w-4" />
-            <AlertDescription>
-              <div className="space-y-1">
-                <div className="font-medium">Atenção aos seguintes pontos do contrato:</div>
-                <ul className="list-disc list-inside text-sm space-y-1">
-                  {contractWarnings.map((warning, index) => (
-                    <li key={index}>{warning}</li>
+        <Tabs defaultValue="basic" className="w-full">
+          <TabsList className="grid w-full grid-cols-2">
+            <TabsTrigger value="basic">Informações Básicas</TabsTrigger>
+            <TabsTrigger value="products">Produtos</TabsTrigger>
+          </TabsList>
+          
+          <TabsContent value="basic" className="space-y-6">
+            {/* Client Selection */}
+            <div>
+              <label className="block text-sm font-medium mb-2">Cliente</label>
+              <Select value={formData.clientId} onValueChange={handleClientChange}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione um cliente..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {clients.map(client => (
+                    <SelectItem key={client.id} value={client.id}>
+                      {client.nome_empresa} - R$ {client.custo_maximo_refeicao.toFixed(2)} 
+                      ({client.total_funcionarios} funcionários)
+                    </SelectItem>
                   ))}
-                </ul>
-              </div>
-            </AlertDescription>
-          </Alert>
-        )}
-
-        {/* Period Selection */}
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-medium mb-2">Data de Início</label>
-            <Input
-              type="date"
-              value={formData.period.start}
-              onChange={(e) => setFormData(prev => ({
-                ...prev,
-                period: { ...prev.period, start: e.target.value }
-              }))}
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium mb-2">Data de Término</label>
-            <Input
-              type="date"
-              value={formData.period.end}
-              onChange={(e) => setFormData(prev => ({
-                ...prev,
-                period: { ...prev.period, end: e.target.value }
-              }))}
-            />
-          </div>
-        </div>
-
-        {/* Budget Configuration */}
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-medium mb-2">Orçamento por Refeição</label>
-            <Input
-              type="number"
-              step="0.01"
-              value={formData.budgetPerMeal}
-              onChange={(e) => setFormData(prev => ({
-                ...prev,
-                budgetPerMeal: parseFloat(e.target.value) || 0
-              }))}
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium mb-2">Refeições Estimadas</label>
-            <Input
-              type="number"
-              value={formData.estimatedMeals}
-              onChange={(e) => setFormData(prev => ({
-                ...prev,
-                estimatedMeals: parseInt(e.target.value) || 0
-              }))}
-            />
-          </div>
-        </div>
-
-        {/* Total Budget Display */}
-        {formData.totalBudget > 0 && (
-          <div className="bg-blue-50 p-4 rounded-lg">
-            <div className="flex items-center justify-between">
-              <span className="font-medium">Orçamento Total Estimado:</span>
-              <Badge variant="secondary" className="text-lg">
-                R$ {formData.totalBudget.toFixed(2)}
-              </Badge>
+                </SelectContent>
+              </Select>
             </div>
-          </div>
-        )}
 
-        {/* Dietary Restrictions */}
-        <div>
-          <label className="block text-sm font-medium mb-2">Restrições Alimentares</label>
-          <div className="grid grid-cols-2 gap-2">
-            {restrictionOptions.map(option => (
-              <label key={option.value} className="flex items-center space-x-2">
-                <input
-                  type="checkbox"
-                  checked={formData.restrictions.includes(option.value)}
-                  onChange={() => handleRestrictionToggle(option.value)}
-                  className="rounded"
+            {/* Contract Information */}
+            {formData.contractData && (
+              <div className="bg-gray-50 p-4 rounded-lg space-y-3">
+                <h4 className="font-medium text-sm">Informações do Contrato</h4>
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div className="flex items-center space-x-2">
+                    <Users className="w-4 h-4 text-gray-500" />
+                    <span>{formData.contractData.total_funcionarios} funcionários</span>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <Clock className="w-4 h-4 text-gray-500" />
+                    <span>Periodicidade: {formData.contractData.periodicidade}</span>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <DollarSign className="w-4 h-4 text-gray-500" />
+                    <span>Custo máximo: R$ {formData.contractData.custo_maximo_refeicao.toFixed(2)}</span>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <CheckCircle className="w-4 h-4 text-green-500" />
+                    <span>Status: {formData.contractData.ativo ? 'Ativo' : 'Inativo'}</span>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Contract Warnings */}
+            {contractWarnings.length > 0 && (
+              <Alert>
+                <AlertTriangle className="h-4 w-4" />
+                <AlertDescription>
+                  <div className="space-y-1">
+                    <div className="font-medium">Atenção aos seguintes pontos do contrato:</div>
+                    <ul className="list-disc list-inside text-sm space-y-1">
+                      {contractWarnings.map((warning, index) => (
+                        <li key={index}>{warning}</li>
+                      ))}
+                    </ul>
+                  </div>
+                </AlertDescription>
+              </Alert>
+            )}
+
+            {/* Period Selection */}
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium mb-2">Data de Início</label>
+                <Input
+                  type="date"
+                  value={formData.period.start}
+                  onChange={(e) => setFormData(prev => ({
+                    ...prev,
+                    period: { ...prev.period, start: e.target.value }
+                  }))}
                 />
-                <span className="text-sm">{option.label}</span>
-              </label>
-            ))}
-          </div>
-        </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-2">Data de Término</label>
+                <Input
+                  type="date"
+                  value={formData.period.end}
+                  onChange={(e) => setFormData(prev => ({
+                    ...prev,
+                    period: { ...prev.period, end: e.target.value }
+                  }))}
+                />
+              </div>
+            </div>
 
-        {/* Additional Preferences */}
-        <div>
-          <label className="block text-sm font-medium mb-2">Preferências Adicionais</label>
-          <Textarea
-            placeholder="Ex: pratos regionais, comida caseira, mínimo 2 proteínas bovinas por semana..."
-            value={formData.preferences}
-            onChange={(e) => setFormData(prev => ({
-              ...prev,
-              preferences: e.target.value
-            }))}
-          />
-        </div>
+            {/* Budget Configuration */}
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium mb-2">Orçamento por Refeição</label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  value={formData.budgetPerMeal}
+                  onChange={(e) => setFormData(prev => ({
+                    ...prev,
+                    budgetPerMeal: parseFloat(e.target.value) || 0
+                  }))}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-2">Refeições Estimadas</label>
+                <Input
+                  type="number"
+                  value={formData.estimatedMeals}
+                  onChange={(e) => setFormData(prev => ({
+                    ...prev,
+                    estimatedMeals: parseInt(e.target.value) || 0
+                  }))}
+                />
+              </div>
+            </div>
 
-        {/* AI Context Summary */}
-        {formData.contractData && formData.period.start && formData.period.end && (
-          <div className="bg-green-50 p-4 rounded-lg">
-            <h4 className="font-medium text-sm mb-2">Resumo para IA:</h4>
-            <p className="text-sm text-gray-700">
-              {generateAIContextSummary(formData)}
-            </p>
-          </div>
-        )}
+            {/* Total Budget Display */}
+            {formData.totalBudget > 0 && (
+              <div className="bg-blue-50 p-4 rounded-lg">
+                <div className="flex items-center justify-between">
+                  <span className="font-medium">Orçamento Total Estimado:</span>
+                  <Badge variant="secondary" className="text-lg">
+                    R$ {formData.totalBudget.toFixed(2)}
+                  </Badge>
+                </div>
+              </div>
+            )}
+
+            {/* Product Costs Summary */}
+            {productCosts.total > 0 && (
+              <div className="bg-green-50 p-4 rounded-lg">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="font-medium">Custo dos Produtos:</span>
+                  <div className="flex space-x-4">
+                    <Badge variant="outline" className="text-green-600">
+                      <Package className="w-3 h-3 mr-1" />
+                      R$ {productCosts.total.toFixed(2)}
+                    </Badge>
+                    <Badge variant="outline" className="text-blue-600">
+                      Compra: R$ {productCosts.purchase.toFixed(2)}
+                    </Badge>
+                  </div>
+                </div>
+                <div className="text-sm text-gray-600">
+                  {productCosts.total > formData.budgetPerMeal * formData.estimatedMeals ? (
+                    <span className="text-red-600">⚠️ Custos excedem o orçamento planejado</span>
+                  ) : (
+                    <span className="text-green-600">✅ Custos dentro do orçamento</span>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Dietary Restrictions */}
+            <div>
+              <label className="block text-sm font-medium mb-2">Restrições Alimentares</label>
+              <div className="grid grid-cols-2 gap-2">
+                {restrictionOptions.map(option => (
+                  <label key={option.value} className="flex items-center space-x-2">
+                    <input
+                      type="checkbox"
+                      checked={formData.restrictions.includes(option.value)}
+                      onChange={() => handleRestrictionToggle(option.value)}
+                      className="rounded"
+                    />
+                    <span className="text-sm">{option.label}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            {/* Additional Preferences */}
+            <div>
+              <label className="block text-sm font-medium mb-2">Preferências Adicionais</label>
+              <Textarea
+                placeholder="Ex: pratos regionais, comida caseira, mínimo 2 proteínas bovinas por semana..."
+                value={formData.preferences}
+                onChange={(e) => setFormData(prev => ({
+                  ...prev,
+                  preferences: e.target.value
+                }))}
+              />
+            </div>
+
+            {/* AI Context Summary */}
+            {formData.contractData && formData.period.start && formData.period.end && (
+              <div className="bg-green-50 p-4 rounded-lg">
+                <h4 className="font-medium text-sm mb-2">Resumo para IA:</h4>
+                <p className="text-sm text-gray-700">
+                  {generateAIContextSummary(formData)}
+                </p>
+              </div>
+            )}
+          </TabsContent>
+          
+          <TabsContent value="products">
+            <ProductRequestManager 
+              menuId={formData.clientId}
+              clientId={formData.clientId}
+              onCostChange={handleProductCostChange}
+            />
+          </TabsContent>
+        </Tabs>
 
         {/* Error Display */}
         {error && (

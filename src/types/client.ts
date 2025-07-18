@@ -54,6 +54,40 @@ export interface Menu {
   };
 }
 
+// New interface for product requests
+export interface ProductRequest {
+  solicitacao_id: number;
+  categoria_id?: number;
+  categoria_descricao?: string;
+  grupo?: string;
+  produto_id?: number;
+  preco?: number;
+  per_capita?: number;
+  inteiro?: boolean;
+  arredondar_tipo?: number;
+  promocao?: boolean;
+  descricao?: string;
+  unidade?: string;
+  preco_compra?: number;
+  produto_base_id?: number;
+  quantidade_embalagem?: number;
+  criado_em?: string;
+}
+
+// Legacy product interface
+export interface LegacyProduct {
+  id: string;
+  produto_id_legado: string;
+  nome: string;
+  categoria: string | null;
+  unidade: string;
+  peso_unitario: number;
+  preco_unitario: number;
+  disponivel: boolean;
+  sync_at: string;
+  created_at: string;
+}
+
 export interface ShoppingListItem {
   ingredient: string;
   quantity: number;

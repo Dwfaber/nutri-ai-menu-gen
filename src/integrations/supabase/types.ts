@@ -14,6 +14,63 @@ export type Database = {
   }
   public: {
     Tables: {
+      co_solicitacao_produto_listagem: {
+        Row: {
+          arredondar_tipo: number | null
+          categoria_descricao: string | null
+          categoria_id: number | null
+          criado_em: string | null
+          descricao: string | null
+          grupo: string | null
+          inteiro: boolean | null
+          per_capita: number | null
+          preco: number | null
+          preco_compra: number | null
+          produto_base_id: number | null
+          produto_id: number | null
+          promocao: boolean | null
+          quantidade_embalagem: number | null
+          solicitacao_id: number
+          unidade: string | null
+        }
+        Insert: {
+          arredondar_tipo?: number | null
+          categoria_descricao?: string | null
+          categoria_id?: number | null
+          criado_em?: string | null
+          descricao?: string | null
+          grupo?: string | null
+          inteiro?: boolean | null
+          per_capita?: number | null
+          preco?: number | null
+          preco_compra?: number | null
+          produto_base_id?: number | null
+          produto_id?: number | null
+          promocao?: boolean | null
+          quantidade_embalagem?: number | null
+          solicitacao_id: number
+          unidade?: string | null
+        }
+        Update: {
+          arredondar_tipo?: number | null
+          categoria_descricao?: string | null
+          categoria_id?: number | null
+          criado_em?: string | null
+          descricao?: string | null
+          grupo?: string | null
+          inteiro?: boolean | null
+          per_capita?: number | null
+          preco?: number | null
+          preco_compra?: number | null
+          produto_base_id?: number | null
+          produto_id?: number | null
+          promocao?: boolean | null
+          quantidade_embalagem?: number | null
+          solicitacao_id?: number
+          unidade?: string | null
+        }
+        Relationships: []
+      }
       contratos_corporativos: {
         Row: {
           ativo: boolean
