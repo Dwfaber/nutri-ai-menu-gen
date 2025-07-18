@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { Plus, Edit2, Trash2, Package, DollarSign, Percent } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -48,7 +47,8 @@ export const ProductRequestManager = ({ menuId, clientId, onCostChange }: Produc
     inteiro: false,
     arredondar_tipo: 0,
     promocao: false,
-    quantidade_embalagem: 1
+    quantidade_embalagem: 1,
+    apenas_valor_inteiro: false
   });
 
   // Load available products
@@ -115,7 +115,8 @@ export const ProductRequestManager = ({ menuId, clientId, onCostChange }: Produc
       inteiro: false,
       arredondar_tipo: 0,
       promocao: false,
-      quantidade_embalagem: 1
+      quantidade_embalagem: 1,
+      apenas_valor_inteiro: false
     });
     setShowAddForm(false);
   };
@@ -267,6 +268,14 @@ export const ProductRequestManager = ({ menuId, clientId, onCostChange }: Produc
                 />
                 <Label htmlFor="promocao">Promoção</Label>
               </div>
+              <div className="flex items-center space-x-2">
+                <Switch 
+                  id="apenas_valor_inteiro"
+                  checked={formData.apenas_valor_inteiro || false}
+                  onCheckedChange={(checked) => setFormData(prev => ({ ...prev, apenas_valor_inteiro: checked }))}
+                />
+                <Label htmlFor="apenas_valor_inteiro">Apenas Valor Inteiro</Label>
+              </div>
             </div>
 
             <div className="flex space-x-2">
@@ -284,7 +293,8 @@ export const ProductRequestManager = ({ menuId, clientId, onCostChange }: Produc
                     inteiro: false,
                     arredondar_tipo: 0,
                     promocao: false,
-                    quantidade_embalagem: 1
+                    quantidade_embalagem: 1,
+                    apenas_valor_inteiro: false
                   });
                 }}
               >
@@ -343,6 +353,9 @@ export const ProductRequestManager = ({ menuId, clientId, onCostChange }: Produc
                     <h4 className="font-medium">{request.descricao}</h4>
                     {request.promocao && (
                       <Badge className="bg-orange-100 text-orange-800">Promoção</Badge>
+                    )}
+                    {request.apenas_valor_inteiro && (
+                      <Badge className="bg-blue-100 text-blue-800">Valor Inteiro</Badge>
                     )}
                     {request.grupo && (
                       <Badge variant="outline">{request.grupo}</Badge>

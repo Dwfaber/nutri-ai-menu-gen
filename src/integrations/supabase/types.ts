@@ -16,6 +16,7 @@ export type Database = {
     Tables: {
       co_solicitacao_produto_listagem: {
         Row: {
+          apenas_valor_inteiro: boolean | null
           arredondar_tipo: number | null
           categoria_descricao: string | null
           categoria_id: number | null
@@ -34,6 +35,7 @@ export type Database = {
           unidade: string | null
         }
         Insert: {
+          apenas_valor_inteiro?: boolean | null
           arredondar_tipo?: number | null
           categoria_descricao?: string | null
           categoria_id?: number | null
@@ -52,6 +54,7 @@ export type Database = {
           unidade?: string | null
         }
         Update: {
+          apenas_valor_inteiro?: boolean | null
           arredondar_tipo?: number | null
           categoria_descricao?: string | null
           categoria_id?: number | null

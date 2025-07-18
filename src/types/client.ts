@@ -1,4 +1,3 @@
-
 export interface Client {
   id: string;
   name: string;
@@ -72,6 +71,7 @@ export interface ProductRequest {
   produto_base_id?: number;
   quantidade_embalagem?: number;
   criado_em?: string;
+  apenas_valor_inteiro?: boolean;
 }
 
 // Legacy product interface
