@@ -22,6 +22,7 @@ export type Database = {
           categoria_id: number | null
           criado_em: string | null
           descricao: string | null
+          em_promocao: boolean | null
           grupo: string | null
           inteiro: boolean | null
           per_capita: number | null
@@ -41,6 +42,7 @@ export type Database = {
           categoria_id?: number | null
           criado_em?: string | null
           descricao?: string | null
+          em_promocao?: boolean | null
           grupo?: string | null
           inteiro?: boolean | null
           per_capita?: number | null
@@ -60,6 +62,7 @@ export type Database = {
           categoria_id?: number | null
           criado_em?: string | null
           descricao?: string | null
+          em_promocao?: boolean | null
           grupo?: string | null
           inteiro?: boolean | null
           per_capita?: number | null

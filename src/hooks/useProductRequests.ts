@@ -20,6 +20,7 @@ export interface ProductRequest {
   quantidade_embalagem?: number;
   criado_em?: string;
   apenas_valor_inteiro?: boolean;
+  em_promocao?: boolean;
 }
 
 export const useProductRequests = () => {

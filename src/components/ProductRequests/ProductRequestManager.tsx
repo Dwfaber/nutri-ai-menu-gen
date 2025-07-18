@@ -48,7 +48,8 @@ export const ProductRequestManager = ({ menuId, clientId, onCostChange }: Produc
     arredondar_tipo: 0,
     promocao: false,
     quantidade_embalagem: 1,
-    apenas_valor_inteiro: false
+    apenas_valor_inteiro: false,
+    em_promocao: false
   });
 
   // Load available products
@@ -116,7 +117,8 @@ export const ProductRequestManager = ({ menuId, clientId, onCostChange }: Produc
       arredondar_tipo: 0,
       promocao: false,
       quantidade_embalagem: 1,
-      apenas_valor_inteiro: false
+      apenas_valor_inteiro: false,
+      em_promocao: false
     });
     setShowAddForm(false);
   };
@@ -276,6 +278,14 @@ export const ProductRequestManager = ({ menuId, clientId, onCostChange }: Produc
                 />
                 <Label htmlFor="apenas_valor_inteiro">Apenas Valor Inteiro</Label>
               </div>
+              <div className="flex items-center space-x-2">
+                <Switch 
+                  id="em_promocao"
+                  checked={formData.em_promocao || false}
+                  onCheckedChange={(checked) => setFormData(prev => ({ ...prev, em_promocao: checked }))}
+                />
+                <Label htmlFor="em_promocao">Em Promoção</Label>
+              </div>
             </div>
 
             <div className="flex space-x-2">
@@ -294,7 +304,8 @@ export const ProductRequestManager = ({ menuId, clientId, onCostChange }: Produc
                     arredondar_tipo: 0,
                     promocao: false,
                     quantidade_embalagem: 1,
-                    apenas_valor_inteiro: false
+                    apenas_valor_inteiro: false,
+                    em_promocao: false
                   });
                 }}
               >
@@ -353,6 +364,9 @@ export const ProductRequestManager = ({ menuId, clientId, onCostChange }: Produc
                     <h4 className="font-medium">{request.descricao}</h4>
                     {request.promocao && (
                       <Badge className="bg-orange-100 text-orange-800">Promoção</Badge>
+                    )}
+                    {request.em_promocao && (
+                      <Badge className="bg-green-100 text-green-800">Em Promoção</Badge>
                     )}
                     {request.apenas_valor_inteiro && (
                       <Badge className="bg-blue-100 text-blue-800">Valor Inteiro</Badge>
