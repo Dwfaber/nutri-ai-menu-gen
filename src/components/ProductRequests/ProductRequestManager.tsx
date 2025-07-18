@@ -368,12 +368,17 @@ export const ProductRequestManager = ({ menuId, clientId, onCostChange }: Produc
       {/* Requests List */}
       <div className="space-y-4">
         {requests.map((request) => (
-          <Card key={request.solicitacao_id}>
+          <Card key={request.solicitacao_produto_listagem_id || request.solicitacao_id}>
             <CardContent className="p-4">
               <div className="flex justify-between items-start">
                 <div className="flex-1">
                   <div className="flex items-center space-x-2 mb-2">
                     <h4 className="font-medium">{request.descricao}</h4>
+                    {request.solicitacao_produto_listagem_id && (
+                      <Badge variant="outline" className="text-xs">
+                        ID: {request.solicitacao_produto_listagem_id.substring(0, 8)}...
+                      </Badge>
+                    )}
                     {request.promocao && (
                       <Badge className="bg-orange-100 text-orange-800">Promoção</Badge>
                     )}

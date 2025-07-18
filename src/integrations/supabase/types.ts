@@ -34,6 +34,7 @@ export type Database = {
           promocao: boolean | null
           quantidade_embalagem: number | null
           solicitacao_id: number
+          solicitacao_produto_listagem_id: string | null
           unidade: string | null
         }
         Insert: {
@@ -55,6 +56,7 @@ export type Database = {
           promocao?: boolean | null
           quantidade_embalagem?: number | null
           solicitacao_id: number
+          solicitacao_produto_listagem_id?: string | null
           unidade?: string | null
         }
         Update: {
@@ -76,6 +78,7 @@ export type Database = {
           promocao?: boolean | null
           quantidade_embalagem?: number | null
           solicitacao_id?: number
+          solicitacao_produto_listagem_id?: string | null
           unidade?: string | null
         }
         Relationships: []

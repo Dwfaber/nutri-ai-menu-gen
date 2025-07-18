@@ -1,3 +1,4 @@
+
 export interface Client {
   id: string;
   name: string;
@@ -56,6 +57,7 @@ export interface Menu {
 // New interface for product requests
 export interface ProductRequest {
   solicitacao_id: number;
+  solicitacao_produto_listagem_id?: string;
   categoria_id?: number;
   categoria_descricao?: string;
   grupo?: string;
