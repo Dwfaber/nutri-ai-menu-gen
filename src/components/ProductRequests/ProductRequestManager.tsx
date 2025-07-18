@@ -376,7 +376,7 @@ export const ProductRequestManager = ({ menuId, clientId, onCostChange }: Produc
                     <h4 className="font-medium">{request.descricao}</h4>
                     {request.solicitacao_produto_listagem_id && (
                       <Badge variant="outline" className="text-xs">
-                        ID: {request.solicitacao_produto_listagem_id.substring(0, 8)}...
+                        ID: {request.solicitacao_produto_listagem_id}
                       </Badge>
                     )}
                     {request.promocao && (

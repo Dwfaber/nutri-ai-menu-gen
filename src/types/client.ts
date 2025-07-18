@@ -57,7 +57,7 @@ export interface Menu {
 // New interface for product requests
 export interface ProductRequest {
   solicitacao_id: number;
-  solicitacao_produto_listagem_id?: string;
+  solicitacao_produto_listagem_id?: number;
   categoria_id?: number;
   categoria_descricao?: string;
   grupo?: string;
