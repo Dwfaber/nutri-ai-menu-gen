@@ -1,3 +1,5 @@
+
+import React from 'react';
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -11,31 +13,40 @@ import Relatorios from "./pages/Relatorios";
 import NotFound from "./pages/NotFound";
 import SystemArchitecture from "./pages/SystemArchitecture";
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      retry: 1,
+      staleTime: 5 * 60 * 1000, // 5 minutes
+    },
+  },
+});
 
-const App = () => (
-  <QueryClientProvider client={queryClient}>
-    <TooltipProvider>
-      <Toaster />
-      <Sonner />
-      <BrowserRouter>
-        <div className="flex min-h-screen w-full bg-gray-50">
-          <Sidebar />
-          <main className="flex-1 p-6 overflow-auto">
-            <Routes>
-              <Route path="/" element={<Dashboard />} />
-              <Route path="/cardapios" element={<Cardapios />} />
-              <Route path="/compras" element={<Compras />} />
-              <Route path="/relatorios" element={<Relatorios />} />
-              <Route path="/arquitetura" element={<SystemArchitecture />} />
-              <Route path="/configuracoes" element={<Dashboard />} />
-              <Route path="*" element={<NotFound />} />
-            </Routes>
-          </main>
-        </div>
-      </BrowserRouter>
-    </TooltipProvider>
-  </QueryClientProvider>
-);
+const App = () => {
+  return (
+    <QueryClientProvider client={queryClient}>
+      <TooltipProvider>
+        <Toaster />
+        <Sonner />
+        <BrowserRouter>
+          <div className="flex min-h-screen w-full bg-gray-50">
+            <Sidebar />
+            <main className="flex-1 p-6 overflow-auto">
+              <Routes>
+                <Route path="/" element={<Dashboard />} />
+                <Route path="/cardapios" element={<Cardapios />} />
+                <Route path="/compras" element={<Compras />} />
+                <Route path="/relatorios" element={<Relatorios />} />
+                <Route path="/arquitetura" element={<SystemArchitecture />} />
+                <Route path="/configuracoes" element={<Dashboard />} />
+                <Route path="*" element={<NotFound />} />
+              </Routes>
+            </main>
+          </div>
+        </BrowserRouter>
+      </TooltipProvider>
+    </QueryClientProvider>
+  );
+};
 
 export default App;
