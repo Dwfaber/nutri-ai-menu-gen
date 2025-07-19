@@ -17,8 +17,8 @@ const VIEW_MAPPING = {
   },
   vwCoSolicitacaoProdutoListagem: {
     description: 'Produtos Solicitados',
-    targetTable: 'produtos_legado',
-    fields: ['produto_id', 'nome_produto', 'categoria', 'unidade', 'preco_unitario']
+    targetTable: 'co_solicitacao_produto_listagem',
+    fields: ['produto_id', 'nome_produto', 'categoria', 'unidade', 'preco_unitario', 'quantidade_embalagem', 'preco_compra']
   },
   vwCpReceita: {
     description: 'Receitas',
@@ -61,14 +61,17 @@ serve(async (req) => {
       return await checkViewsAvailability(supabaseClient);
     }
 
-    // Verificar se é uma sincronização de view específica
+    // Verificar se é uma sincronização de view específica com dados do n8n
     if (requestBody.viewName && VIEW_MAPPING[requestBody.viewName as keyof typeof VIEW_MAPPING]) {
-      return await syncViewWithData(supabaseClient, requestBody.viewName, requestBody.data || []);
-    }
-
-    // Se tem dados diretos para sincronizar (formato do n8n)
-    if (requestBody.viewName && requestBody.data && Array.isArray(requestBody.data)) {
-      return await syncViewWithData(supabaseClient, requestBody.viewName, requestBody.data);
+      // Se tem dados diretos para sincronizar (formato do n8n)
+      if (requestBody.data && Array.isArray(requestBody.data) && requestBody.data.length > 0) {
+        console.log(`Recebidos ${requestBody.data.length} registros reais do n8n para ${requestBody.viewName}`);
+        return await syncViewWithData(supabaseClient, requestBody.viewName, requestBody.data);
+      } else {
+        // Se não tem dados, é um teste manual - processar sem dados
+        console.log(`Teste manual para ${requestBody.viewName} - sem dados do n8n`);
+        return await syncViewWithData(supabaseClient, requestBody.viewName, []);
+      }
     }
 
     throw new Error('Invalid request format. Expected: { viewName, data } or { action: "checkViews" }');
@@ -88,7 +91,7 @@ serve(async (req) => {
 async function checkViewsAvailability(supabaseClient: any) {
   console.log('Checking views availability...');
   
-  // Simular verificação de views - em produção usaria driver SQL Server
+  // Views disponíveis para sincronização
   const availableViews = [
     'vwCoSolicitacaoFilialCusto',
     'vwCoSolicitacaoProdutoListagem',
@@ -145,13 +148,40 @@ async function syncViewWithData(supabaseClient: any, viewName: string, data: any
   const logId = logData?.id;
 
   try {
-    // Validar se os dados foram enviados corretamente
-    if (!Array.isArray(data)) {
-      throw new Error(`Dados inválidos para ${viewName}: esperado array do n8n`);
+    // Se não há dados, é um teste manual
+    if (!Array.isArray(data) || data.length === 0) {
+      console.log(`Teste manual para ${viewName} - sem processamento de dados`);
+      
+      if (logId) {
+        await supabaseClient
+          .from('sync_logs')
+          .update({
+            status: 'concluido',
+            registros_processados: 0,
+            tempo_execucao_ms: Date.now() - startTime,
+            detalhes: { 
+              viewName, 
+              recordCount: 0,
+              fonte: 'teste manual - sem dados'
+            }
+          })
+          .eq('id', logId);
+      }
+
+      return new Response(
+        JSON.stringify({
+          success: true,
+          viewName,
+          recordCount: 0,
+          message: 'Teste manual executado - aguardando dados reais do n8n'
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
     }
 
     console.log(`Processando ${data.length} registros reais da view ${viewName}`);
     
+    // Log detalhes do primeiro registro para debug
     if (data.length > 0) {
       console.log(`Exemplo de registro recebido:`, JSON.stringify(data[0], null, 2));
     }
@@ -219,11 +249,40 @@ async function processViewData(supabaseClient: any, viewName: string, data: any[
   for (const record of data) {
     try {
       // Log progresso para lotes grandes
-      if (processedCount > 0 && processedCount % 100 === 0) {
+      if (processedCount > 0 && processedCount % 500 === 0) {
         console.log(`Processando registro ${processedCount}/${data.length} da view ${viewName}`);
       }
 
-      if (mapping.targetTable === 'produtos_legado') {
+      if (mapping.targetTable === 'co_solicitacao_produto_listagem') {
+        const { error } = await supabaseClient
+          .from('co_solicitacao_produto_listagem')
+          .upsert({
+            solicitacao_produto_listagem_id: record.solicitacao_produto_listagem_id || record.id,
+            produto_id: record.produto_id,
+            produto_base_id: record.produto_base_id,
+            categoria_id: record.categoria_id,
+            solicitacao_id: record.solicitacao_id,
+            descricao: record.descricao || record.nome_produto,
+            unidade: record.unidade,
+            quantidade_embalagem: record.quantidade_embalagem || 1,
+            produto_base_qtd_embalagem: record.produto_base_qtd_embalagem || 1,
+            preco: record.preco || record.preco_unitario || 0,
+            preco_compra: record.preco_compra || record.preco || 0,
+            promocao: record.promocao || false,
+            em_promocao: record.em_promocao || false,
+            per_capita: record.per_capita || 0,
+            inteiro: record.inteiro || false,
+            apenas_valor_inteiro: record.apenas_valor_inteiro || false,
+            arredondar_tipo: record.arredondar_tipo || 0,
+            grupo: record.grupo,
+            categoria_descricao: record.categoria_descricao,
+            criado_em: record.criado_em || new Date().toISOString()
+          });
+
+        if (error) {
+          console.error(`Erro ao processar produto solicitação:`, error);
+        }
+      } else if (mapping.targetTable === 'produtos_legado') {
         const { error } = await supabaseClient
           .from('produtos_legado')
           .upsert({
