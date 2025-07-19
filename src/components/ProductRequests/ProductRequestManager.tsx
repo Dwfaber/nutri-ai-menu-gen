@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, Edit2, Trash2, Package, DollarSign, Percent } from 'lucide-react';
+import { Plus, Edit2, Trash2, Package, DollarSign, Percent, RefreshCw, Wifi, WifiOff } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -7,8 +7,11 @@ import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
-import { useProductRequests, ProductRequest } from '@/hooks/useProductRequests';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { ProductRequest } from '@/hooks/useProductRequests';
+import { usePaginatedRequests } from '@/hooks/usePaginatedRequests';
 import { supabase } from '@/integrations/supabase/client';
+import { withRetry, createConnectionMonitor } from '@/utils/connectionUtils';
 
 interface ProductRequestManagerProps {
   menuId?: string;
@@ -31,16 +34,21 @@ export const ProductRequestManager = ({ menuId, clientId, onCostChange }: Produc
   const { 
     requests, 
     isLoading, 
+    isLoadingMore,
+    error,
+    hasMore,
+    totalCount,
+    loadMore,
+    refresh,
     createRequest, 
     updateRequest, 
-    deleteRequest,
-    calculateTotalCost,
-    calculateTotalPurchaseCost 
-  } = useProductRequests();
+    deleteRequest
+  } = usePaginatedRequests({ pageSize: 20 });
   
   const [availableProducts, setAvailableProducts] = useState<LegacyProduct[]>([]);
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingRequest, setEditingRequest] = useState<ProductRequest | null>(null);
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [formData, setFormData] = useState<Partial<ProductRequest>>({
     per_capita: 0,
     inteiro: false,
@@ -52,21 +60,34 @@ export const ProductRequestManager = ({ menuId, clientId, onCostChange }: Produc
     produto_base_qtd_embalagem: 1
   });
 
-  // Load available products
+  // Monitor de conectividade
+  useEffect(() => {
+    const connectionMonitor = createConnectionMonitor();
+    const unsubscribe = connectionMonitor.onStatusChange(setIsOnline);
+    return unsubscribe;
+  }, []);
+
+  // Load available products with retry
   useEffect(() => {
     const fetchProducts = async () => {
-      const { data, error } = await supabase
-        .from('produtos_legado')
-        .select('*')
-        .eq('disponivel', true)
-        .order('nome');
+      try {
+        const operation = async () => {
+          const { data, error } = await supabase
+            .from('produtos_legado')
+            .select('*')
+            .eq('disponivel', true)
+            .order('nome')
+            .limit(100); // Limitar para evitar sobrecarga
 
-      if (error) {
+          if (error) throw error;
+          return data || [];
+        };
+
+        const data = await withRetry(operation, { maxRetries: 2 });
+        setAvailableProducts(data);
+      } catch (error) {
         console.error('Error fetching products:', error);
-        return;
       }
-
-      setAvailableProducts(data || []);
     };
 
     fetchProducts();
@@ -74,9 +95,9 @@ export const ProductRequestManager = ({ menuId, clientId, onCostChange }: Produc
 
   // Update parent component with cost changes
   useEffect(() => {
-    if (onCostChange) {
-      const totalCost = calculateTotalCost();
-      const purchaseCost = calculateTotalPurchaseCost();
+    if (onCostChange && requests.length > 0) {
+      const totalCost = requests.reduce((total, req) => total + (req.preco || 0), 0);
+      const purchaseCost = requests.reduce((total, req) => total + (req.preco_compra || 0), 0);
       onCostChange(totalCost, purchaseCost);
     }
   }, [requests, onCostChange]);
@@ -143,20 +164,75 @@ export const ProductRequestManager = ({ menuId, clientId, onCostChange }: Produc
     }
   };
 
+  const calculateTotalCost = () => requests.reduce((total, req) => total + (req.preco || 0), 0);
+
   return (
     <div className="space-y-6">
+      {/* Connection Status */}
+      {!isOnline && (
+        <Alert variant="destructive">
+          <WifiOff className="h-4 w-4" />
+          <AlertDescription className="flex items-center justify-between">
+            <span>Sem conexão com a internet. Algumas funcionalidades podem não funcionar.</span>
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {/* Error Alert with Retry */}
+      {error && (
+        <Alert variant="destructive">
+          <AlertDescription className="flex items-center justify-between">
+            <span>{error}</span>
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={refresh}
+              disabled={isLoading}
+            >
+              <RefreshCw className="w-4 h-4 mr-2" />
+              Tentar Novamente
+            </Button>
+          </AlertDescription>
+        </Alert>
+      )}
+
       <div className="flex justify-between items-center">
         <div>
           <h3 className="text-lg font-semibold">Solicitações de Produtos</h3>
-          <p className="text-sm text-gray-600">Gerencie os produtos do cardápio</p>
+          <div className="flex items-center space-x-4 text-sm text-gray-600">
+            <span>Total: {totalCount} produtos</span>
+            <span>Exibindo: {requests.length}</span>
+            {isOnline ? (
+              <div className="flex items-center space-x-1 text-green-600">
+                <Wifi className="w-3 h-3" />
+                <span>Online</span>
+              </div>
+            ) : (
+              <div className="flex items-center space-x-1 text-red-600">
+                <WifiOff className="w-3 h-3" />
+                <span>Offline</span>
+              </div>
+            )}
+          </div>
         </div>
-        <Button 
-          onClick={() => setShowAddForm(true)}
-          className="bg-blue-600 hover:bg-blue-700"
-        >
-          <Plus className="w-4 h-4 mr-2" />
-          Adicionar Produto
-        </Button>
+        <div className="flex space-x-2">
+          <Button 
+            variant="outline"
+            onClick={refresh}
+            disabled={isLoading}
+          >
+            <RefreshCw className="w-4 h-4 mr-2" />
+            Atualizar
+          </Button>
+          <Button 
+            onClick={() => setShowAddForm(true)}
+            className="bg-blue-600 hover:bg-blue-700"
+            disabled={!isOnline}
+          >
+            <Plus className="w-4 h-4 mr-2" />
+            Adicionar Produto
+          </Button>
+        </div>
       </div>
 
       {/* Add/Edit Form */}
@@ -297,7 +373,10 @@ export const ProductRequestManager = ({ menuId, clientId, onCostChange }: Produc
             </div>
 
             <div className="flex space-x-2">
-              <Button onClick={handleSubmit} disabled={isLoading}>
+              <Button 
+                onClick={handleSubmit} 
+                disabled={isLoading || !isOnline}
+              >
                 {editingRequest ? 'Atualizar' : 'Adicionar'}
               </Button>
               <Button 
@@ -332,7 +411,7 @@ export const ProductRequestManager = ({ menuId, clientId, onCostChange }: Produc
               <Package className="w-5 h-5 text-blue-600" />
               <div>
                 <p className="text-sm font-medium">Total de Produtos</p>
-                <p className="text-2xl font-bold">{requests.length}</p>
+                <p className="text-2xl font-bold">{totalCount}</p>
               </div>
             </div>
           </CardContent>
@@ -421,6 +500,7 @@ export const ProductRequestManager = ({ menuId, clientId, onCostChange }: Produc
                     variant="outline" 
                     size="sm"
                     onClick={() => handleEdit(request)}
+                    disabled={!isOnline}
                   >
                     <Edit2 className="w-3 h-3" />
                   </Button>
@@ -429,6 +509,7 @@ export const ProductRequestManager = ({ menuId, clientId, onCostChange }: Produc
                     size="sm"
                     onClick={() => request.solicitacao_produto_listagem_id && handleDelete(request.solicitacao_produto_listagem_id)}
                     className="text-red-600 hover:text-red-700"
+                    disabled={!isOnline}
                   >
                     <Trash2 className="w-3 h-3" />
                   </Button>
@@ -439,6 +520,20 @@ export const ProductRequestManager = ({ menuId, clientId, onCostChange }: Produc
         ))}
       </div>
 
+      {/* Load More Button */}
+      {hasMore && (
+        <div className="flex justify-center">
+          <Button 
+            variant="outline" 
+            onClick={loadMore} 
+            disabled={isLoadingMore || !isOnline}
+          >
+            {isLoadingMore ? 'Carregando...' : 'Carregar Mais'}
+          </Button>
+        </div>
+      )}
+
+      {/* Empty State */}
       {requests.length === 0 && !isLoading && (
         <Card>
           <CardContent className="p-8 text-center text-gray-500">
@@ -447,6 +542,13 @@ export const ProductRequestManager = ({ menuId, clientId, onCostChange }: Produc
             <p className="text-sm">Adicione produtos ao cardápio para começar</p>
           </CardContent>
         </Card>
+      )}
+
+      {/* Loading State */}
+      {isLoading && (
+        <div className="flex justify-center py-8">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+        </div>
       )}
     </div>
   );
