@@ -166,43 +166,58 @@ export type Database = {
       }
       receitas_legado: {
         Row: {
+          categoria_descricao: string | null
+          categoria_id: number | null
           categoria_receita: string | null
           created_at: string
           custo_total: number | null
           id: string
+          inativa: boolean
           ingredientes: Json
           modo_preparo: string | null
           nome_receita: string
           porcoes: number | null
+          quantidade_refeicoes: number | null
           receita_id_legado: string
           sync_at: string
           tempo_preparo: number | null
+          usuario: string | null
         }
         Insert: {
+          categoria_descricao?: string | null
+          categoria_id?: number | null
           categoria_receita?: string | null
           created_at?: string
           custo_total?: number | null
           id?: string
+          inativa?: boolean
           ingredientes?: Json
           modo_preparo?: string | null
           nome_receita: string
           porcoes?: number | null
+          quantidade_refeicoes?: number | null
           receita_id_legado: string
           sync_at?: string
           tempo_preparo?: number | null
+          usuario?: string | null
         }
         Update: {
+          categoria_descricao?: string | null
+          categoria_id?: number | null
           categoria_receita?: string | null
           created_at?: string
           custo_total?: number | null
           id?: string
+          inativa?: boolean
           ingredientes?: Json
           modo_preparo?: string | null
           nome_receita?: string
           porcoes?: number | null
+          quantidade_refeicoes?: number | null
           receita_id_legado?: string
           sync_at?: string
           tempo_preparo?: number | null
+          usuario?: string | null
         }
         Relationships: []
       }

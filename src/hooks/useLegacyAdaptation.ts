@@ -49,7 +49,7 @@ export const useLegacyAdaptation = () => {
     },
     vwCpReceita: {
       name: 'Receitas',
-      description: 'Receitas e preparações cadastradas',
+      description: 'Receitas e preparações cadastradas (mapeada para receitas_legado)',
       status: 'pending'
     },
     vwCpReceitaProduto: {
@@ -81,8 +81,11 @@ export const useLegacyAdaptation = () => {
         isProcessing: true
       }));
 
-      const { data, error } = await supabase.functions.invoke('sync-legacy-views', {
-        body: { viewName }
+      // Usar edge function específica para vwCpReceita
+      const functionName = viewName === 'vwCpReceita' ? 'sync-legacy-receitas' : 'sync-legacy-views';
+      
+      const { data, error } = await supabase.functions.invoke(functionName, {
+        body: viewName === 'vwCpReceita' ? {} : { viewName }
       });
 
       if (error) {
