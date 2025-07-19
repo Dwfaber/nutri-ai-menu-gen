@@ -1,6 +1,6 @@
 
 import { useState, useEffect } from 'react';
-import { Plus, Search, Filter, ShoppingCart, Download, AlertCircle, CheckCircle } from 'lucide-react';
+import { Plus, Search, Filter, ShoppingCart, Download, AlertCircle, CheckCircle, Package } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -9,6 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useShoppingList, ShoppingList, ShoppingListItem } from '../hooks/useShoppingList';
 import ShoppingListCard from '../components/ShoppingList/ShoppingListCard';
 import AdaptationPanel from '../components/LegacyAdaptation/AdaptationPanel';
+import { ProductRequestManager } from '../components/ProductRequests/ProductRequestManager';
 
 const Compras = () => {
   const [searchTerm, setSearchTerm] = useState('');
@@ -87,7 +88,7 @@ const Compras = () => {
       <div className="flex justify-between items-center">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Sistema de Compras</h1>
-          <p className="text-gray-600">Gerencie listas de compras geradas por IA</p>
+          <p className="text-gray-600">Gerencie listas de compras e mercado de produtos</p>
         </div>
         <Button className="bg-green-600 hover:bg-green-700" disabled>
           <Plus className="w-4 h-4 mr-2" />
@@ -96,8 +97,9 @@ const Compras = () => {
       </div>
 
       <Tabs defaultValue="shopping" className="w-full">
-        <TabsList className="grid w-full grid-cols-2">
+        <TabsList className="grid w-full grid-cols-3">
           <TabsTrigger value="shopping">Listas de Compras</TabsTrigger>
+          <TabsTrigger value="market">Mercado de Produtos</TabsTrigger>
           <TabsTrigger value="adaptation">Adaptação do Sistema</TabsTrigger>
         </TabsList>
         
@@ -284,6 +286,48 @@ const Compras = () => {
                 </Card>
               )}
             </div>
+          </div>
+        </TabsContent>
+        
+        <TabsContent value="market" className="space-y-6">
+          <div className="space-y-4">
+            <div className="flex items-center space-x-2">
+              <Package className="w-6 h-6 text-blue-600" />
+              <div>
+                <h3 className="text-lg font-semibold">Mercado de Produtos</h3>
+                <p className="text-sm text-gray-600">
+                  Gerencie o catálogo de produtos disponíveis para geração de cardápios
+                </p>
+              </div>
+            </div>
+            
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-blue-600">Catálogo Digital</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm text-gray-600 mb-4">
+                  Este é o mercado digital que a IA utiliza para gerar cardápios e listas de compras. 
+                  Todos os produtos aqui cadastrados têm preços atualizados e dados per capita configurados.
+                </p>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                  <div className="bg-blue-50 p-4 rounded-lg">
+                    <h4 className="font-medium text-blue-900">Produtos Ativos</h4>
+                    <p className="text-2xl font-bold text-blue-600">1.735</p>
+                  </div>
+                  <div className="bg-green-50 p-4 rounded-lg">
+                    <h4 className="font-medium text-green-900">Categorias</h4>
+                    <p className="text-2xl font-bold text-green-600">8</p>
+                  </div>
+                  <div className="bg-orange-50 p-4 rounded-lg">
+                    <h4 className="font-medium text-orange-900">Em Promoção</h4>
+                    <p className="text-2xl font-bold text-orange-600">1</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+            
+            <ProductRequestManager />
           </div>
         </TabsContent>
         

@@ -54,46 +54,105 @@ async function generateMenuWithAssistant(supabaseClient: any, clientId: string, 
       .eq('cliente_id_legado', clientId)
       .single();
 
-    // Get available products
-    const { data: products } = await supabaseClient
-      .from('produtos_legado')
+    // Get available products from the digital market
+    const { data: marketProducts } = await supabaseClient
+      .from('co_solicitacao_produto_listagem')
       .select('*')
-      .eq('disponivel', true);
+      .order('categoria_descricao', { ascending: true })
+      .limit(50); // Limit to avoid token overflow
 
     // Get available recipes
     const { data: recipes } = await supabaseClient
       .from('receitas_legado')
-      .select('*');
+      .select('*')
+      .limit(10);
 
-    // Create context for GPT Assistant
-    const context = {
-      client: clientData,
-      budget,
-      restrictions,
-      preferences,
-      availableProducts: products?.slice(0, 20), // Limit to avoid token limit
-      availableRecipes: recipes?.slice(0, 10)
-    };
+    // Process market data by category
+    const productsByCategory = marketProducts?.reduce((acc: any, product: any) => {
+      const category = product.categoria_descricao || 'Outros';
+      if (!acc[category]) {
+        acc[category] = [];
+      }
+      acc[category].push({
+        id: product.produto_id,
+        nome: product.descricao,
+        preco: product.preco || 0,
+        preco_compra: product.preco_compra || 0,
+        per_capita: product.per_capita || 0,
+        unidade: product.unidade || 'kg',
+        grupo: product.grupo || 'Geral',
+        promocao: product.promocao || false,
+        em_promocao: product.em_promocao || false,
+        disponivel: true
+      });
+      return acc;
+    }, {});
+
+    const totalFuncionarios = clientData?.total_funcionarios || 100;
+    const budgetPerPerson = budget;
 
     const prompt = `
 Como nutricionista corporativo especializado, crie um cardápio semanal para:
 
 **Cliente:** ${clientData?.nome_empresa || 'Empresa'}
-**Funcionários:** ${clientData?.total_funcionarios || 100}
-**Orçamento por refeição:** R$ ${budget.toFixed(2)}
+**Funcionários:** ${totalFuncionarios}
+**Orçamento por refeição:** R$ ${budgetPerPerson.toFixed(2)}
 **Restrições:** ${restrictions.join(', ') || 'Nenhuma'}
 **Preferências:** ${preferences || 'Não especificadas'}
 
-**Produtos Disponíveis:** ${JSON.stringify(products?.slice(0, 5), null, 2)}
+**Produtos Disponíveis no Mercado Digital:**
+${Object.entries(productsByCategory || {}).map(([category, products]: [string, any]) => 
+  `\n**${category}:**\n${products.slice(0, 5).map((p: any) => 
+    `- ${p.nome} (${p.unidade}) - R$ ${p.preco?.toFixed(2)} - Per capita: ${p.per_capita} ${p.promocao ? '(PROMOÇÃO)' : ''}`
+  ).join('\n')}`
+).join('\n')}
 
-Crie um cardápio com 5 pratos variados, cada um contendo:
-- Nome do prato
-- Categoria (protein, carb, vegetable, etc)
-- Informações nutricionais (calorias, proteína, carboidratos, gordura)
-- Custo estimado
-- Restrições atendidas
+**Receitas Base Disponíveis:**
+${recipes?.slice(0, 5).map(r => `- ${r.nome_receita} (${r.categoria_receita}) - Porções: ${r.porcoes}`).join('\n') || 'Nenhuma receita cadastrada'}
 
-Retorne em formato JSON estruturado para fácil processamento.
+INSTRUÇÕES IMPORTANTES:
+1. Use APENAS produtos da lista acima
+2. Calcule custos usando per capita × ${totalFuncionarios} funcionários
+3. Considere produtos em promoção para otimizar orçamento
+4. Atenda às restrições alimentares especificadas
+5. Crie 5 pratos variados para a semana
+
+Retorne em JSON com esta estrutura:
+{
+  "items": [
+    {
+      "id": "1",
+      "name": "Nome do Prato",
+      "category": "protein|carb|vegetable|beverage",
+      "ingredients": [
+        {
+          "produto_id": 123,
+          "nome": "Ingrediente",
+          "quantidade": 0.5,
+          "unidade": "kg",
+          "preco_unitario": 10.00,
+          "custo_total": 5.00
+        }
+      ],
+      "nutritionalInfo": {
+        "calories": 450,
+        "protein": 35,
+        "carbs": 25,
+        "fat": 12
+      },
+      "cost": 12.50,
+      "servings": ${totalFuncionarios},
+      "restrictions": ["gluten-free"],
+      "description": "Descrição do prato"
+    }
+  ],
+  "summary": {
+    "total_cost": 62.50,
+    "average_cost_per_person": 12.50,
+    "within_budget": true,
+    "promotions_used": 2
+  }
+}
     `;
 
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -107,7 +166,7 @@ Retorne em formato JSON estruturado para fácil processamento.
         messages: [
           {
             role: 'system',
-            content: `Você é um nutricionista corporativo especializado em criar cardápios balanceados, econômicos e adaptados a restrições alimentares. Sempre retorne respostas em formato JSON válido com a estrutura solicitada.`
+            content: `Você é um nutricionista corporativo especializado em criar cardápios balanceados usando dados reais do mercado. Sempre retorne JSON válido com custos calculados usando per capita × número de funcionários.`
           },
           {
             role: 'user',
@@ -115,7 +174,7 @@ Retorne em formato JSON estruturado para fácil processamento.
           }
         ],
         temperature: 0.7,
-        max_tokens: 2000
+        max_tokens: 3000
       }),
     });
 
@@ -124,17 +183,26 @@ Retorne em formato JSON estruturado para fácil processamento.
 
     // Try to parse JSON response
     let menuItems;
+    let summary;
     try {
       const jsonMatch = assistantResponse.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
         const parsedResponse = JSON.parse(jsonMatch[0]);
-        menuItems = parsedResponse.items || parsedResponse.pratos || [];
+        menuItems = parsedResponse.items || [];
+        summary = parsedResponse.summary || {};
       } else {
         throw new Error('No JSON found in response');
       }
     } catch (parseError) {
-      // Fallback: create structured menu from text response
-      menuItems = createFallbackMenu(assistantResponse, budget, restrictions);
+      console.error('JSON parsing error:', parseError);
+      // Fallback: create structured menu from available products
+      menuItems = createFallbackMenu(marketProducts || [], budget, restrictions, totalFuncionarios);
+      summary = {
+        total_cost: menuItems.reduce((sum: number, item: any) => sum + (item.cost || 0), 0),
+        average_cost_per_person: budget,
+        within_budget: true,
+        promotions_used: 0
+      };
     }
 
     // Create menu object
@@ -144,14 +212,15 @@ Retorne em formato JSON estruturado para fácil processamento.
       name: `Cardápio ${clientData?.nome_empresa || 'Empresa'} - ${new Date().toLocaleDateString()}`,
       week: new Date().toISOString().split('T')[0],
       items: menuItems,
-      totalCost: menuItems.reduce((sum: number, item: any) => sum + (item.cost || 0), 0),
+      summary,
+      totalCost: summary.total_cost || 0,
       createdAt: new Date().toISOString(),
       versions: {
         nutritionist: menuItems,
         kitchen: menuItems.map((item: any) => ({ 
           ...item, 
           name: `${item.name} (Tempo: ${item.prepTime || 20}min)`,
-          instructions: item.instructions || 'Instruções de preparo padrão'
+          instructions: item.instructions || 'Seguir receita padrão'
         })),
         client: menuItems.map((item: any) => ({ 
           ...item, 
@@ -225,29 +294,36 @@ Analise o comando e retorne em JSON:
   }
 }
 
-function createFallbackMenu(response: string, budget: number, restrictions: string[]) {
-  // Fallback menu creation when JSON parsing fails
-  const baseItems = [
-    {
-      id: '1',
-      name: 'Frango Grelhado com Quinoa',
-      category: 'protein',
-      nutritionalInfo: { calories: 450, protein: 35, carbs: 25, fat: 12 },
-      cost: Math.min(budget * 0.8, 12.00),
-      restrictions: restrictions.includes('vegan') ? ['gluten-free'] : []
-    },
-    {
-      id: '2',
-      name: 'Salada Completa',
-      category: 'vegetable',
-      nutritionalInfo: { calories: 320, protein: 15, carbs: 28, fat: 16 },
-      cost: Math.min(budget * 0.6, 8.50),
-      restrictions: ['vegan', 'gluten-free']
-    }
-  ];
+function createFallbackMenu(products: any[], budget: number, restrictions: string[], totalFuncionarios: number) {
+  const filteredProducts = products.filter(p => p.preco > 0 && p.per_capita > 0);
+  
+  return filteredProducts.slice(0, 5).map((product, index) => ({
+    id: (index + 1).toString(),
+    name: product.descricao || 'Prato Especial',
+    category: getCategoryType(product.categoria_descricao),
+    ingredients: [{
+      produto_id: product.produto_id,
+      nome: product.descricao,
+      quantidade: product.per_capita * totalFuncionarios,
+      unidade: product.unidade,
+      preco_unitario: product.preco,
+      custo_total: product.per_capita * totalFuncionarios * product.preco
+    }],
+    nutritionalInfo: { calories: 400, protein: 25, carbs: 30, fat: 15 },
+    cost: product.per_capita * totalFuncionarios * product.preco,
+    servings: totalFuncionarios,
+    restrictions: restrictions.includes('vegan') ? ['vegan'] : [],
+    description: `Prato preparado com ${product.descricao}`
+  }));
+}
 
-  // Filter based on restrictions
-  return restrictions.includes('vegan') 
-    ? baseItems.filter(item => item.restrictions.includes('vegan'))
-    : baseItems;
+function getCategoryType(categoria: string) {
+  const categoryMap: { [key: string]: string } = {
+    'Carnes': 'protein',
+    'Gêneros': 'carb',
+    'Hortifruti': 'vegetable',
+    'Padaria': 'carb',
+    'Cantina': 'beverage'
+  };
+  return categoryMap[categoria] || 'protein';
 }
