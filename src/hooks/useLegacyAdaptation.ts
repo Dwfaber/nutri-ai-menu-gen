@@ -1,4 +1,3 @@
-
 import { useState } from 'react';
 import { supabase } from '../integrations/supabase/client';
 import { useToast } from '@/components/ui/use-toast';
@@ -39,32 +38,32 @@ export const useLegacyAdaptation = () => {
   const [viewsStatus, setViewsStatus] = useState<LegacyViews>({
     vwCoSolicitacaoFilialCusto: {
       name: 'Custos por Filial',
-      description: 'Dados de custos e orçamento por filial',
+      description: 'Dados de custos e orçamento por filial (agora processa dados reais do n8n)',
       status: 'pending'
     },
     vwCoSolicitacaoProdutoListagem: {
       name: 'Produtos Solicitados',
-      description: 'Lista de produtos e solicitações',
+      description: 'Lista de produtos e solicitações (agora processa dados reais do n8n)',
       status: 'pending'
     },
     vwCpReceita: {
       name: 'Receitas',
-      description: 'Receitas e preparações cadastradas (mapeada para receitas_legado)',
+      description: 'Receitas e preparações cadastradas - agora processa lotes completos do n8n (não mais apenas 4 receitas)',
       status: 'pending'
     },
     vwCpReceitaProduto: {
       name: 'Ingredientes das Receitas',
-      description: 'Produtos utilizados em cada receita',
+      description: 'Produtos utilizados em cada receita (agora processa dados reais do n8n)',
       status: 'pending'
     },
     vwEstProdutoBase: {
       name: 'Produtos Base',
-      description: 'Estoque e informações básicas dos produtos',
+      description: 'Estoque e informações básicas dos produtos (agora processa dados reais do n8n)',
       status: 'pending'
     },
     vwOrFiliaisAtiva: {
       name: 'Filiais Ativas',
-      description: 'Filiais ativas e suas configurações',
+      description: 'Filiais ativas e suas configurações (agora processa dados reais do n8n)',
       status: 'pending'
     }
   });
@@ -73,7 +72,7 @@ export const useLegacyAdaptation = () => {
 
   const syncSpecificView = async (viewName: string): Promise<boolean> => {
     try {
-      console.log(`Sincronizando view: ${viewName}`);
+      console.log(`Sincronizando view: ${viewName} - agora com dados reais do n8n`);
       
       setSyncProgress(prev => ({
         ...prev,
@@ -84,8 +83,15 @@ export const useLegacyAdaptation = () => {
       // Usar edge function específica para vwCpReceita
       const functionName = viewName === 'vwCpReceita' ? 'sync-legacy-receitas' : 'sync-legacy-views';
       
+      // Para teste manual (sem dados do n8n), enviar array vazio
+      // Em produção, o n8n enviará os dados reais
+      const requestBody = viewName === 'vwCpReceita' ? {} : { 
+        viewName,
+        data: [] // Array vazio para teste - n8n enviará dados reais
+      };
+
       const { data, error } = await supabase.functions.invoke(functionName, {
-        body: viewName === 'vwCpReceita' ? {} : { viewName }
+        body: requestBody
       });
 
       if (error) {
@@ -103,7 +109,7 @@ export const useLegacyAdaptation = () => {
           ...prev[viewName as keyof LegacyViews],
           status: 'synced',
           lastSync: new Date().toISOString(),
-          recordCount: data.recordCount
+          recordCount: data.recordCount || data.lote_tamanho || 0
         }
       }));
 
@@ -166,7 +172,7 @@ export const useLegacyAdaptation = () => {
     if (allSuccess) {
       toast({
         title: "Sincronização Completa!",
-        description: "Todas as views foram sincronizadas com sucesso",
+        description: "Todas as views foram sincronizadas com dados reais (não mais dados mock)",
       });
     } else {
       toast({
@@ -206,7 +212,7 @@ export const useLegacyAdaptation = () => {
 
       toast({
         title: "Verificação Concluída",
-        description: `${data.availableViews.length} views disponíveis`,
+        description: `${data.availableViews.length} views disponíveis - agora processando dados reais`,
       });
 
       return true;

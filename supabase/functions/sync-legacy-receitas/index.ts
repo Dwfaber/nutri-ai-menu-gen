@@ -1,3 +1,4 @@
+
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
@@ -42,7 +43,7 @@ serve(async (req) => {
         operacao: 'sync_cp_receitas',
         tabela_destino: 'receitas_legado',
         status: 'iniciado',
-        detalhes: { fonte: 'cpReceitas view' }
+        detalhes: { fonte: 'cpReceitas view - dados reais do n8n' }
       });
 
     if (logError) {
@@ -51,10 +52,18 @@ serve(async (req) => {
 
     const startTime = Date.now();
 
-    // Simular dados da view cpReceitas do sistema legado
-    const receitasData = await simulateCpReceitasData();
+    // Ler dados reais enviados pelo n8n
+    const requestBody = await req.json();
     
-    console.log(`Encontradas ${receitasData.length} receitas na view cpReceitas`);
+    // Validar se os dados foram enviados corretamente
+    if (!requestBody || !Array.isArray(requestBody)) {
+      throw new Error('Dados inválidos: esperado array de receitas do n8n');
+    }
+
+    const receitasData = requestBody as CpReceita[];
+    
+    console.log(`Recebido lote com ${receitasData.length} receitas do n8n`);
+    console.log(`IDs das receitas recebidas: ${receitasData.slice(0, 10).map(r => r.receita_id).join(', ')}${receitasData.length > 10 ? '...' : ''}`);
 
     // Sincronizar receitas
     const result = await syncReceitas(supabaseClient, receitasData);
@@ -71,7 +80,8 @@ serve(async (req) => {
         registros_processados: result.processed,
         tempo_execucao_ms: executionTime,
         detalhes: {
-          fonte: 'cpReceitas view',
+          fonte: 'cpReceitas view - dados reais do n8n',
+          lote_tamanho: receitasData.length,
           sucessos: result.success,
           erros: result.errors,
           pulos: result.skipped
@@ -81,8 +91,11 @@ serve(async (req) => {
     return new Response(
       JSON.stringify({
         success: true,
-        message: `Sincronização concluída: ${result.processed} receitas processadas`,
-        details: result
+        message: `Sincronização concluída: ${result.processed} receitas processadas de ${receitasData.length} recebidas`,
+        details: {
+          ...result,
+          lote_tamanho: receitasData.length
+        }
       }),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -106,7 +119,7 @@ serve(async (req) => {
         tabela_destino: 'receitas_legado',
         status: 'erro',
         erro_msg: error.message,
-        detalhes: { fonte: 'cpReceitas view' }
+        detalhes: { fonte: 'cpReceitas view - dados reais do n8n' }
       });
 
     return new Response(
@@ -122,84 +135,6 @@ serve(async (req) => {
   }
 });
 
-async function simulateCpReceitasData(): Promise<CpReceita[]> {
-  // Simular dados da view cpReceitas baseados na estrutura mostrada
-  return [
-    {
-      receita_id: 1001,
-      nome: "Arroz com Feijão Completo",
-      modo_preparo: "Refogue a cebola, adicione o arroz e água. Cozinhe o feijão separadamente.",
-      ingredientes: [
-        { produto_id: "P001", nome: "Arroz", quantidade: 2, unidade: "kg" },
-        { produto_id: "P002", nome: "Feijão", quantidade: 1, unidade: "kg" },
-        { produto_id: "P003", nome: "Cebola", quantidade: 0.5, unidade: "kg" }
-      ],
-      tempo_preparo: 45,
-      porcoes: 10,
-      custo_total: 25.50,
-      categoria_id: 1,
-      categoria_descricao: "Pratos Principais",
-      quantidade_refeicoes: 10,
-      inativa: false,
-      usuario: "chef_principal",
-      criado_em: "2024-01-15T10:30:00Z"
-    },
-    {
-      receita_id: 1002,
-      nome: "Frango Grelhado com Legumes",
-      modo_preparo: "Tempere o frango e grelhe. Refogue os legumes com temperos.",
-      ingredientes: [
-        { produto_id: "P004", nome: "Peito de Frango", quantidade: 2.5, unidade: "kg" },
-        { produto_id: "P005", nome: "Cenoura", quantidade: 1, unidade: "kg" },
-        { produto_id: "P006", nome: "Abobrinha", quantidade: 1, unidade: "kg" }
-      ],
-      tempo_preparo: 35,
-      porcoes: 8,
-      custo_total: 45.80,
-      categoria_id: 1,
-      categoria_descricao: "Pratos Principais",
-      quantidade_refeicoes: 8,
-      inativa: false,
-      usuario: "chef_carnes",
-      criado_em: "2024-01-16T14:20:00Z"
-    },
-    {
-      receita_id: 1003,
-      nome: "Salada Verde Especial",
-      modo_preparo: "Lave bem as folhas, corte os ingredientes e tempere com azeite e vinagre.",
-      ingredientes: [
-        { produto_id: "P007", nome: "Alface", quantidade: 0.5, unidade: "kg" },
-        { produto_id: "P008", nome: "Tomate", quantidade: 1, unidade: "kg" },
-        { produto_id: "P009", nome: "Pepino", quantidade: 0.5, unidade: "kg" }
-      ],
-      tempo_preparo: 15,
-      porcoes: 12,
-      custo_total: 18.30,
-      categoria_id: 2,
-      categoria_descricao: "Saladas",
-      quantidade_refeicoes: 12,
-      inativa: false,
-      usuario: "chef_saladas",
-      criado_em: "2024-01-17T09:15:00Z"
-    },
-    {
-      receita_id: 1004,
-      nome: "Sopa de Legumes Antiga",
-      modo_preparo: "Receita descontinuada - não usar mais.",
-      ingredientes: [],
-      tempo_preparo: 0,
-      porcoes: 0,
-      custo_total: 0,
-      categoria_id: 3,
-      categoria_descricao: "Sopas",
-      quantidade_refeicoes: 0,
-      inativa: true,
-      usuario: "chef_antigo",
-      criado_em: "2023-12-01T08:00:00Z"
-    }
-  ];
-}
-
 async function syncReceitas(supabaseClient: any, receitas: CpReceita[]) {
   let processed = 0;
   let success = 0;
@@ -209,6 +144,11 @@ async function syncReceitas(supabaseClient: any, receitas: CpReceita[]) {
   for (const receita of receitas) {
     try {
       processed++;
+
+      // Log para rastrear progresso em lotes grandes
+      if (processed % 50 === 0) {
+        console.log(`Processando receita ${processed}/${receitas.length}: ID ${receita.receita_id}`);
+      }
 
       // Verificar se a receita já existe
       const { data: existing } = await supabaseClient
@@ -246,7 +186,9 @@ async function syncReceitas(supabaseClient: any, receitas: CpReceita[]) {
           errors++;
         } else {
           success++;
-          console.log(`Receita ${receita.receita_id} atualizada com sucesso`);
+          if (processed <= 10 || processed % 100 === 0) {
+            console.log(`Receita ${receita.receita_id} atualizada com sucesso`);
+          }
         }
       } else {
         // Inserir nova receita
@@ -259,7 +201,9 @@ async function syncReceitas(supabaseClient: any, receitas: CpReceita[]) {
           errors++;
         } else {
           success++;
-          console.log(`Receita ${receita.receita_id} inserida com sucesso`);
+          if (processed <= 10 || processed % 100 === 0) {
+            console.log(`Receita ${receita.receita_id} inserida com sucesso`);
+          }
         }
       }
 
@@ -269,5 +213,6 @@ async function syncReceitas(supabaseClient: any, receitas: CpReceita[]) {
     }
   }
 
+  console.log(`Sincronização finalizada: ${success} sucessos, ${errors} erros de ${processed} processadas`);
   return { processed, success, errors, skipped };
 }
