@@ -28,7 +28,7 @@ const VIEW_MAPPING = {
   vwCpReceitaProduto: {
     description: 'Ingredientes das Receitas',
     targetTable: 'receitas_legado',
-    fields: ['receita_id', 'produto_id', 'quantidade', 'unidade']
+    fields: ['receita_id', 'produto_id', 'produto_base_id', 'quantidade', 'unidade_medida_id', 'unidade', 'notas']
   },
   vwEstProdutoBase: {
     description: 'Produtos Base',
@@ -246,6 +246,95 @@ async function processViewData(supabaseClient: any, viewName: string, data: any[
   const mapping = VIEW_MAPPING[viewName as keyof typeof VIEW_MAPPING];
   let processedCount = 0;
 
+  // Tratamento especial para vwCpReceitaProduto (ingredientes das receitas)
+  if (viewName === 'vwCpReceitaProduto') {
+    console.log(`Processamento especial para ingredientes de receitas - ${data.length} registros`);
+    
+    // Agrupar ingredientes por receita_id
+    const ingredientesPorReceita = new Map<string, any[]>();
+    
+    for (const record of data) {
+      const receitaId = record.receita_id?.toString();
+      if (!receitaId) {
+        console.warn('Registro sem receita_id ignorado:', record);
+        continue;
+      }
+      
+      if (!ingredientesPorReceita.has(receitaId)) {
+        ingredientesPorReceita.set(receitaId, []);
+      }
+      
+      // Estruturar ingrediente
+      const ingrediente = {
+        receita_produto_id: record.receita_produto_id,
+        produto_base_id: record.produto_base_id,
+        produto_id: record.produto_id,
+        quantidade: record.quantidade || 0,
+        unidade_medida_id: record.unidade_medida_id,
+        unidade: record.unidade,
+        notas: record.notas,
+        receita_produto_classificacao_id: record.receita_produto_classificacao_id,
+        user_name: record.user_name,
+        user_date_time: record.user_date_time
+      };
+      
+      ingredientesPorReceita.get(receitaId)?.push(ingrediente);
+    }
+    
+    console.log(`Agrupados ingredientes para ${ingredientesPorReceita.size} receitas diferentes`);
+    
+    // Atualizar cada receita com seus ingredientes
+    let receitasAtualizadas = 0;
+    
+    for (const [receitaIdLegado, ingredientes] of ingredientesPorReceita) {
+      try {
+        // Buscar a receita existente
+        const { data: receitaExistente, error: searchError } = await supabaseClient
+          .from('receitas_legado')
+          .select('id, ingredientes')
+          .eq('receita_id_legado', receitaIdLegado)
+          .maybeSingle();
+        
+        if (searchError) {
+          console.error(`Erro ao buscar receita ${receitaIdLegado}:`, searchError);
+          continue;
+        }
+        
+        if (!receitaExistente) {
+          console.warn(`Receita ${receitaIdLegado} não encontrada - ingredientes ignorados`);
+          continue;
+        }
+        
+        // Merge dos ingredientes existentes com os novos
+        const ingredientesExistentes = receitaExistente.ingredientes || [];
+        const todosIngredientes = [...ingredientesExistentes, ...ingredientes];
+        
+        // Atualizar a receita com os ingredientes
+        const { error: updateError } = await supabaseClient
+          .from('receitas_legado')
+          .update({
+            ingredientes: todosIngredientes,
+            sync_at: new Date().toISOString()
+          })
+          .eq('id', receitaExistente.id);
+        
+        if (updateError) {
+          console.error(`Erro ao atualizar receita ${receitaIdLegado}:`, updateError);
+        } else {
+          receitasAtualizadas++;
+          console.log(`Receita ${receitaIdLegado} atualizada com ${ingredientes.length} ingredientes`);
+        }
+        
+      } catch (error) {
+        console.error(`Erro ao processar receita ${receitaIdLegado}:`, error);
+      }
+    }
+    
+    console.log(`Processamento de ingredientes concluído: ${receitasAtualizadas} receitas atualizadas de ${ingredientesPorReceita.size} encontradas`);
+    return receitasAtualizadas;
+  }
+
+  // Processamento padrão para outras views
   for (const record of data) {
     try {
       // Log progresso para lotes grandes
