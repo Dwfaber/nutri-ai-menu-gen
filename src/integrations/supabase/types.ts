@@ -164,6 +164,57 @@ export type Database = {
         }
         Relationships: []
       }
+      receita_ingredientes: {
+        Row: {
+          created_at: string
+          id: string
+          notas: string | null
+          produto_base_id: number | null
+          produto_id: number | null
+          quantidade: number
+          receita_id_legado: string
+          receita_produto_classificacao_id: number | null
+          receita_produto_id: number | null
+          sync_at: string
+          unidade: string | null
+          unidade_medida_id: number | null
+          user_date_time: string | null
+          user_name: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          notas?: string | null
+          produto_base_id?: number | null
+          produto_id?: number | null
+          quantidade?: number
+          receita_id_legado: string
+          receita_produto_classificacao_id?: number | null
+          receita_produto_id?: number | null
+          sync_at?: string
+          unidade?: string | null
+          unidade_medida_id?: number | null
+          user_date_time?: string | null
+          user_name?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          notas?: string | null
+          produto_base_id?: number | null
+          produto_id?: number | null
+          quantidade?: number
+          receita_id_legado?: string
+          receita_produto_classificacao_id?: number | null
+          receita_produto_id?: number | null
+          sync_at?: string
+          unidade?: string | null
+          unidade_medida_id?: number | null
+          user_date_time?: string | null
+          user_name?: string | null
+        }
+        Relationships: []
+      }
       receitas_legado: {
         Row: {
           categoria_descricao: string | null
@@ -173,7 +224,6 @@ export type Database = {
           custo_total: number | null
           id: string
           inativa: boolean
-          ingredientes: Json
           modo_preparo: string | null
           nome_receita: string
           porcoes: number | null
@@ -191,7 +241,6 @@ export type Database = {
           custo_total?: number | null
           id?: string
           inativa?: boolean
-          ingredientes?: Json
           modo_preparo?: string | null
           nome_receita: string
           porcoes?: number | null
@@ -209,7 +258,6 @@ export type Database = {
           custo_total?: number | null
           id?: string
           inativa?: boolean
-          ingredientes?: Json
           modo_preparo?: string | null
           nome_receita?: string
           porcoes?: number | null
