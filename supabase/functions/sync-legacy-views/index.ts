@@ -256,73 +256,103 @@ async function processViewData(supabaseClient: any, viewName: string, data: any[
   const mapping = VIEW_MAPPING[viewName as keyof typeof VIEW_MAPPING];
   let processedCount = 0;
 
-  // NOVA LÓGICA EXPANDIDA: Tratamento específico para vwCoSolicitacaoFilialCusto com campos detalhados
+  // CORREÇÃO CRÍTICA: Tratamento específico para vwCoSolicitacaoFilialCusto com mapeamento correto
   if (viewName === 'vwCoSolicitacaoFilialCusto') {
     console.log(`Processamento de custos de filiais - ${data.length} registros`);
     
     for (const record of data) {
       try {
+        // LOG DETALHADO: Ver exatamente o que está chegando
+        console.log(`Processando registro ${processedCount + 1}:`, {
+          cliente_id_legado: record.cliente_id_legado,
+          filial_id: record.filial_id,
+          RefCustoSegunda: record.RefCustoSegunda,
+          QtdeRefeicoesUsarMediaValidarSimNao: record.QtdeRefeicoesUsarMediaValidarSimNao,
+          custo_total: record.custo_total,
+          segunda_feira: record.segunda_feira
+        });
+
         // Calcular dias de funcionamento baseado nos campos booleanos
         let diasFuncionamento = 0;
-        if (record.segunda_feira) diasFuncionamento++;
-        if (record.terca_feira) diasFuncionamento++;
-        if (record.quarta_feira) diasFuncionamento++;
-        if (record.quinta_feira) diasFuncionamento++;
-        if (record.sexta_feira) diasFuncionamento++;
-        if (record.sabado) diasFuncionamento++;
-        if (record.domingo) diasFuncionamento++;
+        if (record.segunda_feira === true || record.segunda_feira === 'true' || record.segunda_feira === 1) diasFuncionamento++;
+        if (record.terca_feira === true || record.terca_feira === 'true' || record.terca_feira === 1) diasFuncionamento++;
+        if (record.quarta_feira === true || record.quarta_feira === 'true' || record.quarta_feira === 1) diasFuncionamento++;
+        if (record.quinta_feira === true || record.quinta_feira === 'true' || record.quinta_feira === 1) diasFuncionamento++;
+        if (record.sexta_feira === true || record.sexta_feira === 'true' || record.sexta_feira === 1) diasFuncionamento++;
+        if (record.sabado === true || record.sabado === 'true' || record.sabado === 1) diasFuncionamento++;
+        if (record.domingo === true || record.domingo === 'true' || record.domingo === 1) diasFuncionamento++;
         
         // Calcular custo máximo por refeição baseado no custo total e dias
-        const custoMaximoRefeicao = record.custo_total && diasFuncionamento > 0 
-          ? Number(record.custo_total) / diasFuncionamento 
+        const custoTotal = parseFloat(record.custo_total) || 0;
+        const custoMaximoRefeicao = custoTotal && diasFuncionamento > 0 
+          ? custoTotal / diasFuncionamento 
           : 0;
+
+        // CONVERSÕES CORRETAS para os campos vindos do sistema legado
+        const dataToInsert = {
+          cliente_id_legado: record.cliente_id_legado ? parseInt(record.cliente_id_legado.toString()) : record.filial_id ? parseInt(record.filial_id.toString()) : null,
+          filial_id: record.filial_id ? parseInt(record.filial_id.toString()) : null,
+          nome_filial: record.nome_filial || record.nome_empresa || null,
+          custo_total: custoTotal,
+          orcamento_mensal: parseFloat(record.orcamento_mensal) || 0,
+          custo_maximo_refeicao: custoMaximoRefeicao,
+          dias_funcionamento_calculado: diasFuncionamento,
+          segunda_feira: record.segunda_feira === true || record.segunda_feira === 'true' || record.segunda_feira === 1,
+          terca_feira: record.terca_feira === true || record.terca_feira === 'true' || record.terca_feira === 1,
+          quarta_feira: record.quarta_feira === true || record.quarta_feira === 'true' || record.quarta_feira === 1,
+          quinta_feira: record.quinta_feira === true || record.quinta_feira === 'true' || record.quinta_feira === 1,
+          sexta_feira: record.sexta_feira === true || record.sexta_feira === 'true' || record.sexta_feira === 1,
+          sabado: record.sabado === true || record.sabado === 'true' || record.sabado === 1,
+          domingo: record.domingo === true || record.domingo === 'true' || record.domingo === 1,
+          // CAMPOS DETALHADOS - Conversão correta de numeric
+          RefCustoSegunda: record.RefCustoSegunda ? parseFloat(record.RefCustoSegunda.toString()) : null,
+          RefCustoTerca: record.RefCustoTerca ? parseFloat(record.RefCustoTerca.toString()) : null,
+          RefCustoQuarta: record.RefCustoQuarta ? parseFloat(record.RefCustoQuarta.toString()) : null,
+          RefCustoQuinta: record.RefCustoQuinta ? parseFloat(record.RefCustoQuinta.toString()) : null,
+          RefCustoSexta: record.RefCustoSexta ? parseFloat(record.RefCustoSexta.toString()) : null,
+          RefCustoSabado: record.RefCustoSabado ? parseFloat(record.RefCustoSabado.toString()) : null,
+          RefCustoDomingo: record.RefCustoDomingo ? parseFloat(record.RefCustoDomingo.toString()) : null,
+          RefCustoDiaEspecial: record.RefCustoDiaEspecial ? parseFloat(record.RefCustoDiaEspecial.toString()) : null,
+          // CAMPO BOOLEAN - Conversão correta
+          QtdeRefeicoesUsarMediaValidarSimNao: record.QtdeRefeicoesUsarMediaValidarSimNao === true || record.QtdeRefeicoesUsarMediaValidarSimNao === 'true' || record.QtdeRefeicoesUsarMediaValidarSimNao === 1,
+          PorcentagemLimiteAcimaMedia: record.PorcentagemLimiteAcimaMedia ? parseInt(record.PorcentagemLimiteAcimaMedia.toString()) : null,
+          custo_medio_semanal: record.custo_medio_semanal ? parseFloat(record.custo_medio_semanal.toString()) : null,
+          solicitacao_filial_custo_id: record.solicitacao_filial_custo_id ? parseInt(record.solicitacao_filial_custo_id.toString()) : null,
+          solicitacao_compra_tipo_id: record.solicitacao_compra_tipo_id ? parseInt(record.solicitacao_compra_tipo_id.toString()) : null,
+          user_name: record.user_name?.toString() || null,
+          user_date_time: record.user_date_time || null,
+          nome_fantasia: record.nome_fantasia?.toString() || null,
+          razao_social: record.razao_social?.toString() || null,
+          solicitacao_compra_tipo_descricao: record.solicitacao_compra_tipo_descricao?.toString() || null,
+          sync_at: new Date().toISOString()
+        };
+
+        // LOG DETALHADO: Verificar o que será inserido
+        console.log(`Dados processados para inserção:`, {
+          cliente_id_legado: dataToInsert.cliente_id_legado,
+          RefCustoSegunda: dataToInsert.RefCustoSegunda,
+          QtdeRefeicoesUsarMediaValidarSimNao: dataToInsert.QtdeRefeicoesUsarMediaValidarSimNao,
+          custo_total: dataToInsert.custo_total
+        });
 
         const { error } = await supabaseClient
           .from('custos_filiais')
-          .upsert({
-            cliente_id_legado: record.cliente_id_legado || record.filial_id,
-            filial_id: record.filial_id,
-            nome_filial: record.nome_filial || record.nome_empresa,
-            custo_total: Number(record.custo_total) || 0,
-            orcamento_mensal: Number(record.orcamento_mensal) || 0,
-            custo_maximo_refeicao: custoMaximoRefeicao,
-            dias_funcionamento_calculado: diasFuncionamento,
-            segunda_feira: record.segunda_feira || false,
-            terca_feira: record.terca_feira || false,
-            quarta_feira: record.quarta_feira || false,
-            quinta_feira: record.quinta_feira || false,
-            sexta_feira: record.sexta_feira || false,
-            sabado: record.sabado || false,
-            domingo: record.domingo || false,
-            // Novos campos detalhados
-            RefCustoSegunda: record.RefCustoSegunda ? Number(record.RefCustoSegunda) : null,
-            RefCustoTerca: record.RefCustoTerca ? Number(record.RefCustoTerca) : null,
-            RefCustoQuarta: record.RefCustoQuarta ? Number(record.RefCustoQuarta) : null,
-            RefCustoQuinta: record.RefCustoQuinta ? Number(record.RefCustoQuinta) : null,
-            RefCustoSexta: record.RefCustoSexta ? Number(record.RefCustoSexta) : null,
-            RefCustoSabado: record.RefCustoSabado ? Number(record.RefCustoSabado) : null,
-            RefCustoDomingo: record.RefCustoDomingo ? Number(record.RefCustoDomingo) : null,
-            RefCustoDiaEspecial: record.RefCustoDiaEspecial ? Number(record.RefCustoDiaEspecial) : null,
-            QtdeRefeicoesUsarMediaValidarSimNao: record.QtdeRefeicoesUsarMediaValidarSimNao || null,
-            PorcentagemLimiteAcimaMedia: record.PorcentagemLimiteAcimaMedia || null,
-            custo_medio_semanal: record.custo_medio_semanal ? Number(record.custo_medio_semanal) : null,
-            solicitacao_filial_custo_id: record.solicitacao_filial_custo_id || null,
-            solicitacao_compra_tipo_id: record.solicitacao_compra_tipo_id || null,
-            user_name: record.user_name || null,
-            user_date_time: record.user_date_time || null,
-            nome_fantasia: record.nome_fantasia || null,
-            razao_social: record.razao_social || null,
-            solicitacao_compra_tipo_descricao: record.solicitacao_compra_tipo_descricao || null,
-            sync_at: new Date().toISOString()
-          });
+          .upsert(dataToInsert);
 
         if (error) {
           console.error(`Erro ao processar custo de filial:`, error);
+          console.error(`Dados que causaram erro:`, dataToInsert);
         } else {
           processedCount++;
+          
+          // Log a cada 1000 registros processados
+          if (processedCount % 1000 === 0) {
+            console.log(`Processados ${processedCount} registros de custos de filiais`);
+          }
         }
       } catch (error) {
         console.error(`Erro ao processar registro de custo:`, error);
+        console.error(`Registro problemático:`, record);
       }
     }
     
