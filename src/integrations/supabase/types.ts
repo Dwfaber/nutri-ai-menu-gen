@@ -187,7 +187,7 @@ export type Database = {
       }
       custos_filiais: {
         Row: {
-          cliente_id_legado: number
+          cliente_id_legado: number | null
           created_at: string
           custo_maximo_refeicao: number | null
           custo_medio_semanal: number | null
@@ -225,7 +225,7 @@ export type Database = {
           user_name: string | null
         }
         Insert: {
-          cliente_id_legado: number
+          cliente_id_legado?: number | null
           created_at?: string
           custo_maximo_refeicao?: number | null
           custo_medio_semanal?: number | null
@@ -263,7 +263,7 @@ export type Database = {
           user_name?: string | null
         }
         Update: {
-          cliente_id_legado?: number
+          cliente_id_legado?: number | null
           created_at?: string
           custo_maximo_refeicao?: number | null
           custo_medio_semanal?: number | null
