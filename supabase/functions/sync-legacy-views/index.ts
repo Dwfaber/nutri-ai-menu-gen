@@ -1,4 +1,3 @@
-
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
@@ -8,12 +7,12 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// Mapeamento das views e suas finalidades
+// Mapeamento das views e suas finalidades - ATUALIZADO com separação
 const VIEW_MAPPING = {
   vwCoSolicitacaoFilialCusto: {
     description: 'Custos por Filial',
-    targetTable: 'contratos_corporativos',
-    fields: ['filial_id', 'custo_total', 'orcamento_mensal', 'nome_filial', 'segunda_feira', 'terca_feira', 'quarta_feira', 'quinta_feira', 'sexta_feira', 'sabado', 'domingo']
+    targetTable: 'custos_filiais', // Nova tabela específica
+    fields: ['cliente_id_legado', 'filial_id', 'nome_filial', 'custo_total', 'orcamento_mensal', 'custo_maximo_refeicao', 'segunda_feira', 'terca_feira', 'quarta_feira', 'quinta_feira', 'sexta_feira', 'sabado', 'domingo']
   },
   vwCoSolicitacaoProdutoListagem: {
     description: 'Produtos Solicitados',
@@ -36,9 +35,9 @@ const VIEW_MAPPING = {
     fields: ['produto_id', 'nome', 'categoria', 'unidade', 'preco_unitario', 'peso_unitario']
   },
   vwOrFiliaisAtiva: {
-    description: 'Filiais Ativas',
-    targetTable: 'contratos_corporativos',
-    fields: ['filial_id', 'nome_empresa', 'total_funcionarios', 'ativo']
+    description: 'Filiais Ativas (Contratos)',
+    targetTable: 'contratos_corporativos', // Mantém na tabela original
+    fields: ['cliente_id_legado', 'nome_empresa', 'total_funcionarios', 'ativo', 'periodicidade', 'restricoes_alimentares']
   }
 };
 
@@ -91,14 +90,14 @@ serve(async (req) => {
 async function checkViewsAvailability(supabaseClient: any) {
   console.log('Checking views availability...');
   
-  // Views disponíveis para sincronização
+  // Views disponíveis para sincronização - ATUALIZADO
   const availableViews = [
-    'vwCoSolicitacaoFilialCusto',
+    'vwCoSolicitacaoFilialCusto', // → custos_filiais
     'vwCoSolicitacaoProdutoListagem',
     'vwCpReceita',
     'vwCpReceitaProduto',
     'vwEstProdutoBase',
-    'vwOrFiliaisAtiva'
+    'vwOrFiliaisAtiva' // → contratos_corporativos
   ];
 
   // Log da verificação
@@ -108,7 +107,11 @@ async function checkViewsAvailability(supabaseClient: any) {
       tabela_destino: 'views_check',
       operacao: 'check_availability',
       status: 'concluido',
-      detalhes: { availableViews }
+      detalhes: { 
+        availableViews,
+        separacao_implementada: true,
+        custos_filiais_criada: true
+      }
     });
 
   if (error) {
@@ -119,7 +122,7 @@ async function checkViewsAvailability(supabaseClient: any) {
     JSON.stringify({ 
       success: true, 
       availableViews,
-      message: 'Views verificadas com sucesso'
+      message: 'Views verificadas com sucesso - separação implementada'
     }),
     { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
   );
@@ -139,7 +142,8 @@ async function syncViewWithData(supabaseClient: any, viewName: string, data: any
       status: 'iniciado',
       detalhes: { 
         fonte: 'n8n dados reais',
-        lote_tamanho: data.length
+        lote_tamanho: data.length,
+        target_table: VIEW_MAPPING[viewName as keyof typeof VIEW_MAPPING]?.targetTable
       }
     })
     .select()
@@ -162,7 +166,8 @@ async function syncViewWithData(supabaseClient: any, viewName: string, data: any
             detalhes: { 
               viewName, 
               recordCount: 0,
-              fonte: 'teste manual - sem dados'
+              fonte: 'teste manual - sem dados',
+              target_table: VIEW_MAPPING[viewName as keyof typeof VIEW_MAPPING]?.targetTable
             }
           })
           .eq('id', logId);
@@ -173,6 +178,7 @@ async function syncViewWithData(supabaseClient: any, viewName: string, data: any
           success: true,
           viewName,
           recordCount: 0,
+          targetTable: VIEW_MAPPING[viewName as keyof typeof VIEW_MAPPING]?.targetTable,
           message: 'Teste manual executado - aguardando dados reais do n8n'
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -202,7 +208,8 @@ async function syncViewWithData(supabaseClient: any, viewName: string, data: any
             viewName, 
             recordCount,
             fonte: 'n8n dados reais',
-            lote_tamanho: data.length
+            lote_tamanho: data.length,
+            target_table: VIEW_MAPPING[viewName as keyof typeof VIEW_MAPPING]?.targetTable
           }
         })
         .eq('id', logId);
@@ -213,6 +220,7 @@ async function syncViewWithData(supabaseClient: any, viewName: string, data: any
         success: true,
         viewName,
         recordCount,
+        targetTable: VIEW_MAPPING[viewName as keyof typeof VIEW_MAPPING]?.targetTable,
         lote_tamanho: data.length,
         executionTime: `${executionTime}ms`
       }),
@@ -232,7 +240,8 @@ async function syncViewWithData(supabaseClient: any, viewName: string, data: any
           tempo_execucao_ms: Date.now() - startTime,
           detalhes: {
             fonte: 'n8n dados reais',
-            lote_tamanho: data.length
+            lote_tamanho: data.length,
+            target_table: VIEW_MAPPING[viewName as keyof typeof VIEW_MAPPING]?.targetTable
           }
         })
         .eq('id', logId);
@@ -245,6 +254,61 @@ async function syncViewWithData(supabaseClient: any, viewName: string, data: any
 async function processViewData(supabaseClient: any, viewName: string, data: any[]) {
   const mapping = VIEW_MAPPING[viewName as keyof typeof VIEW_MAPPING];
   let processedCount = 0;
+
+  // NOVA LÓGICA: Tratamento específico para vwCoSolicitacaoFilialCusto
+  if (viewName === 'vwCoSolicitacaoFilialCusto') {
+    console.log(`Processamento de custos de filiais - ${data.length} registros`);
+    
+    for (const record of data) {
+      try {
+        // Calcular dias de funcionamento baseado nos campos booleanos
+        let diasFuncionamento = 0;
+        if (record.segunda_feira) diasFuncionamento++;
+        if (record.terca_feira) diasFuncionamento++;
+        if (record.quarta_feira) diasFuncionamento++;
+        if (record.quinta_feira) diasFuncionamento++;
+        if (record.sexta_feira) diasFuncionamento++;
+        if (record.sabado) diasFuncionamento++;
+        if (record.domingo) diasFuncionamento++;
+        
+        // Calcular custo máximo por refeição baseado no custo total e dias
+        const custoMaximoRefeicao = record.custo_total && diasFuncionamento > 0 
+          ? Number(record.custo_total) / diasFuncionamento 
+          : 0;
+
+        const { error } = await supabaseClient
+          .from('custos_filiais')
+          .upsert({
+            cliente_id_legado: record.filial_id?.toString() || record.cliente_id_legado?.toString(),
+            filial_id: record.filial_id,
+            nome_filial: record.nome_filial || record.nome_empresa,
+            custo_total: Number(record.custo_total) || 0,
+            orcamento_mensal: Number(record.orcamento_mensal) || 0,
+            custo_maximo_refeicao: custoMaximoRefeicao,
+            dias_funcionamento_calculado: diasFuncionamento,
+            segunda_feira: record.segunda_feira || false,
+            terca_feira: record.terca_feira || false,
+            quarta_feira: record.quarta_feira || false,
+            quinta_feira: record.quinta_feira || false,
+            sexta_feira: record.sexta_feira || false,
+            sabado: record.sabado || false,
+            domingo: record.domingo || false,
+            sync_at: new Date().toISOString()
+          });
+
+        if (error) {
+          console.error(`Erro ao processar custo de filial:`, error);
+        } else {
+          processedCount++;
+        }
+      } catch (error) {
+        console.error(`Erro ao processar registro de custo:`, error);
+      }
+    }
+    
+    console.log(`Processamento de custos concluído: ${processedCount} registros inseridos/atualizados`);
+    return processedCount;
+  }
 
   // Tratamento especial para vwCpReceitaProduto (ingredientes das receitas)
   if (viewName === 'vwCpReceitaProduto') {
@@ -355,40 +419,19 @@ async function processViewData(supabaseClient: any, viewName: string, data: any[
             console.error(`Erro ao processar receita:`, error);
           }
         }
-      } else if (mapping.targetTable === 'contratos_corporativos') {
-        // Calcular dias de funcionamento baseado nos campos booleanos da view
-        let diasFuncionamento = 0;
-        if (record.segunda_feira) diasFuncionamento++;
-        if (record.terca_feira) diasFuncionamento++;
-        if (record.quarta_feira) diasFuncionamento++;
-        if (record.quinta_feira) diasFuncionamento++;
-        if (record.sexta_feira) diasFuncionamento++;
-        if (record.sabado) diasFuncionamento++;
-        if (record.domingo) diasFuncionamento++;
-        
-        // Calcular dias de funcionamento no mês (assumindo aproximadamente 4.3 semanas por mês)
-        const diasFuncionamentoMes = Math.round(diasFuncionamento * 4.3);
-        
-        // Calcular custo máximo por refeição baseado nos dias reais de funcionamento
-        const custoMaximoRefeicao = record.custo_total && diasFuncionamentoMes > 0 
-          ? Number(record.custo_total) / diasFuncionamentoMes 
-          : 15.0;
-
+      } else if (mapping.targetTable === 'contratos_corporativos' && viewName === 'vwOrFiliaisAtiva') {
+        // ATUALIZADO: Agora apenas vwOrFiliaisAtiva vai para contratos_corporativos
+        // Foco em dados contratuais, não custos operacionais
         const { error } = await supabaseClient
           .from('contratos_corporativos')
           .upsert({
-            cliente_id_legado: record.filial_id?.toString() || record.id?.toString(),
-            nome_empresa: record.nome_filial || record.nome_empresa || 'Empresa',
+            cliente_id_legado: record.filial_id?.toString() || record.cliente_id_legado?.toString() || record.id?.toString(),
+            nome_empresa: record.nome_empresa || record.nome_filial || 'Empresa',
             total_funcionarios: record.total_funcionarios || 0,
-            custo_maximo_refeicao: custoMaximoRefeicao,
-            dias_funcionamento_mes: diasFuncionamentoMes,
-            segunda_feira: record.segunda_feira || false,
-            terca_feira: record.terca_feira || false,
-            quarta_feira: record.quarta_feira || false,
-            quinta_feira: record.quinta_feira || false,
-            sexta_feira: record.sexta_feira || false,
-            sabado: record.sabado || false,
-            domingo: record.domingo || false,
+            custo_maximo_refeicao: record.custo_maximo_refeicao || 15.0, // Valor padrão
+            total_refeicoes_mes: record.total_refeicoes_mes || (record.total_funcionarios * 22) || 0,
+            periodicidade: record.periodicidade || 'mensal',
+            restricoes_alimentares: record.restricoes_alimentares || [],
             ativo: record.ativo !== false,
             sync_at: new Date().toISOString()
           });

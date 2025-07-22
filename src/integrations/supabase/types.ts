@@ -185,6 +185,69 @@ export type Database = {
         }
         Relationships: []
       }
+      custos_filiais: {
+        Row: {
+          cliente_id_legado: string
+          created_at: string
+          custo_maximo_refeicao: number | null
+          custo_total: number | null
+          dias_funcionamento_calculado: number | null
+          domingo: boolean | null
+          filial_id: number | null
+          id: string
+          nome_filial: string | null
+          orcamento_mensal: number | null
+          quarta_feira: boolean | null
+          quinta_feira: boolean | null
+          sabado: boolean | null
+          segunda_feira: boolean | null
+          sexta_feira: boolean | null
+          sync_at: string
+          terca_feira: boolean | null
+          updated_at: string
+        }
+        Insert: {
+          cliente_id_legado: string
+          created_at?: string
+          custo_maximo_refeicao?: number | null
+          custo_total?: number | null
+          dias_funcionamento_calculado?: number | null
+          domingo?: boolean | null
+          filial_id?: number | null
+          id?: string
+          nome_filial?: string | null
+          orcamento_mensal?: number | null
+          quarta_feira?: boolean | null
+          quinta_feira?: boolean | null
+          sabado?: boolean | null
+          segunda_feira?: boolean | null
+          sexta_feira?: boolean | null
+          sync_at?: string
+          terca_feira?: boolean | null
+          updated_at?: string
+        }
+        Update: {
+          cliente_id_legado?: string
+          created_at?: string
+          custo_maximo_refeicao?: number | null
+          custo_total?: number | null
+          dias_funcionamento_calculado?: number | null
+          domingo?: boolean | null
+          filial_id?: number | null
+          id?: string
+          nome_filial?: string | null
+          orcamento_mensal?: number | null
+          quarta_feira?: boolean | null
+          quinta_feira?: boolean | null
+          sabado?: boolean | null
+          segunda_feira?: boolean | null
+          sexta_feira?: boolean | null
+          sync_at?: string
+          terca_feira?: boolean | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       produtos_legado: {
         Row: {
           categoria: string | null
