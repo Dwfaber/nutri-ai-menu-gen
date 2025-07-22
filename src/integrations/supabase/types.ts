@@ -52,68 +52,68 @@ export type Database = {
       }
       co_solicitacao_produto_listagem: {
         Row: {
-          apenas_valor_inteiro: boolean | null
+          apenas_valor_inteiro_sim_nao: boolean | null
           arredondar_tipo: number | null
           categoria_descricao: string | null
-          categoria_id: number | null
           criado_em: string | null
           descricao: string | null
-          em_promocao: boolean | null
+          em_promocao_sim_nao: boolean | null
           grupo: string | null
           inteiro: boolean | null
           per_capita: number | null
           preco: number | null
           preco_compra: number | null
           produto_base_id: number | null
-          produto_base_qtd_embalagem: number | null
+          produto_base_quantidade_embalagem: number | null
           produto_id: number | null
           promocao: boolean | null
           quantidade_embalagem: number | null
           solicitacao_id: number | null
+          solicitacao_produto_categoria_id: number | null
           solicitacao_produto_listagem_id: number
           unidade: string | null
         }
         Insert: {
-          apenas_valor_inteiro?: boolean | null
+          apenas_valor_inteiro_sim_nao?: boolean | null
           arredondar_tipo?: number | null
           categoria_descricao?: string | null
-          categoria_id?: number | null
           criado_em?: string | null
           descricao?: string | null
-          em_promocao?: boolean | null
+          em_promocao_sim_nao?: boolean | null
           grupo?: string | null
           inteiro?: boolean | null
           per_capita?: number | null
           preco?: number | null
           preco_compra?: number | null
           produto_base_id?: number | null
-          produto_base_qtd_embalagem?: number | null
+          produto_base_quantidade_embalagem?: number | null
           produto_id?: number | null
           promocao?: boolean | null
           quantidade_embalagem?: number | null
           solicitacao_id?: number | null
+          solicitacao_produto_categoria_id?: number | null
           solicitacao_produto_listagem_id?: number
           unidade?: string | null
         }
         Update: {
-          apenas_valor_inteiro?: boolean | null
+          apenas_valor_inteiro_sim_nao?: boolean | null
           arredondar_tipo?: number | null
           categoria_descricao?: string | null
-          categoria_id?: number | null
           criado_em?: string | null
           descricao?: string | null
-          em_promocao?: boolean | null
+          em_promocao_sim_nao?: boolean | null
           grupo?: string | null
           inteiro?: boolean | null
           per_capita?: number | null
           preco?: number | null
           preco_compra?: number | null
           produto_base_id?: number | null
-          produto_base_qtd_embalagem?: number | null
+          produto_base_quantidade_embalagem?: number | null
           produto_id?: number | null
           promocao?: boolean | null
           quantidade_embalagem?: number | null
           solicitacao_id?: number | null
+          solicitacao_produto_categoria_id?: number | null
           solicitacao_produto_listagem_id?: number
           unidade?: string | null
         }

@@ -58,7 +58,7 @@ export interface Menu {
 export interface ProductRequest {
   solicitacao_id?: number; // Agora é opcional
   solicitacao_produto_listagem_id?: number;
-  categoria_id?: number;
+  solicitacao_produto_categoria_id?: number;
   categoria_descricao?: string;
   grupo?: string;
   produto_id?: number;
@@ -73,9 +73,9 @@ export interface ProductRequest {
   produto_base_id?: number;
   quantidade_embalagem?: number;
   criado_em?: string;
-  apenas_valor_inteiro?: boolean;
-  em_promocao?: boolean;
-  produto_base_qtd_embalagem?: number;
+  apenas_valor_inteiro_sim_nao?: boolean;
+  em_promocao_sim_nao?: boolean;
+  produto_base_quantidade_embalagem?: number;
 }
 
 // Legacy product interface
