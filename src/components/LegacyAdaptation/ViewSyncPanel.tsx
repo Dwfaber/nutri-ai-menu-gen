@@ -1,154 +1,198 @@
-
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Progress } from '@/components/ui/progress';
+import React, { useEffect } from 'react';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Progress } from "@/components/ui/progress";
 import { 
-  Database, 
-  RefreshCw, 
   CheckCircle, 
   XCircle, 
-  AlertCircle,
-  Eye,
-  Play
-} from 'lucide-react';
-import { useLegacyAdaptation } from '@/hooks/useLegacyAdaptation';
+  Clock, 
+  RefreshCw,
+  Download,
+  Search,
+  Database,
+  Play,
+  Timer
+} from "lucide-react";
+import { useLegacyAdaptation } from "@/hooks/useLegacyAdaptation";
+import { useTriggerAutomation } from "@/hooks/useTriggerAutomation";
 
-const ViewSyncPanel = () => {
-  const {
-    syncSpecificView,
-    syncAllViews,
-    checkViewsAvailability,
-    isProcessing,
-    viewsStatus,
-    syncProgress
+// Status Icon Helper
+const getStatusIcon = (status: string): JSX.Element => {
+  switch (status) {
+    case 'synced':
+      return <CheckCircle className="h-4 w-4 text-green-600" />;
+    case 'error':
+      return <XCircle className="h-4 w-4 text-red-600" />;
+    case 'pending':
+      return <Clock className="h-4 w-4 text-yellow-600" />;
+    default:
+      return <Clock className="h-4 w-4 text-gray-400" />;
+  }
+};
+
+// Status Variant Helper
+const getStatusVariant = (status: string): string => {
+  switch (status) {
+    case 'synced':
+      return 'default';
+    case 'error':
+      return 'destructive';
+    case 'pending':
+      return 'secondary';
+    default:
+      return 'outline';
+  }
+};
+
+export const ViewSyncPanel = () => {
+  const { 
+    viewsStatus, 
+    syncProgress, 
+    syncAllViews, 
+    syncSpecificView, 
+    checkViewsAvailability 
   } = useLegacyAdaptation();
 
-  const getStatusIcon = (status: string) => {
-    switch (status) {
-      case 'synced':
-        return <CheckCircle className="w-4 h-4 text-green-600" />;
-      case 'error':
-        return <XCircle className="w-4 h-4 text-red-600" />;
-      case 'pending':
-        return <AlertCircle className="w-4 h-4 text-yellow-600" />;
-      default:
-        return <AlertCircle className="w-4 h-4 text-gray-600" />;
-    }
-  };
+  const {
+    isTriggering,
+    status: automationStatus,
+    triggerCompleteSync,
+    fetchAutomationStatus
+  } = useTriggerAutomation();
 
-  const getStatusVariant = (status: string) => {
-    switch (status) {
-      case 'synced':
-        return 'default';
-      case 'error':
-        return 'destructive';
-      case 'pending':
-        return 'secondary';
-      default:
-        return 'outline';
-    }
-  };
-
-  const progressPercentage = syncProgress.totalViews > 0 
-    ? (syncProgress.completedViews / syncProgress.totalViews) * 100 
-    : 0;
+  useEffect(() => {
+    fetchAutomationStatus();
+  }, []);
 
   return (
     <div className="space-y-6">
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <Database className="w-5 h-5" />
-            Sincronização com Views do Sistema Legado
+            <Database className="h-5 w-5" />
+            Sincronização de Views do Sistema Legado
           </CardTitle>
-          <p className="text-sm text-gray-600">
-            Sincronize dados das views liberadas pelo TI da empresa
-          </p>
+          <CardDescription>
+            Sincronize dados das views liberadas pelo TI da empresa usando automação n8n
+          </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="flex flex-wrap gap-4 mb-6">
-            <Button
-              onClick={syncAllViews}
-              disabled={isProcessing}
-              className="flex items-center gap-2 bg-green-600 hover:bg-green-700"
+          {/* Status da Automação Agendada */}
+          {automationStatus && (
+            <div className="mb-4 p-3 bg-muted/50 rounded-lg">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm font-medium flex items-center">
+                  <Timer className="h-4 w-4 mr-2" />
+                  Automação Agendada
+                </span>
+                <Badge variant={automationStatus.is_enabled ? "default" : "secondary"}>
+                  {automationStatus.is_enabled ? "Ativa" : "Inativa"}
+                </Badge>
+              </div>
+              <div className="text-xs text-muted-foreground space-y-1">
+                <p>Execução: Segunda a Sexta às 20:00 (Horário de Brasília)</p>
+                {automationStatus.last_triggered_at && (
+                  <p>Última execução: {new Date(automationStatus.last_triggered_at).toLocaleString('pt-BR')}</p>
+                )}
+                <p>Status: <span className="capitalize">{automationStatus.status}</span></p>
+              </div>
+            </div>
+          )}
+
+          <div className="flex gap-2">
+            <Button 
+              onClick={triggerCompleteSync} 
+              disabled={isTriggering || syncProgress.isProcessing}
+              size="sm"
+              className="bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70"
             >
-              {isProcessing ? (
-                <RefreshCw className="w-4 h-4 animate-spin" />
-              ) : (
-                <Database className="w-4 h-4" />
-              )}
-              Sincronizar Todas as Views
+              <Play className="h-4 w-4 mr-2" />
+              {isTriggering ? 'Iniciando Automação...' : 'Iniciar Automação Completa'}
             </Button>
             
-            <Button
+            <Button 
+              onClick={syncAllViews} 
+              disabled={syncProgress.isProcessing || isTriggering}
               variant="outline"
-              onClick={checkViewsAvailability}
-              disabled={isProcessing}
+              size="sm"
             >
-              <Eye className="w-4 h-4 mr-2" />
+              <RefreshCw className="h-4 w-4 mr-2" />
+              Sincronizar Todas
+            </Button>
+            
+            <Button 
+              onClick={checkViewsAvailability} 
+              variant="outline"
+              size="sm"
+            >
+              <Search className="h-4 w-4 mr-2" />
               Verificar Disponibilidade
             </Button>
           </div>
 
           {syncProgress.isProcessing && (
-            <div className="mb-6">
-              <div className="flex justify-between items-center mb-2">
-                <span className="text-sm font-medium">
-                  Sincronizando: {syncProgress.currentView}
-                </span>
-                <span className="text-sm text-gray-600">
-                  {syncProgress.completedViews} de {syncProgress.totalViews}
-                </span>
+            <div className="mb-4 space-y-2">
+              <div className="flex items-center justify-between text-sm">
+                <span>Progresso da Sincronização</span>
+                <span>{Math.round((syncProgress.completedViews / syncProgress.totalViews) * 100)}%</span>
               </div>
-              <Progress value={progressPercentage} className="w-full" />
+              <Progress value={(syncProgress.completedViews / syncProgress.totalViews) * 100} className="w-full" />
+              {syncProgress.currentView && (
+                <p className="text-sm text-muted-foreground">
+                  Sincronizando: {syncProgress.currentView}
+                </p>
+              )}
             </div>
           )}
         </CardContent>
       </Card>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {Object.entries(viewsStatus).map(([viewName, info]) => (
-          <Card key={viewName}>
+      {/* Views Status Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {Object.entries(viewsStatus).map(([viewName, viewInfo]) => (
+          <Card key={viewName} className="relative">
             <CardHeader className="pb-3">
-              <div className="flex justify-between items-start">
-                <div>
-                  <CardTitle className="text-lg">{info.name}</CardTitle>
-                  <p className="text-sm text-gray-600 mt-1">{info.description}</p>
+              <div className="flex items-start justify-between">
+                <div className="space-y-1">
+                  <CardTitle className="text-base">{viewInfo.name}</CardTitle>
+                  <CardDescription className="text-sm">
+                    {viewInfo.description}
+                  </CardDescription>
                 </div>
                 <div className="flex items-center gap-2">
-                  {getStatusIcon(info.status)}
-                  <Badge variant={getStatusVariant(info.status)}>
-                    {info.status}
+                  {getStatusIcon(viewInfo.status)}
+                  <Badge variant={getStatusVariant(viewInfo.status) as any}>
+                    {viewInfo.status === 'synced' ? 'Sincronizado' : 
+                     viewInfo.status === 'error' ? 'Erro' : 'Pendente'}
                   </Badge>
                 </div>
               </div>
             </CardHeader>
-            <CardContent>
-              <div className="space-y-3">
-                {info.lastSync && (
-                  <div className="text-sm text-gray-600">
-                    <strong>Última sincronização:</strong> {new Date(info.lastSync).toLocaleString()}
-                  </div>
-                )}
-                
-                {info.recordCount && (
-                  <div className="text-sm text-gray-600">
-                    <strong>Registros processados:</strong> {info.recordCount}
-                  </div>
-                )}
+            <CardContent className="space-y-3">
+              {viewInfo.lastSync && (
+                <div className="text-xs text-muted-foreground">
+                  <strong>Última sync:</strong><br />
+                  {new Date(viewInfo.lastSync).toLocaleString('pt-BR')}
+                </div>
+              )}
+              
+              {viewInfo.recordCount && (
+                <div className="text-xs text-muted-foreground">
+                  <strong>Registros:</strong> {viewInfo.recordCount}
+                </div>
+              )}
 
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => syncSpecificView(viewName)}
-                  disabled={isProcessing}
-                  className="w-full"
-                >
-                  <Play className="w-4 h-4 mr-2" />
-                  Sincronizar View
-                </Button>
-              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => syncSpecificView(viewName)}
+                disabled={syncProgress.isProcessing || isTriggering}
+                className="w-full"
+              >
+                <RefreshCw className="h-4 w-4 mr-2" />
+                Sincronizar View
+              </Button>
             </CardContent>
           </Card>
         ))}
@@ -156,5 +200,3 @@ const ViewSyncPanel = () => {
     </div>
   );
 };
-
-export default ViewSyncPanel;

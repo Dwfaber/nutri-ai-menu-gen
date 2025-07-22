@@ -14,6 +14,42 @@ export type Database = {
   }
   public: {
     Tables: {
+      automation_control: {
+        Row: {
+          automation_name: string
+          created_at: string
+          id: string
+          is_enabled: boolean
+          last_triggered_at: string | null
+          next_scheduled_at: string | null
+          status: string | null
+          trigger_source: string | null
+          updated_at: string
+        }
+        Insert: {
+          automation_name: string
+          created_at?: string
+          id?: string
+          is_enabled?: boolean
+          last_triggered_at?: string | null
+          next_scheduled_at?: string | null
+          status?: string | null
+          trigger_source?: string | null
+          updated_at?: string
+        }
+        Update: {
+          automation_name?: string
+          created_at?: string
+          id?: string
+          is_enabled?: boolean
+          last_triggered_at?: string | null
+          next_scheduled_at?: string | null
+          status?: string | null
+          trigger_source?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       co_solicitacao_produto_listagem: {
         Row: {
           apenas_valor_inteiro: boolean | null

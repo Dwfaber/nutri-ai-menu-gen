@@ -50,5 +50,8 @@ verify_jwt = false
 [functions.discover-legacy-schema]
 verify_jwt = false
 
+[functions.trigger-n8n-automation]
+verify_jwt = false
+
 [edge-runtime]
 inspector_port = 8083
