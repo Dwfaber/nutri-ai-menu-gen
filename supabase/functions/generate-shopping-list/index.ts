@@ -1,3 +1,4 @@
+
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
@@ -5,6 +6,82 @@ const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
+
+// Optimization algorithm implementation
+const calculateOptimalPackaging = (
+  quantidadeNecessaria: number,
+  opcoes: any[],
+  config: any
+) => {
+  const opcoesDisponiveis = opcoes.filter(opcao => opcao.preco > 0);
+  
+  if (opcoesDisponiveis.length === 0) {
+    return [];
+  }
+
+  // Sort by priority: promotions first, then cost per unit
+  const opcoesOrdenadas = [...opcoesDisponiveis].sort((a, b) => {
+    if (config.prioridade_promocao === 'alta') {
+      if (a.promocao || a.em_promocao) return -1;
+      if (b.promocao || b.em_promocao) return 1;
+    }
+    
+    const custoUnitarioA = a.preco / (a.quantidade_embalagem || 1);
+    const custoUnitarioB = b.preco / (b.quantidade_embalagem || 1);
+    
+    return custoUnitarioA - custoUnitarioB;
+  });
+
+  const selecoes = [];
+  let quantidadeRestante = quantidadeNecessaria;
+
+  for (const opcao of opcoesOrdenadas) {
+    if (quantidadeRestante <= 0) break;
+    
+    if (selecoes.length >= config.maximo_tipos_embalagem_por_produto) break;
+
+    const quantidadeEmbalagem = opcao.quantidade_embalagem || 1;
+    
+    if (opcao.apenas_valor_inteiro) {
+      const pacotesNecessarios = Math.ceil(quantidadeRestante / quantidadeEmbalagem);
+      const quantidadeTotal = pacotesNecessarios * quantidadeEmbalagem;
+      const sobra = quantidadeTotal - quantidadeRestante;
+      const sobraPercentual = (sobra / quantidadeNecessaria) * 100;
+      
+      if (sobraPercentual <= config.tolerancia_sobra_percentual) {
+        selecoes.push({
+          produto_id: opcao.produto_id,
+          descricao: opcao.descricao,
+          quantidade_pacotes: pacotesNecessarios,
+          quantidade_unitaria: quantidadeEmbalagem,
+          preco_unitario: opcao.preco,
+          custo_total: pacotesNecessarios * opcao.preco,
+          em_promocao: opcao.promocao || opcao.em_promocao,
+          motivo_selecao: `${opcao.promocao || opcao.em_promocao ? 'promoção, ' : ''}R$ ${(opcao.preco / quantidadeEmbalagem).toFixed(2)}/unidade${sobra > 0 ? `, sobra ${sobraPercentual.toFixed(1)}%` : ''}`
+        });
+        
+        quantidadeRestante = 0;
+      }
+    } else {
+      const pacotesNecessarios = Math.ceil(quantidadeRestante / quantidadeEmbalagem);
+      
+      selecoes.push({
+        produto_id: opcao.produto_id,
+        descricao: opcao.descricao,
+        quantidade_pacotes: pacotesNecessarios,
+        quantidade_unitaria: quantidadeEmbalagem,
+        preco_unitario: opcao.preco,
+        custo_total: pacotesNecessarios * opcao.preco,
+        em_promocao: opcao.promocao || opcao.em_promocao,
+        motivo_selecao: `${opcao.promocao || opcao.em_promocao ? 'promoção, ' : ''}R$ ${(opcao.preco / quantidadeEmbalagem).toFixed(2)}/unidade`
+      });
+      
+      quantidadeRestante -= pacotesNecessarios * quantidadeEmbalagem;
+    }
+  }
+
+  return selecoes;
+};
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -32,114 +109,172 @@ serve(async (req) => {
       .select('*')
       .order('categoria_descricao', { ascending: true });
 
-    // Create a map for easy product lookup
-    const productMap = new Map()
+    // Group products by produto_base_id for optimization
+    const productsByBase = new Map();
     marketProducts?.forEach(product => {
-      productMap.set(product.produto_id, product)
-    })
+      const baseId = product.produto_base_id || product.produto_id;
+      if (!productsByBase.has(baseId)) {
+        productsByBase.set(baseId, []);
+      }
+      productsByBase.get(baseId).push(product);
+    });
 
     // Process menu items to extract ingredients
-    const ingredientMap = new Map()
+    const ingredientMap = new Map();
     
     if (menuItems && menuItems.length > 0) {
-      // Use actual menu items
       for (const item of menuItems) {
         if (item.ingredients) {
           for (const ingredient of item.ingredients) {
-            const key = ingredient.produto_id
+            const baseId = ingredient.produto_base_id || ingredient.produto_id;
+            const key = baseId;
             if (ingredientMap.has(key)) {
-              const existing = ingredientMap.get(key)
-              existing.quantity += ingredient.quantidade || 0
+              const existing = ingredientMap.get(key);
+              existing.quantity += ingredient.quantidade || 0;
             } else {
-              const marketProduct = productMap.get(ingredient.produto_id)
-              if (marketProduct) {
+              const firstProduct = productsByBase.get(baseId)?.[0];
+              if (firstProduct) {
                 ingredientMap.set(key, {
-                  product_id: ingredient.produto_id.toString(),
-                  name: ingredient.nome,
+                  produto_base_id: baseId,
+                  name: ingredient.nome || firstProduct.descricao,
                   quantity: ingredient.quantidade || 0,
-                  unit: ingredient.unidade || marketProduct.unidade,
-                  category: marketProduct.categoria_descricao || 'Outros',
-                  price: marketProduct.preco || 0,
-                  per_capita: marketProduct.per_capita || 0,
-                  promocao: marketProduct.promocao || false
-                })
+                  unit: ingredient.unidade || firstProduct.unidade,
+                  category: firstProduct.categoria_descricao || 'Outros',
+                  opcoes_embalagem: productsByBase.get(baseId) || []
+                });
               }
             }
           }
         }
       }
     } else {
-      // Fallback: create sample shopping list from available products
-      const sampleProducts = marketProducts?.slice(0, 15) || []
+      // Fallback: create sample shopping list
+      const sampleProducts = marketProducts?.slice(0, 15) || [];
       
       for (const product of sampleProducts) {
         if (product.preco > 0 && product.per_capita > 0) {
-          const baseQuantity = product.per_capita * 100 // Assuming 100 employees
+          const baseQuantity = product.per_capita * 100;
+          const baseId = product.produto_base_id || product.produto_id;
           
-          ingredientMap.set(product.produto_id, {
-            product_id: product.produto_id.toString(),
+          ingredientMap.set(baseId, {
+            produto_base_id: baseId,
             name: product.descricao,
             quantity: baseQuantity,
             unit: product.unidade || 'kg',
             category: product.categoria_descricao || 'Outros',
-            price: product.preco,
-            per_capita: product.per_capita,
-            promocao: product.promocao || false
-          })
+            opcoes_embalagem: productsByBase.get(baseId) || [product]
+          });
         }
       }
     }
 
-    const aggregatedIngredients = Array.from(ingredientMap.values())
+    const aggregatedIngredients = Array.from(ingredientMap.values());
 
-    // Calculate costs and create shopping list with optimization preparation
-    let totalCost = 0
-    const shoppingItems = []
-    const optimizationData = []
+    // Apply optimization if enabled
+    let totalCost = 0;
+    let totalSavings = 0;
+    const shoppingItems = [];
+    const optimizationResults = [];
+
+    const defaultConfig = {
+      prioridade_promocao: 'alta',
+      tolerancia_sobra_percentual: 10,
+      preferir_produtos_integrais: false,
+      maximo_tipos_embalagem_por_produto: 3,
+      considerar_custo_compra: false
+    };
+
+    const config = optimizationConfig || defaultConfig;
 
     for (const ingredient of aggregatedIngredients) {
-      const unitPrice = ingredient.price || 0
-      const totalPrice = ingredient.quantity * unitPrice
+      if (optimizationConfig && ingredient.opcoes_embalagem.length > 1) {
+        // Apply optimization algorithm
+        const selections = calculateOptimalPackaging(
+          ingredient.quantity,
+          ingredient.opcoes_embalagem,
+          config
+        );
 
-      totalCost += totalPrice
+        if (selections.length > 0) {
+          const optimizedCost = selections.reduce((sum, sel) => sum + sel.custo_total, 0);
+          const totalQuantity = selections.reduce((sum, sel) => sum + (sel.quantidade_pacotes * sel.quantidade_unitaria), 0);
+          const sobra = Math.max(0, totalQuantity - ingredient.quantity);
 
-      // Preparar dados para futura otimização
-      const productVariants = marketProducts?.filter(p => 
-        p.produto_base_id === ingredient.product_id || 
-        p.produto_id === ingredient.product_id
-      ) || []
+          // Calculate cost without optimization (using first available option)
+          const firstOption = ingredient.opcoes_embalagem[0];
+          const packagesNeeded = Math.ceil(ingredient.quantity / (firstOption.quantidade_embalagem || 1));
+          const costWithoutOptimization = packagesNeeded * firstOption.preco;
+          const savings = Math.max(0, costWithoutOptimization - optimizedCost);
 
-      shoppingItems.push({
-        product_id_legado: ingredient.product_id,
-        product_name: ingredient.name,
-        category: ingredient.category,
-        quantity: ingredient.quantity,
-        unit: ingredient.unit,
-        unit_price: unitPrice,
-        total_price: totalPrice,
-        available: true, // Products in market are available
-        promocao: ingredient.promocao
-      })
+          totalCost += optimizedCost;
+          totalSavings += savings;
 
-      // Dados para otimização (preparação para GPT Assistant)
-      if (optimizationConfig && productVariants.length > 1) {
-        optimizationData.push({
-          produto_base_id: ingredient.product_id,
-          produto_base_nome: ingredient.name,
-          quantidade_necessaria: ingredient.quantity,
-          unidade: ingredient.unit,
-          opcoes_embalagem: productVariants.map(variant => ({
-            produto_id: variant.produto_id,
-            descricao: variant.descricao,
-            quantidade_embalagem: variant.quantidade_embalagem || 1,
-            preco: variant.preco || 0,
-            preco_compra: variant.preco_compra || 0,
-            promocao: variant.promocao || false,
-            em_promocao: variant.em_promocao || false,
-            apenas_valor_inteiro: variant.apenas_valor_inteiro || false
-          })),
-          configuracao_otimizacao: optimizationConfig
-        })
+          // Create shopping items for each selection
+          for (const selection of selections) {
+            shoppingItems.push({
+              product_id_legado: selection.produto_id.toString(),
+              product_name: selection.descricao,
+              category: ingredient.category,
+              quantity: selection.quantidade_pacotes,
+              unit: `pacote(s) de ${selection.quantidade_unitaria}${ingredient.unit}`,
+              unit_price: selection.preco_unitario,
+              total_price: selection.custo_total,
+              available: true,
+              promocao: selection.em_promocao,
+              optimized: true
+            });
+          }
+
+          optimizationResults.push({
+            produto_base_id: ingredient.produto_base_id,
+            produto_base_nome: ingredient.name,
+            quantidade_solicitada: ingredient.quantity,
+            quantidade_total_comprada: totalQuantity,
+            sobra: sobra,
+            custo_total: optimizedCost,
+            economia_obtida: savings,
+            pacotes_selecionados: selections,
+            justificativa: `Otimização aplicada: ${selections.length} tipo(s) de embalagem selecionado(s)${savings > 0 ? `, economia de R$ ${savings.toFixed(2)}` : ''}${sobra > 0 ? `, sobra de ${sobra.toFixed(2)}${ingredient.unit}` : ''}`
+          });
+        } else {
+          // Fallback to first option if optimization fails
+          const firstOption = ingredient.opcoes_embalagem[0];
+          const unitPrice = firstOption.preco || 0;
+          const totalPrice = ingredient.quantity * unitPrice;
+          totalCost += totalPrice;
+
+          shoppingItems.push({
+            product_id_legado: firstOption.produto_id.toString(),
+            product_name: ingredient.name,
+            category: ingredient.category,
+            quantity: ingredient.quantity,
+            unit: ingredient.unit,
+            unit_price: unitPrice,
+            total_price: totalPrice,
+            available: true,
+            promocao: firstOption.promocao || false,
+            optimized: false
+          });
+        }
+      } else {
+        // No optimization - use simple calculation
+        const firstOption = ingredient.opcoes_embalagem[0];
+        const unitPrice = firstOption?.preco || 0;
+        const totalPrice = ingredient.quantity * unitPrice;
+        totalCost += totalPrice;
+
+        shoppingItems.push({
+          product_id_legado: (firstOption?.produto_id || ingredient.produto_base_id).toString(),
+          product_name: ingredient.name,
+          category: ingredient.category,
+          quantity: ingredient.quantity,
+          unit: ingredient.unit,
+          unit_price: unitPrice,
+          total_price: totalPrice,
+          available: true,
+          promocao: firstOption?.promocao || false,
+          optimized: false
+        });
       }
     }
 
@@ -174,8 +309,9 @@ serve(async (req) => {
     }
 
     console.log(`Shopping list created successfully. Total cost: R$ ${totalCost.toFixed(2)}`)
-    console.log(`Optimization data prepared for ${optimizationData.length} products`)
-    console.log(`Used ${shoppingItems.filter(item => item.promocao).length} products on promotion`)
+    console.log(`Optimization results: ${optimizationResults.length} products optimized`)
+    console.log(`Total savings: R$ ${totalSavings.toFixed(2)}`)
+    console.log(`Promotions used: ${shoppingItems.filter(item => item.promocao).length}`)
 
     return new Response(
       JSON.stringify({
@@ -190,12 +326,19 @@ serve(async (req) => {
           withinBudget: totalCost <= budgetPredicted,
           difference: totalCost - budgetPredicted
         },
+        optimizationSummary: {
+          enabled: !!optimizationConfig,
+          products_optimized: optimizationResults.length,
+          total_savings: totalSavings,
+          promotions_used: shoppingItems.filter(item => item.promocao).length,
+          products_with_surplus: optimizationResults.filter(r => r.sobra > 0).length
+        },
+        optimizationResults: optimizationResults,
         marketStats: {
           total_products_used: shoppingItems.length,
-          promotions_used: shoppingItems.filter(item => item.promocao).length,
+          optimized_products: shoppingItems.filter(item => item.optimized).length,
           categories_covered: [...new Set(shoppingItems.map(item => item.category))].length
-        },
-        optimizationData: optimizationData // Dados preparados para otimização
+        }
       }),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
