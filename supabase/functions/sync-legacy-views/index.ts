@@ -12,7 +12,7 @@ const VIEW_MAPPING = {
   vwCoSolicitacaoFilialCusto: {
     description: 'Custos por Filial',
     targetTable: 'custos_filiais', // Nova tabela específica
-    fields: ['cliente_id_legado', 'filial_id', 'nome_filial', 'custo_total', 'orcamento_mensal', 'custo_maximo_refeicao', 'segunda_feira', 'terca_feira', 'quarta_feira', 'quinta_feira', 'sexta_feira', 'sabado', 'domingo', 'RefCustoSegunda', 'RefCustoTerca', 'RefCustoQuarta', 'RefCustoQuinta', 'RefCustoSexta', 'RefCustoSabado', 'RefCustoDomingo', 'RefCustoDiaEspecial', 'QtdeRefeicoesUsarMediaValidarSimNao', 'PorcentagemLimiteAcimaMedia', 'custo_medio_semanal', 'solicitacao_filial_custo_id', 'solicitacao_compra_tipo_id', 'user_name', 'user_date_time', 'nome_fantasia', 'razao_social', 'solicitacao_compra_tipo_descricao']
+    fields: ['cliente_id_legado', 'filial_id', 'nome_filial', 'custo_total', 'RefCustoSegunda', 'RefCustoTerca', 'RefCustoQuarta', 'RefCustoQuinta', 'RefCustoSexta', 'RefCustoSabado', 'RefCustoDomingo', 'RefCustoDiaEspecial', 'QtdeRefeicoesUsarMediaValidarSimNao', 'PorcentagemLimiteAcimaMedia', 'custo_medio_semanal', 'solicitacao_filial_custo_id', 'solicitacao_compra_tipo_id', 'user_name', 'user_date_time', 'nome_fantasia', 'razao_social', 'solicitacao_compra_tipo_descricao']
   },
   vwCoSolicitacaoProdutoListagem: {
     description: 'Produtos Solicitados',
@@ -92,7 +92,7 @@ async function checkViewsAvailability(supabaseClient: any) {
   
   // Views disponíveis para sincronização - ATUALIZADO
   const availableViews = [
-    'vwCoSolicitacaoFilialCusto', // → custos_filiais
+    'vwCoSolicitacaoFilialCusto', // → custos_filiais (estrutura padronizada)
     'vwCoSolicitacaoProdutoListagem',
     'vwCpReceita',
     'vwCpReceitaProduto',
@@ -109,9 +109,9 @@ async function checkViewsAvailability(supabaseClient: any) {
       status: 'concluido',
       detalhes: { 
         availableViews,
-        separacao_implementada: true,
-        custos_filiais_expandida: true,
-        novos_campos_adicionados: true
+        custos_filiais_padronizada: true,
+        campos_duplicados_removidos: true,
+        estrutura_legado_mantida: true
       }
     });
 
@@ -123,7 +123,7 @@ async function checkViewsAvailability(supabaseClient: any) {
     JSON.stringify({ 
       success: true, 
       availableViews,
-      message: 'Views verificadas com sucesso - tabela custos_filiais expandida com campos detalhados'
+      message: 'Views verificadas - tabela custos_filiais padronizada com estrutura do sistema legado'
     }),
     { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
   );
@@ -256,55 +256,27 @@ async function processViewData(supabaseClient: any, viewName: string, data: any[
   const mapping = VIEW_MAPPING[viewName as keyof typeof VIEW_MAPPING];
   let processedCount = 0;
 
-  // CORREÇÃO CRÍTICA: Tratamento específico para vwCoSolicitacaoFilialCusto com mapeamento correto
+  // PROCESSAMENTO SIMPLIFICADO para vwCoSolicitacaoFilialCusto - mapeamento direto
   if (viewName === 'vwCoSolicitacaoFilialCusto') {
-    console.log(`Processamento de custos de filiais - ${data.length} registros`);
+    console.log(`Processamento simplificado de custos de filiais - ${data.length} registros`);
     
     for (const record of data) {
       try {
-        // LOG DETALHADO: Ver exatamente o que está chegando
+        // LOG DETALHADO: Ver o que está chegando
         console.log(`Processando registro ${processedCount + 1}:`, {
           cliente_id_legado: record.cliente_id_legado,
           filial_id: record.filial_id,
           RefCustoSegunda: record.RefCustoSegunda,
-          QtdeRefeicoesUsarMediaValidarSimNao: record.QtdeRefeicoesUsarMediaValidarSimNao,
-          custo_total: record.custo_total,
-          segunda_feira: record.segunda_feira
+          custo_total: record.custo_total
         });
 
-        // Calcular dias de funcionamento baseado nos campos booleanos
-        let diasFuncionamento = 0;
-        if (record.segunda_feira === true || record.segunda_feira === 'true' || record.segunda_feira === 1) diasFuncionamento++;
-        if (record.terca_feira === true || record.terca_feira === 'true' || record.terca_feira === 1) diasFuncionamento++;
-        if (record.quarta_feira === true || record.quarta_feira === 'true' || record.quarta_feira === 1) diasFuncionamento++;
-        if (record.quinta_feira === true || record.quinta_feira === 'true' || record.quinta_feira === 1) diasFuncionamento++;
-        if (record.sexta_feira === true || record.sexta_feira === 'true' || record.sexta_feira === 1) diasFuncionamento++;
-        if (record.sabado === true || record.sabado === 'true' || record.sabado === 1) diasFuncionamento++;
-        if (record.domingo === true || record.domingo === 'true' || record.domingo === 1) diasFuncionamento++;
-        
-        // Calcular custo máximo por refeição baseado no custo total e dias
-        const custoTotal = parseFloat(record.custo_total) || 0;
-        const custoMaximoRefeicao = custoTotal && diasFuncionamento > 0 
-          ? custoTotal / diasFuncionamento 
-          : 0;
-
-        // CONVERSÕES CORRETAS para os campos vindos do sistema legado
+        // MAPEAMENTO DIRETO - sem conversões complexas, apenas conversões de tipo básicas
         const dataToInsert = {
           cliente_id_legado: record.cliente_id_legado ? parseInt(record.cliente_id_legado.toString()) : record.filial_id ? parseInt(record.filial_id.toString()) : null,
           filial_id: record.filial_id ? parseInt(record.filial_id.toString()) : null,
           nome_filial: record.nome_filial || record.nome_empresa || null,
-          custo_total: custoTotal,
-          orcamento_mensal: parseFloat(record.orcamento_mensal) || 0,
-          custo_maximo_refeicao: custoMaximoRefeicao,
-          dias_funcionamento_calculado: diasFuncionamento,
-          segunda_feira: record.segunda_feira === true || record.segunda_feira === 'true' || record.segunda_feira === 1,
-          terca_feira: record.terca_feira === true || record.terca_feira === 'true' || record.terca_feira === 1,
-          quarta_feira: record.quarta_feira === true || record.quarta_feira === 'true' || record.quarta_feira === 1,
-          quinta_feira: record.quinta_feira === true || record.quinta_feira === 'true' || record.quinta_feira === 1,
-          sexta_feira: record.sexta_feira === true || record.sexta_feira === 'true' || record.sexta_feira === 1,
-          sabado: record.sabado === true || record.sabado === 'true' || record.sabado === 1,
-          domingo: record.domingo === true || record.domingo === 'true' || record.domingo === 1,
-          // CAMPOS DETALHADOS - Conversão correta de numeric
+          custo_total: record.custo_total ? parseFloat(record.custo_total.toString()) : null,
+          // Mapeamento direto dos campos RefCusto*
           RefCustoSegunda: record.RefCustoSegunda ? parseFloat(record.RefCustoSegunda.toString()) : null,
           RefCustoTerca: record.RefCustoTerca ? parseFloat(record.RefCustoTerca.toString()) : null,
           RefCustoQuarta: record.RefCustoQuarta ? parseFloat(record.RefCustoQuarta.toString()) : null,
@@ -313,7 +285,7 @@ async function processViewData(supabaseClient: any, viewName: string, data: any[
           RefCustoSabado: record.RefCustoSabado ? parseFloat(record.RefCustoSabado.toString()) : null,
           RefCustoDomingo: record.RefCustoDomingo ? parseFloat(record.RefCustoDomingo.toString()) : null,
           RefCustoDiaEspecial: record.RefCustoDiaEspecial ? parseFloat(record.RefCustoDiaEspecial.toString()) : null,
-          // CAMPO BOOLEAN - Conversão correta
+          // Campos adicionais - mapeamento direto
           QtdeRefeicoesUsarMediaValidarSimNao: record.QtdeRefeicoesUsarMediaValidarSimNao === true || record.QtdeRefeicoesUsarMediaValidarSimNao === 'true' || record.QtdeRefeicoesUsarMediaValidarSimNao === 1,
           PorcentagemLimiteAcimaMedia: record.PorcentagemLimiteAcimaMedia ? parseInt(record.PorcentagemLimiteAcimaMedia.toString()) : null,
           custo_medio_semanal: record.custo_medio_semanal ? parseFloat(record.custo_medio_semanal.toString()) : null,
@@ -327,11 +299,9 @@ async function processViewData(supabaseClient: any, viewName: string, data: any[
           sync_at: new Date().toISOString()
         };
 
-        // LOG DETALHADO: Verificar o que será inserido
-        console.log(`Dados processados para inserção:`, {
+        console.log(`Dados para inserção:`, {
           cliente_id_legado: dataToInsert.cliente_id_legado,
           RefCustoSegunda: dataToInsert.RefCustoSegunda,
-          QtdeRefeicoesUsarMediaValidarSimNao: dataToInsert.QtdeRefeicoesUsarMediaValidarSimNao,
           custo_total: dataToInsert.custo_total
         });
 
@@ -345,7 +315,6 @@ async function processViewData(supabaseClient: any, viewName: string, data: any[
         } else {
           processedCount++;
           
-          // Log a cada 1000 registros processados
           if (processedCount % 1000 === 0) {
             console.log(`Processados ${processedCount} registros de custos de filiais`);
           }
@@ -470,15 +439,13 @@ async function processViewData(supabaseClient: any, viewName: string, data: any[
           }
         }
       } else if (mapping.targetTable === 'contratos_corporativos' && viewName === 'vwOrFiliaisAtiva') {
-        // ATUALIZADO: Agora apenas vwOrFiliaisAtiva vai para contratos_corporativos
-        // Foco em dados contratuais, não custos operacionais
         const { error } = await supabaseClient
           .from('contratos_corporativos')
           .upsert({
             cliente_id_legado: record.filial_id?.toString() || record.cliente_id_legado?.toString() || record.id?.toString(),
             nome_empresa: record.nome_empresa || record.nome_filial || 'Empresa',
             total_funcionarios: record.total_funcionarios || 0,
-            custo_maximo_refeicao: record.custo_maximo_refeicao || 15.0, // Valor padrão
+            custo_maximo_refeicao: record.custo_maximo_refeicao || 15.0,
             total_refeicoes_mes: record.total_refeicoes_mes || (record.total_funcionarios * 22) || 0,
             periodicidade: record.periodicidade || 'mensal',
             restricoes_alimentares: record.restricoes_alimentares || [],
