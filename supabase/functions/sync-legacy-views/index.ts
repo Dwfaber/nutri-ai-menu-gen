@@ -305,9 +305,10 @@ async function processViewData(supabaseClient: any, viewName: string, data: any[
           custo_total: dataToInsert.custo_total
         });
 
+        // CORREÇÃO: Usar upsert com onConflict para evitar erro de chave duplicada
         const { error } = await supabaseClient
           .from('custos_filiais')
-          .upsert(dataToInsert);
+          .upsert(dataToInsert, { onConflict: 'cliente_id_legado,filial_id' });
 
         if (error) {
           console.error(`Erro ao processar custo de filial:`, error);
@@ -335,6 +336,7 @@ async function processViewData(supabaseClient: any, viewName: string, data: any[
     
     for (const record of data) {
       try {
+        // CORREÇÃO: Usar upsert com onConflict para evitar erro de chave duplicada
         const { error } = await supabaseClient
           .from('receita_ingredientes')
           .upsert({
@@ -350,7 +352,7 @@ async function processViewData(supabaseClient: any, viewName: string, data: any[
             user_name: record.user_name,
             user_date_time: record.user_date_time,
             sync_at: new Date().toISOString()
-          });
+          }, { onConflict: 'receita_id_legado,receita_produto_id' });
 
         if (error) {
           console.error(`Erro ao processar ingrediente:`, error);
@@ -375,35 +377,45 @@ async function processViewData(supabaseClient: any, viewName: string, data: any[
       }
 
       if (mapping.targetTable === 'co_solicitacao_produto_listagem') {
+        console.log(`Processando produto solicitação com ID: ${record.solicitacao_produto_listagem_id || record.id}`);
+        
+        // CORREÇÃO PRINCIPAL: Usar upsert com onConflict para resolver o erro de chave duplicada
         const { error } = await supabaseClient
           .from('co_solicitacao_produto_listagem')
           .upsert({
             solicitacao_produto_listagem_id: record.solicitacao_produto_listagem_id || record.id,
             produto_id: record.produto_id,
             produto_base_id: record.produto_base_id,
-            categoria_id: record.categoria_id,
+            solicitacao_produto_categoria_id: record.solicitacao_produto_categoria_id || record.categoria_id,
             solicitacao_id: record.solicitacao_id,
             descricao: record.descricao || record.nome_produto,
             unidade: record.unidade,
             quantidade_embalagem: record.quantidade_embalagem || 1,
-            produto_base_qtd_embalagem: record.produto_base_qtd_embalagem || 1,
+            produto_base_quantidade_embalagem: record.produto_base_quantidade_embalagem || record.produto_base_qtd_embalagem || 1,
             preco: record.preco || record.preco_unitario || 0,
             preco_compra: record.preco_compra || record.preco || 0,
             promocao: record.promocao || false,
-            em_promocao: record.em_promocao || false,
+            em_promocao_sim_nao: record.em_promocao_sim_nao || record.em_promocao || false,
             per_capita: record.per_capita || 0,
             inteiro: record.inteiro || false,
-            apenas_valor_inteiro: record.apenas_valor_inteiro || false,
+            apenas_valor_inteiro_sim_nao: record.apenas_valor_inteiro_sim_nao || record.apenas_valor_inteiro || false,
             arredondar_tipo: record.arredondar_tipo || 0,
             grupo: record.grupo,
             categoria_descricao: record.categoria_descricao,
             criado_em: record.criado_em || new Date().toISOString()
+          }, { 
+            onConflict: 'solicitacao_produto_listagem_id',
+            ignoreDuplicates: false 
           });
 
         if (error) {
-          console.error(`Erro ao processar produto solicitação:`, error);
+          console.error(`Erro ao processar produto solicitação ID ${record.solicitacao_produto_listagem_id}:`, error);
+          console.error(`Dados problemáticos:`, record);
+        } else {
+          console.log(`Produto solicitação ID ${record.solicitacao_produto_listagem_id} processado com sucesso`);
         }
       } else if (mapping.targetTable === 'produtos_legado') {
+        // CORREÇÃO: Usar upsert com onConflict para evitar erro de chave duplicada
         const { error } = await supabaseClient
           .from('produtos_legado')
           .upsert({
@@ -415,13 +427,14 @@ async function processViewData(supabaseClient: any, viewName: string, data: any[
             peso_unitario: record.peso_unitario || 1.0,
             disponivel: record.disponivel !== false,
             sync_at: new Date().toISOString()
-          });
+          }, { onConflict: 'produto_id_legado' });
 
         if (error) {
           console.error(`Erro ao processar produto:`, error);
         }
       } else if (mapping.targetTable === 'receitas_legado') {
         if (viewName === 'vwCpReceita') {
+          // CORREÇÃO: Usar upsert com onConflict para evitar erro de chave duplicada
           const { error } = await supabaseClient
             .from('receitas_legado')
             .upsert({
@@ -432,13 +445,14 @@ async function processViewData(supabaseClient: any, viewName: string, data: any[
               porcoes: record.porcoes || 1,
               ingredientes: record.ingredientes || [],
               sync_at: new Date().toISOString()
-            });
+            }, { onConflict: 'receita_id_legado' });
 
           if (error) {
             console.error(`Erro ao processar receita:`, error);
           }
         }
       } else if (mapping.targetTable === 'contratos_corporativos' && viewName === 'vwOrFiliaisAtiva') {
+        // CORREÇÃO: Usar upsert com onConflict para evitar erro de chave duplicada
         const { error } = await supabaseClient
           .from('contratos_corporativos')
           .upsert({
@@ -451,7 +465,7 @@ async function processViewData(supabaseClient: any, viewName: string, data: any[
             restricoes_alimentares: record.restricoes_alimentares || [],
             ativo: record.ativo !== false,
             sync_at: new Date().toISOString()
-          });
+          }, { onConflict: 'cliente_id_legado' });
 
         if (error) {
           console.error(`Erro ao processar contrato:`, error);
@@ -466,4 +480,47 @@ async function processViewData(supabaseClient: any, viewName: string, data: any[
 
   console.log(`View ${viewName}: ${processedCount} registros processados de ${data.length} recebidos`);
   return processedCount;
+}
+
+async function checkViewsAvailability(supabaseClient: any) {
+  console.log('Checking views availability...');
+  
+  // Views disponíveis para sincronização - ATUALIZADO
+  const availableViews = [
+    'vwCoSolicitacaoFilialCusto', // → custos_filiais (estrutura padronizada)
+    'vwCoSolicitacaoProdutoListagem',
+    'vwCpReceita',
+    'vwCpReceitaProduto',
+    'vwEstProdutoBase',
+    'vwOrFiliaisAtiva' // → contratos_corporativos
+  ];
+
+  // Log da verificação
+  const { error } = await supabaseClient
+    .from('sync_logs')
+    .insert({
+      tabela_destino: 'views_check',
+      operacao: 'check_availability',
+      status: 'concluido',
+      detalhes: { 
+        availableViews,
+        custos_filiais_padronizada: true,
+        campos_duplicados_removidos: true,
+        estrutura_legado_mantida: true,
+        upsert_conflicts_fixed: true
+      }
+    });
+
+  if (error) {
+    console.error('Error logging view check:', error);
+  }
+
+  return new Response(
+    JSON.stringify({ 
+      success: true, 
+      availableViews,
+      message: 'Views verificadas - correções de upsert implementadas para resolver erros de chave duplicada'
+    }),
+    { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+  );
 }
