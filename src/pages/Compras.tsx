@@ -102,6 +102,12 @@ const Compras = () => {
         return <Badge className="bg-red-100 text-red-800">Orçamento Excedido</Badge>;
       case 'finalized':
         return <Badge className="bg-blue-100 text-blue-800">Finalizada</Badge>;
+      case 'draft':
+        return <Badge variant="outline" className="text-gray-600">Rascunho</Badge>;
+      case 'approved':
+        return <Badge className="bg-blue-100 text-blue-800">Aprovada</Badge>;
+      case 'purchased':
+        return <Badge className="bg-green-100 text-green-800">Comprada</Badge>;
       default:
         return <Badge variant="outline">Desconhecido</Badge>;
     }
@@ -187,7 +193,7 @@ const Compras = () => {
             <Card>
               <CardContent className="p-4">
                 <div className="flex items-center space-x-2">
-                  {selectedList?.status === 'budget_ok' ? (
+                  {selectedList?.status === 'budget_ok' || selectedList?.status === 'approved' ? (
                     <CheckCircle className="w-5 h-5 text-green-600" />
                   ) : (
                     <AlertCircle className="w-5 h-5 text-amber-600" />

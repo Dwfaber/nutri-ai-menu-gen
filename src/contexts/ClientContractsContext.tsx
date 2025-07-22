@@ -39,7 +39,7 @@ export const ClientContractsProvider = ({ children }: { children: ReactNode }) =
       setError(null);
 
       const { data, error: fetchError } = await supabase
-        .from('clientes_contratos')
+        .from('contratos_corporativos')
         .select('*')
         .order('nome_empresa');
 
@@ -47,7 +47,21 @@ export const ClientContractsProvider = ({ children }: { children: ReactNode }) =
         throw fetchError;
       }
 
-      setClients(data || []);
+      // Transform data to match ContractClient interface
+      const transformedData: ContractClient[] = (data || []).map(item => ({
+        id: item.id,
+        nome_empresa: item.nome_empresa,
+        total_funcionarios: item.total_funcionarios,
+        custo_maximo_refeicao: Number(item.custo_maximo_refeicao),
+        restricoes_alimentares: item.restricoes_alimentares || [],
+        periodicidade: item.periodicidade as 'diario' | 'semanal' | 'mensal',
+        total_refeicoes_mes: item.total_refeicoes_mes,
+        ativo: item.ativo,
+        created_at: item.created_at,
+        updated_at: item.sync_at // Using sync_at as updated_at since that's what exists in the table
+      }));
+
+      setClients(transformedData);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Erro ao carregar clientes';
       setError(errorMessage);
@@ -69,7 +83,7 @@ export const ClientContractsProvider = ({ children }: { children: ReactNode }) =
   const getClientContract = async (clientId: string): Promise<ContractClient | null> => {
     try {
       const { data, error } = await supabase
-        .from('clientes_contratos')
+        .from('contratos_corporativos')
         .select('*')
         .eq('id', clientId)
         .single();
@@ -78,7 +92,21 @@ export const ClientContractsProvider = ({ children }: { children: ReactNode }) =
         throw error;
       }
 
-      return data;
+      if (!data) return null;
+
+      // Transform single record to match ContractClient interface
+      return {
+        id: data.id,
+        nome_empresa: data.nome_empresa,
+        total_funcionarios: data.total_funcionarios,
+        custo_maximo_refeicao: Number(data.custo_maximo_refeicao),
+        restricoes_alimentares: data.restricoes_alimentares || [],
+        periodicidade: data.periodicidade as 'diario' | 'semanal' | 'mensal',
+        total_refeicoes_mes: data.total_refeicoes_mes,
+        ativo: data.ativo,
+        created_at: data.created_at,
+        updated_at: data.sync_at
+      };
     } catch (err) {
       console.error('Erro ao buscar contrato do cliente:', err);
       return null;
