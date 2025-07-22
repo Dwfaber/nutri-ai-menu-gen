@@ -1,8 +1,8 @@
+
 import { useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/components/ui/use-toast';
 import { withRetry } from '@/utils/connectionUtils';
-import type { OptimizationSettings } from '@/types/optimization';
 
 interface Ingredient {
   produto_id: string;
@@ -30,7 +30,7 @@ export interface OptimizationSettings {
   budgetLimit: number | null;
 }
 
-interface ShoppingItem {
+export interface ShoppingItem {
   id: string;
   produto_id: string;
   produto_nome: string;
@@ -44,7 +44,7 @@ interface ShoppingItem {
   receita_origem: string[];
 }
 
-interface ShoppingList {
+export interface ShoppingList {
   id: string;
   nome: string;
   cardapio_id?: string;
@@ -58,6 +58,24 @@ interface ShoppingList {
     promotion_savings: number;
     packaging_savings: number;
   };
+  client_name: string;
+  budget_predicted: number;
+  cost_actual?: number;
+  created_at: string;
+}
+
+export interface ShoppingListItem {
+  id: string;
+  product_id_legado: string;
+  product_name: string;
+  category: string;
+  quantity: number;
+  unit: string;
+  unit_price: number;
+  total_price: number;
+  available: boolean;
+  supplier?: string;
+  notes?: string;
 }
 
 export const useShoppingList = () => {
@@ -102,7 +120,11 @@ export const useShoppingList = () => {
         valor_total: result.total_cost || 0,
         data_criacao: new Date().toISOString(),
         status: 'draft',
-        optimization_results: result.optimization_results
+        optimization_results: result.optimization_results,
+        client_name: result.client_name || 'Cliente',
+        budget_predicted: result.budget_predicted || 0,
+        cost_actual: result.total_cost || 0,
+        created_at: new Date().toISOString()
       };
 
       setCurrentList(newList);
@@ -133,7 +155,6 @@ export const useShoppingList = () => {
 
   const saveShoppingList = async (list: ShoppingList): Promise<boolean> => {
     try {
-      // Simulate saving to database
       setLists(prev => 
         prev.map(l => l.id === list.id ? list : l)
       );
@@ -184,6 +205,77 @@ export const useShoppingList = () => {
     }
   };
 
+  // Métodos adicionais que estavam sendo usados
+  const getShoppingLists = async (): Promise<ShoppingList[]> => {
+    return lists;
+  };
+
+  const getShoppingListItems = async (listId: string): Promise<ShoppingListItem[]> => {
+    const list = lists.find(l => l.id === listId);
+    if (!list) return [];
+
+    // Convert ShoppingItem to ShoppingListItem format
+    return list.itens.map(item => ({
+      id: item.id,
+      product_id_legado: item.produto_id,
+      product_name: item.produto_nome,
+      category: item.categoria,
+      quantity: item.quantidade_necessaria,
+      unit: item.unidade,
+      unit_price: item.preco_unitario,
+      total_price: item.valor_total,
+      available: true,
+      supplier: item.fornecedor,
+      notes: item.observacoes
+    }));
+  };
+
+  const exportToCSV = (items: ShoppingListItem[], clientName: string) => {
+    const headers = ['Produto', 'Categoria', 'Quantidade', 'Unidade', 'Preço Unit.', 'Total'];
+    const csvContent = [
+      headers.join(','),
+      ...items.map(item => [
+        item.product_name,
+        item.category,
+        item.quantity,
+        item.unit,
+        item.unit_price.toFixed(2),
+        item.total_price.toFixed(2)
+      ].join(','))
+    ].join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `lista-compras-${clientName}.csv`;
+    a.click();
+    window.URL.revokeObjectURL(url);
+  };
+
+  const updateItemQuantity = async (itemId: string, quantity: number) => {
+    if (!currentList) return;
+
+    const updatedItems = currentList.itens.map(item => 
+      item.id === itemId 
+        ? { ...item, quantidade_necessaria: quantity, valor_total: quantity * item.preco_unitario }
+        : item
+    );
+
+    const updatedList = {
+      ...currentList,
+      itens: updatedItems,
+      valor_total: updatedItems.reduce((sum, item) => sum + item.valor_total, 0)
+    };
+
+    setCurrentList(updatedList);
+    setLists(prev => prev.map(l => l.id === updatedList.id ? updatedList : l));
+  };
+
+  const createFromMenu = async (menuId: string, clientName: string, totalCost: number): Promise<void> => {
+    return generateShoppingList(menuId).then(() => {});
+  };
+
   return {
     lists,
     currentList,
@@ -191,6 +283,11 @@ export const useShoppingList = () => {
     generateShoppingList,
     saveShoppingList,
     deleteShoppingList,
-    setCurrentList
+    setCurrentList,
+    getShoppingLists,
+    getShoppingListItems,
+    exportToCSV,
+    updateItemQuantity,
+    createFromMenu
   };
 };

@@ -23,7 +23,14 @@ const Compras = () => {
   const [optimizationSummary, setOptimizationSummary] = useState<any>(null);
   const [budgetStatus, setBudgetStatus] = useState<any>(null);
 
-  const { getShoppingLists, getShoppingListItems, exportToCSV, updateItemQuantity } = useShoppingList();
+  const { 
+    lists,
+    getShoppingLists, 
+    getShoppingListItems, 
+    exportToCSV, 
+    updateItemQuantity 
+  } = useShoppingList();
+  
   const { config: optimizationConfig, lastResults: optimizationResults } = useOptimization();
 
   useEffect(() => {
@@ -31,8 +38,8 @@ const Compras = () => {
   }, []);
 
   const loadShoppingLists = async () => {
-    const lists = await getShoppingLists();
-    setShoppingLists(lists);
+    const listsData = await getShoppingLists();
+    setShoppingLists(listsData);
   };
 
   const handleSelectList = async (list: ShoppingList) => {
@@ -112,6 +119,9 @@ const Compras = () => {
     return acc;
   }, {} as Record<string, ShoppingListItem[]>);
 
+  // Use lists from hook, fallback to local state
+  const displayLists = lists.length > 0 ? lists : shoppingLists;
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
@@ -150,7 +160,7 @@ const Compras = () => {
                   <ShoppingCart className="w-5 h-5 text-green-600" />
                   <div>
                     <p className="text-sm font-medium text-gray-600">Listas Ativas</p>
-                    <p className="text-2xl font-bold">{shoppingLists.length}</p>
+                    <p className="text-2xl font-bold">{displayLists.length}</p>
                   </div>
                 </div>
               </CardContent>
@@ -214,7 +224,7 @@ const Compras = () => {
             {/* Lista de Shopping Lists */}
             <div className="space-y-4">
               <h3 className="text-lg font-semibold">Listas de Compras Disponíveis</h3>
-              {shoppingLists.length === 0 ? (
+              {displayLists.length === 0 ? (
                 <Card>
                   <CardContent className="p-8 text-center text-gray-500">
                     <ShoppingCart className="w-12 h-12 mx-auto mb-4 text-gray-300" />
@@ -223,7 +233,7 @@ const Compras = () => {
                   </CardContent>
                 </Card>
               ) : (
-                shoppingLists.map((list) => (
+                displayLists.map((list) => (
                   <Card 
                     key={list.id} 
                     className={`cursor-pointer transition-all hover:shadow-md ${
@@ -244,7 +254,7 @@ const Compras = () => {
                           Orçamento: R$ {list.budget_predicted.toFixed(2)}
                         </span>
                         <span className={`font-medium ${
-                          list.cost_actual <= list.budget_predicted ? 'text-green-600' : 'text-red-600'
+                          (list.cost_actual || 0) <= list.budget_predicted ? 'text-green-600' : 'text-red-600'
                         }`}>
                           Custo: R$ {list.cost_actual?.toFixed(2) || '0.00'}
                         </span>
