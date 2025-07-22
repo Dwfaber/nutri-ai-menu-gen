@@ -1,3 +1,4 @@
+
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
 
@@ -54,7 +55,7 @@ serve(async (req) => {
         detalhes: {
           trigger_source,
           views,
-          n8n_webhook_url: 'http://localhost:5678/webhook/7d565ff8-db01-45bb-adba-793e60880e7a',
+          n8n_webhook_url: 'https://n8n.docaperformance.com.br/webhook-test/7d565ff8-db01-45bb-adba-793e60880e7a',
           timestamp: timestamp || new Date().toISOString()
         }
       })
@@ -74,7 +75,7 @@ serve(async (req) => {
     console.log('📤 Enviando payload para n8n:', JSON.stringify(n8nPayload, null, 2))
 
     // Chamar webhook do n8n
-    const n8nResponse = await fetch('http://localhost:5678/webhook/7d565ff8-db01-45bb-adba-793e60880e7a', {
+    const n8nResponse = await fetch('https://n8n.docaperformance.com.br/webhook-test/7d565ff8-db01-45bb-adba-793e60880e7a', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
