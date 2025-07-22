@@ -14,6 +14,9 @@ import OptimizationAnalysis from '../components/Optimization/OptimizationAnalysi
 import OptimizationResults from '../components/Optimization/OptimizationResults';
 import { useOptimization } from '../hooks/useOptimization';
 
+// Define valid status types for shopping lists
+type ShoppingListStatus = 'pending' | 'budget_ok' | 'budget_exceeded' | 'finalized' | 'draft' | 'approved' | 'purchased';
+
 const Compras = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [shoppingLists, setShoppingLists] = useState<ShoppingList[]>([]);
@@ -92,7 +95,7 @@ const Compras = () => {
     }
   };
 
-  const getStatusBadge = (status: string) => {
+  const getStatusBadge = (status: ShoppingListStatus) => {
     switch (status) {
       case 'pending':
         return <Badge variant="outline" className="text-amber-600">Pendente</Badge>;
@@ -127,6 +130,11 @@ const Compras = () => {
 
   // Use lists from hook, fallback to local state
   const displayLists = lists.length > 0 ? lists : shoppingLists;
+
+  // Helper function to check if status indicates success
+  const isSuccessStatus = (status: ShoppingListStatus) => {
+    return status === 'budget_ok' || status === 'approved' || status === 'purchased';
+  };
 
   return (
     <div className="space-y-6">
@@ -193,7 +201,7 @@ const Compras = () => {
             <Card>
               <CardContent className="p-4">
                 <div className="flex items-center space-x-2">
-                  {selectedList?.status === 'budget_ok' || selectedList?.status === 'approved' ? (
+                  {selectedList && isSuccessStatus(selectedList.status as ShoppingListStatus) ? (
                     <CheckCircle className="w-5 h-5 text-green-600" />
                   ) : (
                     <AlertCircle className="w-5 h-5 text-amber-600" />
@@ -201,7 +209,7 @@ const Compras = () => {
                   <div>
                     <p className="text-sm font-medium text-gray-600">Status</p>
                     <p className="text-sm font-medium">
-                      {selectedList ? getStatusBadge(selectedList.status) : 'Nenhuma lista selecionada'}
+                      {selectedList ? getStatusBadge(selectedList.status as ShoppingListStatus) : 'Nenhuma lista selecionada'}
                     </p>
                   </div>
                 </div>
@@ -250,7 +258,7 @@ const Compras = () => {
                     <CardContent className="p-4">
                       <div className="flex justify-between items-start mb-2">
                         <h4 className="font-medium text-gray-900">{list.client_name}</h4>
-                        {getStatusBadge(list.status)}
+                        {getStatusBadge(list.status as ShoppingListStatus)}
                       </div>
                       <p className="text-sm text-gray-600 mb-2">
                         Criada em: {new Date(list.created_at).toLocaleDateString()}

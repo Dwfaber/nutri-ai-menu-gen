@@ -38,9 +38,21 @@ export const ClientContractsProvider = ({ children }: { children: ReactNode }) =
       setIsLoading(true);
       setError(null);
 
+      // Select explícito das colunas necessárias
       const { data, error: fetchError } = await supabase
         .from('contratos_corporativos')
-        .select('*')
+        .select(`
+          id,
+          nome_empresa,
+          total_funcionarios,
+          custo_maximo_refeicao,
+          restricoes_alimentares,
+          periodicidade,
+          total_refeicoes_mes,
+          ativo,
+          created_at,
+          sync_at
+        `)
         .order('nome_empresa');
 
       if (fetchError) {
@@ -82,9 +94,21 @@ export const ClientContractsProvider = ({ children }: { children: ReactNode }) =
 
   const getClientContract = async (clientId: string): Promise<ContractClient | null> => {
     try {
+      // Select explícito das colunas necessárias
       const { data, error } = await supabase
         .from('contratos_corporativos')
-        .select('*')
+        .select(`
+          id,
+          nome_empresa,
+          total_funcionarios,
+          custo_maximo_refeicao,
+          restricoes_alimentares,
+          periodicidade,
+          total_refeicoes_mes,
+          ativo,
+          created_at,
+          sync_at
+        `)
         .eq('id', clientId)
         .single();
 
@@ -108,7 +132,16 @@ export const ClientContractsProvider = ({ children }: { children: ReactNode }) =
         updated_at: data.sync_at
       };
     } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Erro ao buscar contrato do cliente';
       console.error('Erro ao buscar contrato do cliente:', err);
+      
+      // Adicionar toast para consistência na experiência do usuário
+      toast({
+        title: "Erro ao Buscar Contrato",
+        description: errorMessage,
+        variant: "destructive"
+      });
+      
       return null;
     }
   };
