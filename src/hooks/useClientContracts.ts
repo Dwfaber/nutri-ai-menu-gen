@@ -1,20 +1,6 @@
-import { useState, useEffect } from 'react';
-import { supabase } from '../integrations/supabase/client';
-import { useToast } from '@/components/ui/use-toast';
 
-export interface ContractClient {
-  id: string;
-  cliente_id_legado: string;
-  nome_empresa: string;
-  total_funcionarios: number;
-  custo_maximo_refeicao: number;
-  total_refeicoes_mes: number;
-  restricoes_alimentares: string[];
-  periodicidade: string;
-  ativo: boolean;
-  created_at: string;
-  sync_at: string;
-}
+import { useClientContractsContext } from '@/contexts/ClientContractsContext';
+import type { ContractClient } from '@/contexts/ClientContractsContext';
 
 export interface ContractFormData {
   clientId: string;
@@ -31,66 +17,7 @@ export interface ContractFormData {
 }
 
 export const useClientContracts = () => {
-  const [clients, setClients] = useState<ContractClient[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const { toast } = useToast();
-
-  // Load all clients from contracts table
-  const loadClients = async () => {
-    setIsLoading(true);
-    setError(null);
-
-    try {
-      const { data, error: queryError } = await supabase
-        .from('contratos_corporativos')
-        .select('*')
-        .eq('ativo', true)
-        .order('nome_empresa');
-
-      if (queryError) {
-        throw new Error(queryError.message);
-      }
-
-      setClients(data || []);
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Erro ao carregar clientes';
-      setError(errorMessage);
-      toast({
-        title: "Erro ao Carregar Clientes",
-        description: errorMessage,
-        variant: "destructive"
-      });
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // Get specific client contract details
-  const getClientContract = async (clientId: string): Promise<ContractClient | null> => {
-    try {
-      const { data, error: queryError } = await supabase
-        .from('contratos_corporativos')
-        .select('*')
-        .eq('id', clientId)
-        .single();
-
-      if (queryError) {
-        throw new Error(queryError.message);
-      }
-
-      return data;
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Erro ao carregar contrato';
-      setError(errorMessage);
-      toast({
-        title: "Erro ao Carregar Contrato",
-        description: errorMessage,
-        variant: "destructive"
-      });
-      return null;
-    }
-  };
+  const context = useClientContractsContext();
 
   // Calculate estimated meals for a period
   const calculateEstimatedMeals = (
@@ -172,16 +99,8 @@ export const useClientContracts = () => {
            `Periodicidade: ${contract.periodicidade}. ${contract.total_funcionarios} funcionários.`;
   };
 
-  useEffect(() => {
-    loadClients();
-  }, []);
-
   return {
-    clients,
-    isLoading,
-    error,
-    loadClients,
-    getClientContract,
+    ...context,
     calculateEstimatedMeals,
     validateContract,
     generateAIContextSummary

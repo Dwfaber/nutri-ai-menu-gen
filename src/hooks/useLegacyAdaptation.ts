@@ -26,14 +26,11 @@ interface SyncProgress {
   isProcessing: boolean;
 }
 
+// Environment configuration for testing vs production
+const IS_TEST_MODE = import.meta.env.DEV; // Use dev mode as indicator for testing
+
 export const useLegacyAdaptation = () => {
   const [isProcessing, setIsProcessing] = useState(false);
-  const [syncProgress, setSyncProgress] = useState<SyncProgress>({
-    currentView: '',
-    totalViews: 6,
-    completedViews: 0,
-    isProcessing: false
-  });
   
   const [viewsStatus, setViewsStatus] = useState<LegacyViews>({
     vwCoSolicitacaoFilialCusto: {
@@ -68,26 +65,36 @@ export const useLegacyAdaptation = () => {
     }
   });
 
+  // Calculate totalViews dynamically
+  const totalViews = Object.keys(viewsStatus).length;
+  
+  const [syncProgress, setSyncProgress] = useState<SyncProgress>({
+    currentView: '',
+    totalViews,
+    completedViews: 0,
+    isProcessing: false
+  });
+
   const { toast } = useToast();
 
   const syncSpecificView = async (viewName: string): Promise<boolean> => {
     try {
-      console.log(`Sincronizando view: ${viewName} - agora com dados reais do n8n`);
+      console.log(`Sincronizando view: ${viewName} - processando dados do n8n`);
       
       setSyncProgress(prev => ({
         ...prev,
         currentView: viewName,
-        isProcessing: true
+        isProcessing: true,
+        totalViews // Update with current totalViews
       }));
 
       // Usar edge function específica para vwCpReceita
       const functionName = viewName === 'vwCpReceita' ? 'sync-legacy-receitas' : 'sync-legacy-views';
       
-      // Para teste manual (sem dados do n8n), enviar array vazio
-      // Em produção, o n8n enviará os dados reais
+      // Control test data based on environment
       const requestBody = viewName === 'vwCpReceita' ? {} : { 
         viewName,
-        data: [] // Array vazio para teste - n8n enviará dados reais
+        data: IS_TEST_MODE ? [] : undefined // Send empty array only in test mode
       };
 
       const { data, error } = await supabase.functions.invoke(functionName, {
@@ -115,7 +122,8 @@ export const useLegacyAdaptation = () => {
 
       setSyncProgress(prev => ({
         ...prev,
-        completedViews: prev.completedViews + 1
+        completedViews: prev.completedViews + 1,
+        totalViews // Update with current totalViews
       }));
 
       return true;
@@ -146,7 +154,7 @@ export const useLegacyAdaptation = () => {
     setIsProcessing(true);
     setSyncProgress({
       currentView: '',
-      totalViews: 6,
+      totalViews,
       completedViews: 0,
       isProcessing: true
     });
@@ -164,7 +172,8 @@ export const useLegacyAdaptation = () => {
     setSyncProgress(prev => ({
       ...prev,
       isProcessing: false,
-      currentView: ''
+      currentView: '',
+      totalViews
     }));
 
     setIsProcessing(false);
@@ -172,7 +181,7 @@ export const useLegacyAdaptation = () => {
     if (allSuccess) {
       toast({
         title: "Sincronização Completa!",
-        description: "Todas as views foram sincronizadas com dados reais (não mais dados mock)",
+        description: `Todas as ${totalViews} views foram sincronizadas com sucesso`,
       });
     } else {
       toast({
@@ -212,7 +221,7 @@ export const useLegacyAdaptation = () => {
 
       toast({
         title: "Verificação Concluída",
-        description: `${data.availableViews.length} views disponíveis - agora processando dados reais`,
+        description: `${data.availableViews.length} views disponíveis - processando dados reais`,
       });
 
       return true;

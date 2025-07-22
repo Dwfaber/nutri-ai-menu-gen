@@ -1,85 +1,123 @@
 import { useState } from 'react';
-import { supabase } from '../integrations/supabase/client';
+import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/components/ui/use-toast';
-import { OptimizationConfig } from '@/types/optimization';
+import { withRetry } from '@/utils/connectionUtils';
+import type { OptimizationSettings } from '@/types/optimization';
 
-export interface ShoppingList {
-  id: string;
-  menu_id: string;
-  client_name: string;
-  status: string;
-  budget_predicted: number;
-  cost_actual: number;
-  created_at: string;
-  updated_at: string;
+interface Ingredient {
+  produto_id: string;
+  produto_nome: string;
+  quantidade: number;
+  unidade: string;
 }
 
-export interface ShoppingListItem {
+interface Recipe {
   id: string;
-  shopping_list_id: string;
-  product_id_legado: string;
-  product_name: string;
-  category: string;
-  quantity: number;
-  unit: string;
-  unit_price: number;
-  total_price: number;
-  available: boolean;
+  nome: string;
+  ingredientes: Ingredient[];
+}
+
+interface Menu {
+  id: string;
+  nome: string;
+  receitas: Recipe[];
+}
+
+export interface OptimizationSettings {
+  prioritizePromotions: boolean;
+  allowFractionalUnits: boolean;
+  wasteThreshold: number;
+  budgetLimit: number | null;
+}
+
+interface ShoppingItem {
+  id: string;
+  produto_id: string;
+  produto_nome: string;
+  categoria: string;
+  quantidade_necessaria: number;
+  unidade: string;
+  preco_unitario: number;
+  valor_total: number;
+  fornecedor?: string;
+  observacoes?: string;
+  receita_origem: string[];
+}
+
+interface ShoppingList {
+  id: string;
+  nome: string;
+  cardapio_id?: string;
+  itens: ShoppingItem[];
+  valor_total: number;
+  data_criacao: string;
+  status: 'draft' | 'approved' | 'purchased';
+  optimization_results?: {
+    total_savings: number;
+    optimized_items: number;
+    promotion_savings: number;
+    packaging_savings: number;
+  };
 }
 
 export const useShoppingList = () => {
+  const [lists, setLists] = useState<ShoppingList[]>([]);
+  const [currentList, setCurrentList] = useState<ShoppingList | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
 
-  const createFromMenu = async (
-    menuId: string, 
-    clientName: string, 
-    budgetPredicted: number,
-    optimizationConfig?: OptimizationConfig
-  ) => {
+  const generateShoppingList = async (
+    cardapioId: string,
+    optimizationSettings: OptimizationSettings = {
+      prioritizePromotions: true,
+      allowFractionalUnits: false,
+      wasteThreshold: 0.1,
+      budgetLimit: null
+    }
+  ): Promise<ShoppingList | null> => {
     setIsLoading(true);
-    setError(null);
-
+    
     try {
-      console.log('Creating shopping list from menu:', { 
-        menuId, 
-        clientName, 
-        budgetPredicted,
-        optimizationEnabled: !!optimizationConfig
+      const result = await withRetry(async () => {
+        const { data, error } = await supabase.functions.invoke('generate-shopping-list', {
+          body: { 
+            cardapioId,
+            optimizationSettings
+          }
+        });
+
+        if (error) throw error;
+        return data;
       });
 
-      const { data, error: functionError } = await supabase.functions.invoke('generate-shopping-list', {
-        body: {
-          menuId,
-          clientName,
-          budgetPredicted,
-          optimizationConfig
-        }
-      });
-
-      if (functionError) {
-        throw new Error(functionError.message || 'Erro ao gerar lista de compras');
+      if (!result.success) {
+        throw new Error(result.error || 'Erro na geração da lista');
       }
 
-      if (!data.success) {
-        throw new Error(data.error || 'Erro na geração da lista');
-      }
+      const newList: ShoppingList = {
+        id: crypto.randomUUID(),
+        nome: `Lista de Compras - ${new Date().toLocaleDateString()}`,
+        cardapio_id: cardapioId,
+        itens: result.items || [],
+        valor_total: result.total_cost || 0,
+        data_criacao: new Date().toISOString(),
+        status: 'draft',
+        optimization_results: result.optimization_results
+      };
 
-      const budgetStatus = data.budgetStatus.withinBudget ? 'Dentro do orçamento' : 'Orçamento excedido';
-      
+      setCurrentList(newList);
+      setLists(prev => [newList, ...prev]);
+
       toast({
         title: "Lista de Compras Gerada!",
-        description: `${budgetStatus} - R$ ${data.budgetStatus.actual.toFixed(2)}`,
-        variant: data.budgetStatus.withinBudget ? "default" : "destructive"
+        description: `${result.items?.length || 0} itens gerados com otimização automática`,
       });
 
-      return data.shoppingList;
+      return newList;
 
-    } catch (err) {
-      console.error('Error creating shopping list:', err);
-      const errorMessage = err instanceof Error ? err.message : 'Erro ao gerar lista de compras';
-      setError(errorMessage);
+    } catch (error) {
+      console.error('Erro ao gerar lista de compras:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Erro na geração da lista';
       
       toast({
         title: "Erro na Geração",
@@ -93,166 +131,66 @@ export const useShoppingList = () => {
     }
   };
 
-  const getShoppingLists = async (): Promise<ShoppingList[]> => {
+  const saveShoppingList = async (list: ShoppingList): Promise<boolean> => {
     try {
-      const { data, error } = await supabase
-        .from('shopping_lists')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      if (error) {
-        throw error;
-      }
-
-      return data || [];
-    } catch (err) {
-      console.error('Error fetching shopping lists:', err);
-      setError('Erro ao buscar listas de compras');
-      return [];
-    }
-  };
-
-  const getShoppingListItems = async (listId: string): Promise<ShoppingListItem[]> => {
-    try {
-      const { data, error } = await supabase
-        .from('shopping_list_items')
-        .select('*')
-        .eq('shopping_list_id', listId)
-        .order('category', { ascending: true });
-
-      if (error) {
-        throw error;
-      }
-
-      return data || [];
-    } catch (err) {
-      console.error('Error fetching shopping list items:', err);
-      setError('Erro ao buscar itens da lista');
-      return [];
-    }
-  };
-
-  const updateItemQuantity = async (itemId: string, quantity: number) => {
-    try {
-      // First get the current item to calculate the new total
-      const { data: currentItem, error: fetchError } = await supabase
-        .from('shopping_list_items')
-        .select('unit_price')
-        .eq('id', itemId)
-        .single();
-
-      if (fetchError) {
-        throw fetchError;
-      }
-
-      const totalPrice = quantity * currentItem.unit_price;
-
-      const { error } = await supabase
-        .from('shopping_list_items')
-        .update({ 
-          quantity,
-          total_price: totalPrice
-        })
-        .eq('id', itemId);
-
-      if (error) {
-        throw error;
+      // Simulate saving to database
+      setLists(prev => 
+        prev.map(l => l.id === list.id ? list : l)
+      );
+      
+      if (currentList?.id === list.id) {
+        setCurrentList(list);
       }
 
       toast({
-        title: "Quantidade Atualizada",
-        description: "Item atualizado com sucesso"
+        title: "Lista Salva",
+        description: "Lista de compras salva com sucesso",
       });
 
-    } catch (err) {
-      console.error('Error updating item quantity:', err);
+      return true;
+    } catch (error) {
+      console.error('Erro ao salvar lista:', error);
       toast({
-        title: "Erro",
-        description: "Erro ao atualizar quantidade",
+        title: "Erro ao Salvar",
+        description: "Não foi possível salvar a lista",
         variant: "destructive"
       });
+      return false;
     }
   };
 
-  const exportToCSV = (items: ShoppingListItem[], listName: string) => {
-    const headers = ['Código', 'Produto', 'Categoria', 'Quantidade', 'Unidade', 'Preço Unit.', 'Total'];
-    const csvContent = [
-      headers.join(','),
-      ...items.map(item => [
-        item.product_id_legado,
-        `"${item.product_name}"`,
-        item.category,
-        item.quantity,
-        item.unit,
-        item.unit_price.toFixed(2),
-        item.total_price.toFixed(2)
-      ].join(','))
-    ].join('\n');
+  const deleteShoppingList = async (listId: string): Promise<boolean> => {
+    try {
+      setLists(prev => prev.filter(l => l.id !== listId));
+      
+      if (currentList?.id === listId) {
+        setCurrentList(null);
+      }
 
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    const url = URL.createObjectURL(blob);
-    
-    link.setAttribute('href', url);
-    link.setAttribute('download', `lista_compras_${listName.replace(/\s+/g, '_')}.csv`);
-    link.style.visibility = 'hidden';
-    
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+      toast({
+        title: "Lista Excluída",
+        description: "Lista de compras excluída com sucesso",
+      });
 
-    toast({
-      title: "Lista Exportada",
-      description: "Arquivo CSV baixado com sucesso"
-    });
-  };
-
-  const exportOptimizationReport = (items: ShoppingListItem[], optimizationResults: any[], listName: string) => {
-    const headers = [
-      'Produto Base', 'Quantidade Solicitada', 'Quantidade Comprada', 
-      'Sobra', 'Custo Total', 'Economia', 'Embalagens Usadas', 'Promoções'
-    ];
-    
-    const csvContent = [
-      headers.join(','),
-      ...optimizationResults.map(result => [
-        `"${result.produto_base_nome}"`,
-        result.quantidade_solicitada.toFixed(2),
-        result.quantidade_total_comprada.toFixed(2),
-        result.sobra.toFixed(2),
-        result.custo_total.toFixed(2),
-        result.economia_obtida.toFixed(2),
-        result.pacotes_selecionados.length,
-        result.pacotes_selecionados.filter((p: any) => p.em_promocao).length
-      ].join(','))
-    ].join('\n');
-
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    const url = URL.createObjectURL(blob);
-    
-    link.setAttribute('href', url);
-    link.setAttribute('download', `otimizacao_${listName.replace(/\s+/g, '_')}.csv`);
-    link.style.visibility = 'hidden';
-    
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-
-    toast({
-      title: "Relatório de Otimização Exportado",
-      description: "Arquivo CSV com análise detalhada baixado com sucesso"
-    });
+      return true;
+    } catch (error) {
+      console.error('Erro ao excluir lista:', error);
+      toast({
+        title: "Erro ao Excluir",
+        description: "Não foi possível excluir a lista",
+        variant: "destructive"
+      });
+      return false;
+    }
   };
 
   return {
-    createFromMenu,
-    getShoppingLists,
-    getShoppingListItems,
-    updateItemQuantity,
-    exportToCSV,
-    exportOptimizationReport,
+    lists,
+    currentList,
     isLoading,
-    error
+    generateShoppingList,
+    saveShoppingList,
+    deleteShoppingList,
+    setCurrentList
   };
 };
