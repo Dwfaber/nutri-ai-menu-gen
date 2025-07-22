@@ -12,7 +12,7 @@ const VIEW_MAPPING = {
   vwCoSolicitacaoFilialCusto: {
     description: 'Custos por Filial',
     targetTable: 'custos_filiais', // Nova tabela específica
-    fields: ['cliente_id_legado', 'filial_id', 'nome_filial', 'custo_total', 'orcamento_mensal', 'custo_maximo_refeicao', 'segunda_feira', 'terca_feira', 'quarta_feira', 'quinta_feira', 'sexta_feira', 'sabado', 'domingo']
+    fields: ['cliente_id_legado', 'filial_id', 'nome_filial', 'custo_total', 'orcamento_mensal', 'custo_maximo_refeicao', 'segunda_feira', 'terca_feira', 'quarta_feira', 'quinta_feira', 'sexta_feira', 'sabado', 'domingo', 'RefCustoSegunda', 'RefCustoTerca', 'RefCustoQuarta', 'RefCustoQuinta', 'RefCustoSexta', 'RefCustoSabado', 'RefCustoDomingo', 'RefCustoDiaEspecial', 'QtdeRefeicoesUsarMediaValidarSimNao', 'PorcentagemLimiteAcimaMedia', 'custo_medio_semanal', 'solicitacao_filial_custo_id', 'solicitacao_compra_tipo_id', 'user_name', 'user_date_time', 'nome_fantasia', 'razao_social', 'solicitacao_compra_tipo_descricao']
   },
   vwCoSolicitacaoProdutoListagem: {
     description: 'Produtos Solicitados',
@@ -110,7 +110,8 @@ async function checkViewsAvailability(supabaseClient: any) {
       detalhes: { 
         availableViews,
         separacao_implementada: true,
-        custos_filiais_criada: true
+        custos_filiais_expandida: true,
+        novos_campos_adicionados: true
       }
     });
 
@@ -122,7 +123,7 @@ async function checkViewsAvailability(supabaseClient: any) {
     JSON.stringify({ 
       success: true, 
       availableViews,
-      message: 'Views verificadas com sucesso - separação implementada'
+      message: 'Views verificadas com sucesso - tabela custos_filiais expandida com campos detalhados'
     }),
     { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
   );
@@ -255,7 +256,7 @@ async function processViewData(supabaseClient: any, viewName: string, data: any[
   const mapping = VIEW_MAPPING[viewName as keyof typeof VIEW_MAPPING];
   let processedCount = 0;
 
-  // NOVA LÓGICA: Tratamento específico para vwCoSolicitacaoFilialCusto
+  // NOVA LÓGICA EXPANDIDA: Tratamento específico para vwCoSolicitacaoFilialCusto com campos detalhados
   if (viewName === 'vwCoSolicitacaoFilialCusto') {
     console.log(`Processamento de custos de filiais - ${data.length} registros`);
     
@@ -279,7 +280,7 @@ async function processViewData(supabaseClient: any, viewName: string, data: any[
         const { error } = await supabaseClient
           .from('custos_filiais')
           .upsert({
-            cliente_id_legado: record.filial_id?.toString() || record.cliente_id_legado?.toString(),
+            cliente_id_legado: record.cliente_id_legado || record.filial_id,
             filial_id: record.filial_id,
             nome_filial: record.nome_filial || record.nome_empresa,
             custo_total: Number(record.custo_total) || 0,
@@ -293,6 +294,25 @@ async function processViewData(supabaseClient: any, viewName: string, data: any[
             sexta_feira: record.sexta_feira || false,
             sabado: record.sabado || false,
             domingo: record.domingo || false,
+            // Novos campos detalhados
+            RefCustoSegunda: record.RefCustoSegunda ? Number(record.RefCustoSegunda) : null,
+            RefCustoTerca: record.RefCustoTerca ? Number(record.RefCustoTerca) : null,
+            RefCustoQuarta: record.RefCustoQuarta ? Number(record.RefCustoQuarta) : null,
+            RefCustoQuinta: record.RefCustoQuinta ? Number(record.RefCustoQuinta) : null,
+            RefCustoSexta: record.RefCustoSexta ? Number(record.RefCustoSexta) : null,
+            RefCustoSabado: record.RefCustoSabado ? Number(record.RefCustoSabado) : null,
+            RefCustoDomingo: record.RefCustoDomingo ? Number(record.RefCustoDomingo) : null,
+            RefCustoDiaEspecial: record.RefCustoDiaEspecial ? Number(record.RefCustoDiaEspecial) : null,
+            QtdeRefeicoesUsarMediaValidarSimNao: record.QtdeRefeicoesUsarMediaValidarSimNao || null,
+            PorcentagemLimiteAcimaMedia: record.PorcentagemLimiteAcimaMedia || null,
+            custo_medio_semanal: record.custo_medio_semanal ? Number(record.custo_medio_semanal) : null,
+            solicitacao_filial_custo_id: record.solicitacao_filial_custo_id || null,
+            solicitacao_compra_tipo_id: record.solicitacao_compra_tipo_id || null,
+            user_name: record.user_name || null,
+            user_date_time: record.user_date_time || null,
+            nome_fantasia: record.nome_fantasia || null,
+            razao_social: record.razao_social || null,
+            solicitacao_compra_tipo_descricao: record.solicitacao_compra_tipo_descricao || null,
             sync_at: new Date().toISOString()
           });
 

@@ -187,64 +187,118 @@ export type Database = {
       }
       custos_filiais: {
         Row: {
-          cliente_id_legado: string
+          cliente_id_legado: number
           created_at: string
           custo_maximo_refeicao: number | null
+          custo_medio_semanal: number | null
           custo_total: number | null
           dias_funcionamento_calculado: number | null
           domingo: boolean | null
           filial_id: number | null
           id: string
+          nome_fantasia: string | null
           nome_filial: string | null
           orcamento_mensal: number | null
+          PorcentagemLimiteAcimaMedia: number | null
+          QtdeRefeicoesUsarMediaValidarSimNao: boolean | null
           quarta_feira: boolean | null
           quinta_feira: boolean | null
+          razao_social: string | null
+          RefCustoDiaEspecial: number | null
+          RefCustoDomingo: number | null
+          RefCustoQuarta: number | null
+          RefCustoQuinta: number | null
+          RefCustoSabado: number | null
+          RefCustoSegunda: number | null
+          RefCustoSexta: number | null
+          RefCustoTerca: number | null
           sabado: boolean | null
           segunda_feira: boolean | null
           sexta_feira: boolean | null
+          solicitacao_compra_tipo_descricao: string | null
+          solicitacao_compra_tipo_id: number | null
+          solicitacao_filial_custo_id: number | null
           sync_at: string
           terca_feira: boolean | null
           updated_at: string
+          user_date_time: string | null
+          user_name: string | null
         }
         Insert: {
-          cliente_id_legado: string
+          cliente_id_legado: number
           created_at?: string
           custo_maximo_refeicao?: number | null
+          custo_medio_semanal?: number | null
           custo_total?: number | null
           dias_funcionamento_calculado?: number | null
           domingo?: boolean | null
           filial_id?: number | null
           id?: string
+          nome_fantasia?: string | null
           nome_filial?: string | null
           orcamento_mensal?: number | null
+          PorcentagemLimiteAcimaMedia?: number | null
+          QtdeRefeicoesUsarMediaValidarSimNao?: boolean | null
           quarta_feira?: boolean | null
           quinta_feira?: boolean | null
+          razao_social?: string | null
+          RefCustoDiaEspecial?: number | null
+          RefCustoDomingo?: number | null
+          RefCustoQuarta?: number | null
+          RefCustoQuinta?: number | null
+          RefCustoSabado?: number | null
+          RefCustoSegunda?: number | null
+          RefCustoSexta?: number | null
+          RefCustoTerca?: number | null
           sabado?: boolean | null
           segunda_feira?: boolean | null
           sexta_feira?: boolean | null
+          solicitacao_compra_tipo_descricao?: string | null
+          solicitacao_compra_tipo_id?: number | null
+          solicitacao_filial_custo_id?: number | null
           sync_at?: string
           terca_feira?: boolean | null
           updated_at?: string
+          user_date_time?: string | null
+          user_name?: string | null
         }
         Update: {
-          cliente_id_legado?: string
+          cliente_id_legado?: number
           created_at?: string
           custo_maximo_refeicao?: number | null
+          custo_medio_semanal?: number | null
           custo_total?: number | null
           dias_funcionamento_calculado?: number | null
           domingo?: boolean | null
           filial_id?: number | null
           id?: string
+          nome_fantasia?: string | null
           nome_filial?: string | null
           orcamento_mensal?: number | null
+          PorcentagemLimiteAcimaMedia?: number | null
+          QtdeRefeicoesUsarMediaValidarSimNao?: boolean | null
           quarta_feira?: boolean | null
           quinta_feira?: boolean | null
+          razao_social?: string | null
+          RefCustoDiaEspecial?: number | null
+          RefCustoDomingo?: number | null
+          RefCustoQuarta?: number | null
+          RefCustoQuinta?: number | null
+          RefCustoSabado?: number | null
+          RefCustoSegunda?: number | null
+          RefCustoSexta?: number | null
+          RefCustoTerca?: number | null
           sabado?: boolean | null
           segunda_feira?: boolean | null
           sexta_feira?: boolean | null
+          solicitacao_compra_tipo_descricao?: string | null
+          solicitacao_compra_tipo_id?: number | null
+          solicitacao_filial_custo_id?: number | null
           sync_at?: string
           terca_feira?: boolean | null
           updated_at?: string
+          user_date_time?: string | null
+          user_name?: string | null
         }
         Relationships: []
       }
