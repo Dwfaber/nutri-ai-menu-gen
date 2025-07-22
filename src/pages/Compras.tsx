@@ -1,6 +1,5 @@
-
 import { useState, useEffect } from 'react';
-import { Plus, Search, Filter, ShoppingCart, Download, AlertCircle, CheckCircle, Package } from 'lucide-react';
+import { Plus, Search, Filter, ShoppingCart, Download, AlertCircle, CheckCircle, Package, Settings } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -10,6 +9,9 @@ import { useShoppingList, ShoppingList, ShoppingListItem } from '../hooks/useSho
 import ShoppingListCard from '../components/ShoppingList/ShoppingListCard';
 import AdaptationPanel from '../components/LegacyAdaptation/AdaptationPanel';
 import { ProductRequestManager } from '../components/ProductRequests/ProductRequestManager';
+import OptimizationSettings from '../components/Optimization/OptimizationSettings';
+import OptimizationAnalysis from '../components/Optimization/OptimizationAnalysis';
+import { useOptimization } from '../hooks/useOptimization';
 
 const Compras = () => {
   const [searchTerm, setSearchTerm] = useState('');
@@ -19,6 +21,7 @@ const Compras = () => {
   const [isLoadingItems, setIsLoadingItems] = useState(false);
 
   const { getShoppingLists, getShoppingListItems, exportToCSV, updateItemQuantity } = useShoppingList();
+  const { config: optimizationConfig, lastResults: optimizationResults } = useOptimization();
 
   useEffect(() => {
     loadShoppingLists();
@@ -97,9 +100,10 @@ const Compras = () => {
       </div>
 
       <Tabs defaultValue="shopping" className="w-full">
-        <TabsList className="grid w-full grid-cols-3">
+        <TabsList className="grid w-full grid-cols-4">
           <TabsTrigger value="shopping">Listas de Compras</TabsTrigger>
           <TabsTrigger value="market">Mercado de Produtos</TabsTrigger>
+          <TabsTrigger value="optimization">Otimização</TabsTrigger>
           <TabsTrigger value="adaptation">Adaptação do Sistema</TabsTrigger>
         </TabsList>
         
@@ -328,6 +332,79 @@ const Compras = () => {
             </Card>
             
             <ProductRequestManager />
+          </div>
+        </TabsContent>
+        
+        <TabsContent value="optimization" className="space-y-6">
+          <div className="space-y-4">
+            <div className="flex items-center space-x-2">
+              <Settings className="w-6 h-6 text-purple-600" />
+              <div>
+                <h3 className="text-lg font-semibold">Otimização de Compras</h3>
+                <p className="text-sm text-gray-600">
+                  Configure e analise a otimização inteligente de compras
+                </p>
+              </div>
+            </div>
+            
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Configurações de Otimização */}
+              <OptimizationSettings />
+              
+              {/* Preparação para GPT Assistant */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-purple-600">GPT Assistant</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    <div className="bg-purple-50 p-4 rounded-lg">
+                      <h4 className="font-medium text-purple-900 mb-2">
+                        Sistema de IA em Desenvolvimento
+                      </h4>
+                      <p className="text-sm text-purple-700 mb-3">
+                        O GPT Assistant está sendo preparado para realizar otimizações 
+                        inteligentes de compras considerando:
+                      </p>
+                      <ul className="text-xs space-y-1 text-purple-600">
+                        <li>• Análise de produtos base vs produtos embalados</li>
+                        <li>• Otimização por preço e promoções</li>
+                        <li>• Cálculo de combinações de embalagens</li>
+                        <li>• Respeito a restrições de fracionamento</li>
+                        <li>• Minimização de desperdício</li>
+                      </ul>
+                    </div>
+                    
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="bg-gray-50 p-3 rounded">
+                        <h5 className="text-sm font-medium">Estrutura Preparada</h5>
+                        <p className="text-xs text-gray-600 mt-1">
+                          Interfaces TypeScript, hooks e utilitários prontos
+                        </p>
+                      </div>
+                      <div className="bg-gray-50 p-3 rounded">
+                        <h5 className="text-sm font-medium">Configurações</h5>
+                        <p className="text-xs text-gray-600 mt-1">
+                          Sistema de preferências implementado
+                        </p>
+                      </div>
+                    </div>
+                    
+                    <Badge variant="outline" className="w-full justify-center text-purple-600">
+                      Aguardando integração com GPT Assistant
+                    </Badge>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+            
+            {/* Análise de Resultados */}
+            {optimizationResults.length > 0 && (
+              <OptimizationAnalysis 
+                results={optimizationResults}
+                className="mt-6"
+              />
+            )}
           </div>
         </TabsContent>
         

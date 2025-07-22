@@ -1,4 +1,3 @@
-
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
@@ -13,7 +12,7 @@ serve(async (req) => {
   }
 
   try {
-    const { menuId, clientName, budgetPredicted, menuItems } = await req.json()
+    const { menuId, clientName, budgetPredicted, menuItems, optimizationConfig } = await req.json()
 
     if (!menuId || !clientName || !budgetPredicted) {
       throw new Error('menuId, clientName e budgetPredicted são obrigatórios')
@@ -25,6 +24,7 @@ serve(async (req) => {
     )
 
     console.log(`Generating shopping list for menu: ${menuId}`)
+    console.log(`Optimization enabled: ${!!optimizationConfig}`)
 
     // Get products from digital market
     const { data: marketProducts } = await supabaseClient
@@ -92,15 +92,22 @@ serve(async (req) => {
 
     const aggregatedIngredients = Array.from(ingredientMap.values())
 
-    // Calculate costs and create shopping list
+    // Calculate costs and create shopping list with optimization preparation
     let totalCost = 0
     const shoppingItems = []
+    const optimizationData = []
 
     for (const ingredient of aggregatedIngredients) {
       const unitPrice = ingredient.price || 0
       const totalPrice = ingredient.quantity * unitPrice
 
       totalCost += totalPrice
+
+      // Preparar dados para futura otimização
+      const productVariants = marketProducts?.filter(p => 
+        p.produto_base_id === ingredient.product_id || 
+        p.produto_id === ingredient.product_id
+      ) || []
 
       shoppingItems.push({
         product_id_legado: ingredient.product_id,
@@ -113,9 +120,29 @@ serve(async (req) => {
         available: true, // Products in market are available
         promocao: ingredient.promocao
       })
+
+      // Dados para otimização (preparação para GPT Assistant)
+      if (optimizationConfig && productVariants.length > 1) {
+        optimizationData.push({
+          produto_base_id: ingredient.product_id,
+          produto_base_nome: ingredient.name,
+          quantidade_necessaria: ingredient.quantity,
+          unidade: ingredient.unit,
+          opcoes_embalagem: productVariants.map(variant => ({
+            produto_id: variant.produto_id,
+            descricao: variant.descricao,
+            quantidade_embalagem: variant.quantidade_embalagem || 1,
+            preco: variant.preco || 0,
+            preco_compra: variant.preco_compra || 0,
+            promocao: variant.promocao || false,
+            em_promocao: variant.em_promocao || false,
+            apenas_valor_inteiro: variant.apenas_valor_inteiro || false
+          })),
+          configuracao_otimizacao: optimizationConfig
+        })
+      }
     }
 
-    // Create shopping list record
     const { data: shoppingList, error: listError } = await supabaseClient
       .from('shopping_lists')
       .insert({
@@ -147,6 +174,7 @@ serve(async (req) => {
     }
 
     console.log(`Shopping list created successfully. Total cost: R$ ${totalCost.toFixed(2)}`)
+    console.log(`Optimization data prepared for ${optimizationData.length} products`)
     console.log(`Used ${shoppingItems.filter(item => item.promocao).length} products on promotion`)
 
     return new Response(
@@ -166,7 +194,8 @@ serve(async (req) => {
           total_products_used: shoppingItems.length,
           promotions_used: shoppingItems.filter(item => item.promocao).length,
           categories_covered: [...new Set(shoppingItems.map(item => item.category))].length
-        }
+        },
+        optimizationData: optimizationData // Dados preparados para otimização
       }),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },

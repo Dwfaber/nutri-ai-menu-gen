@@ -1,7 +1,7 @@
-
 import { useState } from 'react';
 import { supabase } from '../integrations/supabase/client';
 import { useToast } from '@/components/ui/use-toast';
+import { OptimizationConfig } from '@/types/optimization';
 
 export interface ShoppingList {
   id: string;
@@ -32,18 +32,29 @@ export const useShoppingList = () => {
   const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
 
-  const createFromMenu = async (menuId: string, clientName: string, budgetPredicted: number) => {
+  const createFromMenu = async (
+    menuId: string, 
+    clientName: string, 
+    budgetPredicted: number,
+    optimizationConfig?: OptimizationConfig
+  ) => {
     setIsLoading(true);
     setError(null);
 
     try {
-      console.log('Creating shopping list from menu:', { menuId, clientName, budgetPredicted });
+      console.log('Creating shopping list from menu:', { 
+        menuId, 
+        clientName, 
+        budgetPredicted,
+        optimizationEnabled: !!optimizationConfig
+      });
 
       const { data, error: functionError } = await supabase.functions.invoke('generate-shopping-list', {
         body: {
           menuId,
           clientName,
-          budgetPredicted
+          budgetPredicted,
+          optimizationConfig
         }
       });
 
@@ -196,12 +207,51 @@ export const useShoppingList = () => {
     });
   };
 
+  const exportOptimizationReport = (items: ShoppingListItem[], optimizationResults: any[], listName: string) => {
+    const headers = [
+      'Produto Base', 'Quantidade Solicitada', 'Quantidade Comprada', 
+      'Sobra', 'Custo Total', 'Economia', 'Embalagens Usadas', 'Promoções'
+    ];
+    
+    const csvContent = [
+      headers.join(','),
+      ...optimizationResults.map(result => [
+        `"${result.produto_base_nome}"`,
+        result.quantidade_solicitada.toFixed(2),
+        result.quantidade_total_comprada.toFixed(2),
+        result.sobra.toFixed(2),
+        result.custo_total.toFixed(2),
+        result.economia_obtida.toFixed(2),
+        result.pacotes_selecionados.length,
+        result.pacotes_selecionados.filter((p: any) => p.em_promocao).length
+      ].join(','))
+    ].join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    
+    link.setAttribute('href', url);
+    link.setAttribute('download', `otimizacao_${listName.replace(/\s+/g, '_')}.csv`);
+    link.style.visibility = 'hidden';
+    
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+    toast({
+      title: "Relatório de Otimização Exportado",
+      description: "Arquivo CSV com análise detalhada baixado com sucesso"
+    });
+  };
+
   return {
     createFromMenu,
     getShoppingLists,
     getShoppingListItems,
     updateItemQuantity,
     exportToCSV,
+    exportOptimizationReport,
     isLoading,
     error
   };
