@@ -13,7 +13,7 @@ const VIEW_MAPPING = {
   vwCoSolicitacaoFilialCusto: {
     description: 'Custos por Filial',
     targetTable: 'contratos_corporativos',
-    fields: ['filial_id', 'custo_total', 'orcamento_mensal', 'nome_filial']
+    fields: ['filial_id', 'custo_total', 'orcamento_mensal', 'nome_filial', 'segunda_feira', 'terca_feira', 'quarta_feira', 'quinta_feira', 'sexta_feira', 'sabado', 'domingo']
   },
   vwCoSolicitacaoProdutoListagem: {
     description: 'Produtos Solicitados',
@@ -356,13 +356,39 @@ async function processViewData(supabaseClient: any, viewName: string, data: any[
           }
         }
       } else if (mapping.targetTable === 'contratos_corporativos') {
+        // Calcular dias de funcionamento baseado nos campos booleanos da view
+        let diasFuncionamento = 0;
+        if (record.segunda_feira) diasFuncionamento++;
+        if (record.terca_feira) diasFuncionamento++;
+        if (record.quarta_feira) diasFuncionamento++;
+        if (record.quinta_feira) diasFuncionamento++;
+        if (record.sexta_feira) diasFuncionamento++;
+        if (record.sabado) diasFuncionamento++;
+        if (record.domingo) diasFuncionamento++;
+        
+        // Calcular dias de funcionamento no mês (assumindo aproximadamente 4.3 semanas por mês)
+        const diasFuncionamentoMes = Math.round(diasFuncionamento * 4.3);
+        
+        // Calcular custo máximo por refeição baseado nos dias reais de funcionamento
+        const custoMaximoRefeicao = record.custo_total && diasFuncionamentoMes > 0 
+          ? Number(record.custo_total) / diasFuncionamentoMes 
+          : 15.0;
+
         const { error } = await supabaseClient
           .from('contratos_corporativos')
           .upsert({
             cliente_id_legado: record.filial_id?.toString() || record.id?.toString(),
             nome_empresa: record.nome_filial || record.nome_empresa || 'Empresa',
             total_funcionarios: record.total_funcionarios || 0,
-            custo_maximo_refeicao: record.custo_total ? Number(record.custo_total) / 30 : 15.0,
+            custo_maximo_refeicao: custoMaximoRefeicao,
+            dias_funcionamento_mes: diasFuncionamentoMes,
+            segunda_feira: record.segunda_feira || false,
+            terca_feira: record.terca_feira || false,
+            quarta_feira: record.quarta_feira || false,
+            quinta_feira: record.quinta_feira || false,
+            sexta_feira: record.sexta_feira || false,
+            sabado: record.sabado || false,
+            domingo: record.domingo || false,
             ativo: record.ativo !== false,
             sync_at: new Date().toISOString()
           });

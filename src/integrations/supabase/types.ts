@@ -125,11 +125,19 @@ export type Database = {
           cliente_id_legado: string
           created_at: string
           custo_maximo_refeicao: number
+          dias_funcionamento_mes: number | null
+          domingo: boolean | null
           id: string
           nome_empresa: string
           periodicidade: string
+          quarta_feira: boolean | null
+          quinta_feira: boolean | null
           restricoes_alimentares: string[] | null
+          sabado: boolean | null
+          segunda_feira: boolean | null
+          sexta_feira: boolean | null
           sync_at: string
+          terca_feira: boolean | null
           total_funcionarios: number
           total_refeicoes_mes: number
         }
@@ -138,11 +146,19 @@ export type Database = {
           cliente_id_legado: string
           created_at?: string
           custo_maximo_refeicao?: number
+          dias_funcionamento_mes?: number | null
+          domingo?: boolean | null
           id?: string
           nome_empresa: string
           periodicidade?: string
+          quarta_feira?: boolean | null
+          quinta_feira?: boolean | null
           restricoes_alimentares?: string[] | null
+          sabado?: boolean | null
+          segunda_feira?: boolean | null
+          sexta_feira?: boolean | null
           sync_at?: string
+          terca_feira?: boolean | null
           total_funcionarios?: number
           total_refeicoes_mes?: number
         }
@@ -151,11 +167,19 @@ export type Database = {
           cliente_id_legado?: string
           created_at?: string
           custo_maximo_refeicao?: number
+          dias_funcionamento_mes?: number | null
+          domingo?: boolean | null
           id?: string
           nome_empresa?: string
           periodicidade?: string
+          quarta_feira?: boolean | null
+          quinta_feira?: boolean | null
           restricoes_alimentares?: string[] | null
+          sabado?: boolean | null
+          segunda_feira?: boolean | null
+          sexta_feira?: boolean | null
           sync_at?: string
+          terca_feira?: boolean | null
           total_funcionarios?: number
           total_refeicoes_mes?: number
         }
