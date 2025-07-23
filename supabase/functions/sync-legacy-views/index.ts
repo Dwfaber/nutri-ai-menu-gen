@@ -37,8 +37,14 @@ const VIEW_MAPPING = {
   },
   vwEstProdutoBase: {
     description: 'Produtos Base',
-    targetTable: 'produtos_legado',
-    fields: ['produto_id', 'nome', 'categoria', 'unidade', 'preco_unitario', 'peso_unitario']
+    targetTable: 'produtos_base',
+    fields: ['ProdutoBaseId', 'Descricao', 'UnidadeMedidaId', 'UserName', 'UserDateTime', 'Unidade']
+  },
+  // Adicionar mapeamento para EstProdutoBase (formato N8N)
+  EstProdutoBase: {
+    description: 'Produtos Base (formato N8N)',
+    targetTable: 'produtos_base', 
+    fields: ['ProdutoBaseId', 'Descricao', 'UnidadeMedidaId', 'UserName', 'UserDateTime', 'Unidade']
   },
   vwOrFiliaisAtiva: {
     description: 'Filiais Ativas (Contratos)',
@@ -458,6 +464,40 @@ async function processViewData(supabaseClient: any, viewName: string, data: any[
         } else {
           processedCount++;
           console.log(`Produto solicitação ID ${record.solicitacao_produto_listagem_id} processado com sucesso`);
+        }
+      } else if (mapping.targetTable === 'produtos_base') {
+        console.log(`Processando produto base com ID: ${record.ProdutoBaseId || record.produto_base_id}`);
+        
+        // Mapeamento exato conforme dados do N8N para EstProdutoBase
+        const dataToInsert = {
+          produto_base_id: record.ProdutoBaseId ? parseInt(record.ProdutoBaseId.toString()) : null,
+          descricao: record.Descricao?.toString() || null,
+          unidade_medida_id: record.UnidadeMedidaId ? parseInt(record.UnidadeMedidaId.toString()) : null,
+          user_name: record.UserName?.toString() || null,
+          user_date_time: record.UserDateTime || null,
+          unidade: record.Unidade?.toString() || null,
+          sync_at: new Date().toISOString()
+        };
+        
+        console.log(`Dados mapeados para inserção do produto base:`, {
+          id: dataToInsert.produto_base_id,
+          descricao: dataToInsert.descricao,
+          unidade: dataToInsert.unidade
+        });
+
+        // Usar upsert com onConflict para evitar erro de chave duplicada
+        const { error } = await supabaseClient
+          .from('produtos_base')
+          .upsert(dataToInsert, { 
+            onConflict: 'produto_base_id',
+            ignoreDuplicates: false 
+          });
+
+        if (error) {
+          console.error(`Erro ao processar produto base ID ${record.ProdutoBaseId}:`, error);
+          console.error(`Dados problemáticos:`, dataToInsert);
+        } else {
+          console.log(`Produto base ID ${record.ProdutoBaseId} processado com sucesso`);
         }
       } else if (mapping.targetTable === 'produtos_legado') {
         // CORREÇÃO: Usar upsert com onConflict para evitar erro de chave duplicada
