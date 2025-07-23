@@ -416,39 +416,47 @@ async function processViewData(supabaseClient: any, viewName: string, data: any[
       if (mapping.targetTable === 'co_solicitacao_produto_listagem') {
         console.log(`Processando produto solicitação com ID: ${record.solicitacao_produto_listagem_id || record.id}`);
         
+        // Mapeamento exato conforme dados do N8N
+        const dataToInsert = {
+          solicitacao_produto_listagem_id: record.solicitacao_produto_listagem_id ? parseInt(record.solicitacao_produto_listagem_id.toString()) : null,
+          solicitacao_produto_categoria_id: record.solicitacao_produto_categoria_id ? parseInt(record.solicitacao_produto_categoria_id.toString()) : null,
+          categoria_descricao: record.categoria_descricao?.toString() || null,
+          grupo: record.grupo?.toString() || null,
+          produto_id: record.produto_id ? parseInt(record.produto_id.toString()) : null,
+          preco: record.preco ? parseFloat(record.preco.toString()) : null,
+          per_capita: record.per_capita ? parseFloat(record.per_capita.toString()) : null,
+          apenas_valor_inteiro_sim_nao: record.apenas_valor_inteiro_sim_nao === true || record.apenas_valor_inteiro_sim_nao === 'true',
+          arredondar_tipo: record.arredondar_tipo ? parseInt(record.arredondar_tipo.toString()) : null,
+          em_promocao_sim_nao: record.em_promocao_sim_nao === true || record.em_promocao_sim_nao === 'true',
+          descricao: record.descricao?.toString() || null,
+          unidade: record.unidade?.toString() || null,
+          preco_compra: record.preco_compra ? parseFloat(record.preco_compra.toString()) : null,
+          produto_base_id: record.produto_base_id ? parseInt(record.produto_base_id.toString()) : null,
+          produto_base_quantidade_embalagem: record.produto_base_quantidade_embalagem ? parseFloat(record.produto_base_quantidade_embalagem.toString()) : null,
+          criado_em: new Date().toISOString(),
+          solicitacao_id: Math.floor(Date.now() / 1000) // Timestamp como ID da solicitação
+        };
+        
+        console.log(`Dados mapeados para inserção:`, {
+          id: dataToInsert.solicitacao_produto_listagem_id,
+          categoria: dataToInsert.categoria_descricao,
+          produto: dataToInsert.descricao,
+          preco: dataToInsert.preco
+        });
+
         // CORREÇÃO PRINCIPAL: Usar upsert com onConflict para resolver o erro de chave duplicada
         const { error } = await supabaseClient
           .from('co_solicitacao_produto_listagem')
-          .upsert({
-            solicitacao_produto_listagem_id: record.solicitacao_produto_listagem_id || record.id,
-            produto_id: record.produto_id,
-            produto_base_id: record.produto_base_id,
-            solicitacao_produto_categoria_id: record.solicitacao_produto_categoria_id || record.categoria_id,
-            solicitacao_id: record.solicitacao_id,
-            descricao: record.descricao || record.nome_produto,
-            unidade: record.unidade,
-            quantidade_embalagem: record.quantidade_embalagem || 1,
-            produto_base_quantidade_embalagem: record.produto_base_quantidade_embalagem || record.produto_base_qtd_embalagem || 1,
-            preco: record.preco || record.preco_unitario || 0,
-            preco_compra: record.preco_compra || record.preco || 0,
-            promocao: record.promocao || false,
-            em_promocao_sim_nao: record.em_promocao_sim_nao || record.em_promocao || false,
-            per_capita: record.per_capita || 0,
-            inteiro: record.inteiro || false,
-            apenas_valor_inteiro_sim_nao: record.apenas_valor_inteiro_sim_nao || record.apenas_valor_inteiro || false,
-            arredondar_tipo: record.arredondar_tipo || 0,
-            grupo: record.grupo,
-            categoria_descricao: record.categoria_descricao,
-            criado_em: record.criado_em || new Date().toISOString()
-          }, { 
+          .upsert(dataToInsert, { 
             onConflict: 'solicitacao_produto_listagem_id',
             ignoreDuplicates: false 
           });
 
         if (error) {
           console.error(`Erro ao processar produto solicitação ID ${record.solicitacao_produto_listagem_id}:`, error);
-          console.error(`Dados problemáticos:`, record);
+          console.error(`Dados problemáticos:`, dataToInsert);
         } else {
+          processedCount++;
           console.log(`Produto solicitação ID ${record.solicitacao_produto_listagem_id} processado com sucesso`);
         }
       } else if (mapping.targetTable === 'produtos_legado') {
