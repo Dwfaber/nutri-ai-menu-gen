@@ -19,6 +19,12 @@ const VIEW_MAPPING = {
     targetTable: 'co_solicitacao_produto_listagem',
     fields: ['produto_id', 'nome_produto', 'categoria', 'unidade', 'preco_unitario', 'quantidade_embalagem', 'preco_compra']
   },
+  // Adicionar mapeamento para o formato N8N (compatibilidade)
+  co_solicitacao_produto_listagem: {
+    description: 'Produtos Solicitados (formato N8N)',
+    targetTable: 'co_solicitacao_produto_listagem',
+    fields: ['solicitacao_produto_listagem_id', 'solicitacao_produto_categoria_id', 'categoria_descricao', 'grupo', 'produto_id', 'preco', 'per_capita', 'apenas_valor_inteiro_sim_nao', 'arredondar_tipo', 'em_promocao_sim_nao', 'descricao', 'unidade', 'preco_compra', 'produto_base_id', 'produto_base_quantidade_embalagem']
+  },
   vwCpReceita: {
     description: 'Receitas',
     targetTable: 'receitas_legado',
@@ -62,13 +68,43 @@ serve(async (req) => {
 
     // Verificar se é uma sincronização de view específica com dados do n8n
     if (requestBody.viewName && VIEW_MAPPING[requestBody.viewName as keyof typeof VIEW_MAPPING]) {
-      // Se tem dados diretos para sincronizar (formato do n8n)
-      if (requestBody.data && Array.isArray(requestBody.data) && requestBody.data.length > 0) {
-        console.log(`Recebidos ${requestBody.data.length} registros reais do n8n para ${requestBody.viewName}`);
-        return await syncViewWithData(supabaseClient, requestBody.viewName, requestBody.data);
+      let dataToProcess = [];
+      
+      // Converter dados do N8N para formato array
+      if (requestBody.data) {
+        if (Array.isArray(requestBody.data)) {
+          dataToProcess = requestBody.data;
+        } else if (typeof requestBody.data === 'object') {
+          // N8N envia objeto único, converter para array
+          console.log(`Convertendo objeto único para array para ${requestBody.viewName}`);
+          dataToProcess = [requestBody.data];
+        }
+      }
+      
+      // Filtrar registros válidos (não vazios)
+      const validData = dataToProcess.filter(record => {
+        if (!record || typeof record !== 'object') return false;
+        
+        // Verificar se pelo menos um campo tem valor não vazio
+        const hasValidData = Object.values(record).some(value => 
+          value !== null && value !== undefined && value !== ''
+        );
+        
+        if (!hasValidData) {
+          console.log(`Registro ignorado (todos os campos vazios):`, record);
+          return false;
+        }
+        
+        return true;
+      });
+      
+      console.log(`Dados processados: ${dataToProcess.length} registros recebidos, ${validData.length} válidos para ${requestBody.viewName}`);
+      
+      if (validData.length > 0) {
+        console.log(`Processando ${validData.length} registros válidos do n8n para ${requestBody.viewName}`);
+        return await syncViewWithData(supabaseClient, requestBody.viewName, validData);
       } else {
-        // Se não tem dados, é um teste manual - processar sem dados
-        console.log(`Teste manual para ${requestBody.viewName} - sem dados do n8n`);
+        console.log(`Nenhum registro válido encontrado para ${requestBody.viewName} - tratando como teste manual`);
         return await syncViewWithData(supabaseClient, requestBody.viewName, []);
       }
     }
@@ -94,6 +130,7 @@ async function checkViewsAvailability(supabaseClient: any) {
   const availableViews = [
     'vwCoSolicitacaoFilialCusto', // → custos_filiais (estrutura padronizada)
     'vwCoSolicitacaoProdutoListagem',
+    'co_solicitacao_produto_listagem', // → Formato N8N compatível
     'vwCpReceita',
     'vwCpReceitaProduto',
     'vwEstProdutoBase',

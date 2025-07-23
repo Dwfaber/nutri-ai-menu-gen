@@ -1,1 +1,59 @@
 project_id = "wzbhhioegxdpegirglbq"
+
+[api]
+enabled = true
+port = 54321
+schemas = ["public", "graphql_public"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+
+[db]
+port = 54322
+shadow_port = 54320
+major_version = 15
+
+[studio]
+enabled = true
+port = 54323
+api_url = "http://127.0.0.1:54321"
+
+[inbucket]
+enabled = true
+port = 54324
+smtp_port = 54325
+pop3_port = 54326
+
+[storage]
+enabled = true
+file_size_limit = "50MiB"
+image_transformation = true
+
+[auth]
+enabled = true
+site_url = "http://127.0.0.1:3000"
+additional_redirect_urls = ["https://wzbhhioegxdpegirglbq.supabase.co"]
+jwt_expiry = 3600
+enable_anonymous_sign_ins = false
+enable_signup = true
+enable_confirmations = false
+
+[functions]
+verify_jwt = true
+
+[functions.gpt-assistant]
+verify_jwt = false
+
+[functions.sync-legacy-db]
+verify_jwt = false
+
+[functions.discover-legacy-schema]
+verify_jwt = false
+
+[functions.trigger-n8n-automation]
+verify_jwt = false
+
+[functions.sync-legacy-views]
+verify_jwt = false
+
+[edge-runtime]
+inspector_port = 8083
