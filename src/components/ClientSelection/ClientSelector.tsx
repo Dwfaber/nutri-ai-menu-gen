@@ -2,12 +2,13 @@ import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Building2, Users, DollarSign, Calendar, AlertCircle } from 'lucide-react';
+import { Building2, Users, DollarSign, Calendar, AlertCircle, TrendingUp } from 'lucide-react';
 import { useClientContractsContext } from '@/contexts/ClientContractsContext';
 import { useSelectedClient } from '@/contexts/SelectedClientContext';
+import CostBreakdownCard from './CostBreakdownCard';
 
 const ClientSelector = () => {
-  const { clients, isLoading, error } = useClientContractsContext();
+  const { clients, clientsWithCosts, isLoading, error } = useClientContractsContext();
   const { selectedClient, setSelectedClient } = useSelectedClient();
 
   if (isLoading) {
@@ -57,80 +58,110 @@ const ClientSelector = () => {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {activeClients.map((client) => (
-          <Card 
-            key={client.id} 
-            className={`cursor-pointer transition-all hover:shadow-lg ${
-              selectedClient?.id === client.id ? 'ring-2 ring-primary bg-primary/5' : ''
-            }`}
-            onClick={() => setSelectedClient(client)}
-          >
-            <CardHeader className="pb-3">
-              <div className="flex items-start justify-between">
-                <CardTitle className="text-lg">{client.nome_empresa}</CardTitle>
-                <Badge variant="outline" className="text-green-600 border-green-600">
-                  Ativo
-                </Badge>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-3">
-                <div className="flex items-center space-x-2 text-sm">
-                  <Users className="w-4 h-4 text-gray-500" />
-                  <span className="text-gray-600">
-                    {client.total_funcionarios} funcionários
-                  </span>
-                </div>
-                
-                <div className="flex items-center space-x-2 text-sm">
-                  <DollarSign className="w-4 h-4 text-gray-500" />
-                  <span className="text-gray-600">
-                    Máx. R$ {client.custo_maximo_refeicao.toFixed(2)} por refeição
-                  </span>
-                </div>
-                
-                <div className="flex items-center space-x-2 text-sm">
-                  <Calendar className="w-4 h-4 text-gray-500" />
-                  <span className="text-gray-600">
-                    {client.total_refeicoes_mes} refeições/mês
-                  </span>
-                </div>
-              </div>
-
-              {client.restricoes_alimentares && client.restricoes_alimentares.length > 0 && (
-                <div className="space-y-2">
-                  <p className="text-xs font-medium text-gray-700">Restrições:</p>
-                  <div className="flex flex-wrap gap-1">
-                    {client.restricoes_alimentares.slice(0, 3).map((restricao, index) => (
-                      <Badge key={index} variant="secondary" className="text-xs">
-                        {restricao}
-                      </Badge>
-                    ))}
-                    {client.restricoes_alimentares.length > 3 && (
+        {activeClients.map((client) => {
+          const clientWithCosts = clientsWithCosts.find(cwc => cwc.client.id === client.id);
+          
+          return (
+            <Card 
+              key={client.id} 
+              className={`cursor-pointer transition-all hover:shadow-lg ${
+                selectedClient?.id === client.id ? 'ring-2 ring-primary bg-primary/5' : ''
+              }`}
+              onClick={() => setSelectedClient(client)}
+            >
+              <CardHeader className="pb-3">
+                <div className="flex items-start justify-between">
+                  <CardTitle className="text-lg">{client.nome_empresa}</CardTitle>
+                  <div className="flex gap-2">
+                    <Badge variant="outline" className="text-green-600 border-green-600">
+                      Ativo
+                    </Badge>
+                    {clientWithCosts && clientWithCosts.totalBranches > 1 && (
                       <Badge variant="secondary" className="text-xs">
-                        +{client.restricoes_alimentares.length - 3}
+                        {clientWithCosts.totalBranches} filiais
                       </Badge>
                     )}
                   </div>
                 </div>
-              )}
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-3">
+                  <div className="flex items-center space-x-2 text-sm">
+                    <Users className="w-4 h-4 text-gray-500" />
+                    <span className="text-gray-600">
+                      {client.total_funcionarios} funcionários
+                    </span>
+                  </div>
+                  
+                  <div className="flex items-center space-x-2 text-sm">
+                    <DollarSign className="w-4 h-4 text-gray-500" />
+                    <span className="text-gray-600">
+                      Máx. R$ {client.custo_maximo_refeicao.toFixed(2)} por refeição
+                    </span>
+                  </div>
+                  
+                  <div className="flex items-center space-x-2 text-sm">
+                    <Calendar className="w-4 h-4 text-gray-500" />
+                    <span className="text-gray-600">
+                      {client.total_refeicoes_mes} refeições/mês
+                    </span>
+                  </div>
 
-              <Button 
-                className={`w-full ${
-                  selectedClient?.id === client.id 
-                    ? 'bg-primary text-primary-foreground' 
-                    : 'bg-secondary text-secondary-foreground hover:bg-secondary/80'
-                }`}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setSelectedClient(client);
-                }}
-              >
-                {selectedClient?.id === client.id ? 'Selecionado' : 'Selecionar'}
-              </Button>
-            </CardContent>
-          </Card>
-        ))}
+                  {/* Show daily cost average */}
+                  {clientWithCosts && clientWithCosts.dailyCosts.average > 0 && (
+                    <div className="flex items-center space-x-2 text-sm">
+                      <TrendingUp className="w-4 h-4 text-blue-500" />
+                      <span className="text-gray-600">
+                        Média diária: R$ {clientWithCosts.dailyCosts.average.toFixed(2)}
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                {client.restricoes_alimentares && client.restricoes_alimentares.length > 0 && (
+                  <div className="space-y-2">
+                    <p className="text-xs font-medium text-gray-700">Restrições:</p>
+                    <div className="flex flex-wrap gap-1">
+                      {client.restricoes_alimentares.slice(0, 3).map((restricao, index) => (
+                        <Badge key={index} variant="secondary" className="text-xs">
+                          {restricao}
+                        </Badge>
+                      ))}
+                      {client.restricoes_alimentares.length > 3 && (
+                        <Badge variant="secondary" className="text-xs">
+                          +{client.restricoes_alimentares.length - 3}
+                        </Badge>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                <Button 
+                  className={`w-full ${
+                    selectedClient?.id === client.id 
+                      ? 'bg-primary text-primary-foreground' 
+                      : 'bg-secondary text-secondary-foreground hover:bg-secondary/80'
+                  }`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setSelectedClient(client);
+                  }}
+                >
+                  {selectedClient?.id === client.id ? 'Selecionado' : 'Selecionar'}
+                </Button>
+
+                {/* Show detailed cost breakdown for selected client */}
+                {selectedClient?.id === client.id && clientWithCosts && (
+                  <CostBreakdownCard
+                    dailyCosts={clientWithCosts.dailyCosts}
+                    validationRules={clientWithCosts.validationRules}
+                    totalBranches={clientWithCosts.totalBranches}
+                  />
+                )}
+              </CardContent>
+            </Card>
+          );
+        })}
       </div>
 
       {selectedClient && (

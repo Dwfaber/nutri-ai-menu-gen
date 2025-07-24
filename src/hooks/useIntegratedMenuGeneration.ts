@@ -2,7 +2,9 @@ import { useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useSelectedClient } from '@/contexts/SelectedClientContext';
+import { useClientContractsContext } from '@/contexts/ClientContractsContext';
 import { MarketProduct } from './useMarketProducts';
+import { getDayOfWeekCost } from '@/types/clientCosts';
 
 export interface MenuGenerationRequest {
   clientId: string;
@@ -65,6 +67,7 @@ export const useIntegratedMenuGeneration = () => {
   const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
   const { selectedClient } = useSelectedClient();
+  const { getClientWithCosts } = useClientContractsContext();
 
   const generateMenu = async (
     weekPeriod: string,
@@ -93,15 +96,18 @@ export const useIntegratedMenuGeneration = () => {
         throw new Error(`Erro ao buscar produtos do mercado: ${marketError.message}`);
       }
 
-      // Get client costs by day
-      const { data: clientCosts, error: costsError } = await supabase
-        .from('custos_filiais')
-        .select('*')
-        .eq('cliente_id_legado', parseInt(selectedClient.id))
-        .limit(1);
-
-      if (costsError) {
-        console.warn('Erro ao buscar custos da filial:', costsError);
+      // Get client costs and cost details
+      const clientWithCosts = getClientWithCosts(selectedClient.id);
+      
+      // Enhance cost information with daily breakdown
+      let enhancedCostData = null;
+      if (clientWithCosts) {
+        enhancedCostData = {
+          daily_costs: clientWithCosts.dailyCosts,
+          validation_rules: clientWithCosts.validationRules,
+          cost_details: clientWithCosts.costDetails,
+          total_branches: clientWithCosts.totalBranches
+        };
       }
 
       // Prepare generation request
@@ -134,7 +140,7 @@ export const useIntegratedMenuGeneration = () => {
           },
           week_period: weekPeriod,
           market_products: (marketProducts || []).slice(0, 100), // Limit for API
-          daily_costs: clientCosts?.[0] || null
+          enhanced_cost_data: enhancedCostData
         }
       });
 
