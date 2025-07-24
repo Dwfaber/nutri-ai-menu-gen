@@ -121,67 +121,109 @@ export type Database = {
       }
       contratos_corporativos: {
         Row: {
-          ativo: boolean
-          cliente_id_legado: string
-          created_at: string
-          custo_maximo_refeicao: number
-          dias_funcionamento_mes: number | null
-          domingo: boolean | null
-          id: string
-          nome_empresa: string
-          periodicidade: string
-          quarta_feira: boolean | null
-          quinta_feira: boolean | null
-          restricoes_alimentares: string[] | null
-          sabado: boolean | null
-          segunda_feira: boolean | null
-          sexta_feira: boolean | null
-          sync_at: string
-          terca_feira: boolean | null
-          total_funcionarios: number
-          total_refeicoes_mes: number
+          cnpj: string | null
+          codigo_externo: number | null
+          codigo_externo_2: number | null
+          codigo_externo_2_empresa_id: number | null
+          codigo_externo_empresa_id: number | null
+          controle_interno_custo: boolean | null
+          custo_separado: boolean | null
+          data_contrato: string | null
+          empresa_id_legado: number
+          endereco: string | null
+          endereco_complemento: string | null
+          endereco_numero: string | null
+          estoque_central: boolean | null
+          filial_id_legado: number
+          inscricao_estadual: string | null
+          nome_fantasia: string | null
+          ratear_custo: boolean | null
+          razao_social: string | null
+          tipo_custo: number | null
         }
         Insert: {
-          ativo?: boolean
-          cliente_id_legado: string
-          created_at?: string
-          custo_maximo_refeicao?: number
-          dias_funcionamento_mes?: number | null
-          domingo?: boolean | null
-          id?: string
-          nome_empresa: string
-          periodicidade?: string
-          quarta_feira?: boolean | null
-          quinta_feira?: boolean | null
-          restricoes_alimentares?: string[] | null
-          sabado?: boolean | null
-          segunda_feira?: boolean | null
-          sexta_feira?: boolean | null
-          sync_at?: string
-          terca_feira?: boolean | null
-          total_funcionarios?: number
-          total_refeicoes_mes?: number
+          cnpj?: string | null
+          codigo_externo?: number | null
+          codigo_externo_2?: number | null
+          codigo_externo_2_empresa_id?: number | null
+          codigo_externo_empresa_id?: number | null
+          controle_interno_custo?: boolean | null
+          custo_separado?: boolean | null
+          data_contrato?: string | null
+          empresa_id_legado: number
+          endereco?: string | null
+          endereco_complemento?: string | null
+          endereco_numero?: string | null
+          estoque_central?: boolean | null
+          filial_id_legado: number
+          inscricao_estadual?: string | null
+          nome_fantasia?: string | null
+          ratear_custo?: boolean | null
+          razao_social?: string | null
+          tipo_custo?: number | null
         }
         Update: {
-          ativo?: boolean
+          cnpj?: string | null
+          codigo_externo?: number | null
+          codigo_externo_2?: number | null
+          codigo_externo_2_empresa_id?: number | null
+          codigo_externo_empresa_id?: number | null
+          controle_interno_custo?: boolean | null
+          custo_separado?: boolean | null
+          data_contrato?: string | null
+          empresa_id_legado?: number
+          endereco?: string | null
+          endereco_complemento?: string | null
+          endereco_numero?: string | null
+          estoque_central?: boolean | null
+          filial_id_legado?: number
+          inscricao_estadual?: string | null
+          nome_fantasia?: string | null
+          ratear_custo?: boolean | null
+          razao_social?: string | null
+          tipo_custo?: number | null
+        }
+        Relationships: []
+      }
+      contratos_corporativos_v2: {
+        Row: {
+          ativo: boolean | null
+          cliente_id_legado: string
+          created_at: string
+          custo_maximo_refeicao: number | null
+          id: string
+          nome_empresa: string
+          periodicidade: string | null
+          restricoes_alimentares: string[] | null
+          sync_at: string
+          total_funcionarios: number | null
+          total_refeicoes_mes: number | null
+        }
+        Insert: {
+          ativo?: boolean | null
+          cliente_id_legado: string
+          created_at?: string
+          custo_maximo_refeicao?: number | null
+          id?: string
+          nome_empresa: string
+          periodicidade?: string | null
+          restricoes_alimentares?: string[] | null
+          sync_at?: string
+          total_funcionarios?: number | null
+          total_refeicoes_mes?: number | null
+        }
+        Update: {
+          ativo?: boolean | null
           cliente_id_legado?: string
           created_at?: string
-          custo_maximo_refeicao?: number
-          dias_funcionamento_mes?: number | null
-          domingo?: boolean | null
+          custo_maximo_refeicao?: number | null
           id?: string
           nome_empresa?: string
-          periodicidade?: string
-          quarta_feira?: boolean | null
-          quinta_feira?: boolean | null
+          periodicidade?: string | null
           restricoes_alimentares?: string[] | null
-          sabado?: boolean | null
-          segunda_feira?: boolean | null
-          sexta_feira?: boolean | null
           sync_at?: string
-          terca_feira?: boolean | null
-          total_funcionarios?: number
-          total_refeicoes_mes?: number
+          total_funcionarios?: number | null
+          total_refeicoes_mes?: number | null
         }
         Relationships: []
       }
@@ -272,6 +314,42 @@ export type Database = {
         }
         Relationships: []
       }
+      produtos_base: {
+        Row: {
+          created_at: string
+          descricao: string | null
+          id: string
+          produto_base_id: number
+          sync_at: string
+          unidade: string | null
+          unidade_medida_id: number | null
+          user_date_time: string | null
+          user_name: string | null
+        }
+        Insert: {
+          created_at?: string
+          descricao?: string | null
+          id?: string
+          produto_base_id: number
+          sync_at?: string
+          unidade?: string | null
+          unidade_medida_id?: number | null
+          user_date_time?: string | null
+          user_name?: string | null
+        }
+        Update: {
+          created_at?: string
+          descricao?: string | null
+          id?: string
+          produto_base_id?: number
+          sync_at?: string
+          unidade?: string | null
+          unidade_medida_id?: number | null
+          user_date_time?: string | null
+          user_name?: string | null
+        }
+        Relationships: []
+      }
       produtos_legado: {
         Row: {
           categoria: string | null
@@ -281,7 +359,7 @@ export type Database = {
           nome: string
           peso_unitario: number
           preco_unitario: number
-          produto_id_legado: string
+          produto_id_legado: string | null
           sync_at: string
           unidade: string
         }
@@ -293,7 +371,7 @@ export type Database = {
           nome: string
           peso_unitario?: number
           preco_unitario?: number
-          produto_id_legado: string
+          produto_id_legado?: string | null
           sync_at?: string
           unidade: string
         }
@@ -305,7 +383,7 @@ export type Database = {
           nome?: string
           peso_unitario?: number
           preco_unitario?: number
-          produto_id_legado?: string
+          produto_id_legado?: string | null
           sync_at?: string
           unidade?: string
         }

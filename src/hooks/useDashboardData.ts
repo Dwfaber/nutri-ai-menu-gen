@@ -36,7 +36,7 @@ export const useDashboardData = () => {
 
       // Fetch active clients data
       const { data: clients, error: clientsError } = await supabase
-        .from('contratos_corporativos')
+        .from('contratos_corporativos_v2')
         .select('*')
         .eq('ativo', true);
 

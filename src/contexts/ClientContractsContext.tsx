@@ -40,7 +40,7 @@ export const ClientContractsProvider = ({ children }: { children: ReactNode }) =
 
       // Select explícito das colunas necessárias
       const { data, error: fetchError } = await supabase
-        .from('contratos_corporativos')
+        .from('contratos_corporativos_v2')
         .select(`
           id,
           nome_empresa,
@@ -96,7 +96,7 @@ export const ClientContractsProvider = ({ children }: { children: ReactNode }) =
     try {
       // Select explícito das colunas necessárias
       const { data, error } = await supabase
-        .from('contratos_corporativos')
+        .from('contratos_corporativos_v2')
         .select(`
           id,
           nome_empresa,
