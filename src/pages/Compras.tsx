@@ -13,6 +13,8 @@ import OptimizationSettings from '../components/Optimization/OptimizationSetting
 import OptimizationAnalysis from '../components/Optimization/OptimizationAnalysis';
 import OptimizationResults from '../components/Optimization/OptimizationResults';
 import { useOptimization } from '../hooks/useOptimization';
+import { useMarketProducts } from '../hooks/useMarketProducts';
+import { useSelectedClient } from '@/contexts/SelectedClientContext';
 
 // Define valid status types for shopping lists
 type ShoppingListStatus = 'pending' | 'budget_ok' | 'budget_exceeded' | 'finalized' | 'draft' | 'approved' | 'purchased';
@@ -35,6 +37,10 @@ const Compras = () => {
   } = useShoppingList();
   
   const { config: optimizationConfig, lastResults: optimizationResults } = useOptimization();
+  const { products: marketProducts, getProductStats, isLoading: isLoadingMarket } = useMarketProducts();
+  const { selectedClient } = useSelectedClient();
+
+  const marketStats = getProductStats();
 
   useEffect(() => {
     loadShoppingLists();
@@ -141,7 +147,9 @@ const Compras = () => {
       <div className="flex justify-between items-center">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Sistema de Compras</h1>
-          <p className="text-gray-600">Gerencie listas de compras com otimização inteligente</p>
+          <p className="text-gray-600">
+            {selectedClient ? `Cliente: ${selectedClient.nome_empresa}` : 'Gerencie listas de compras com otimização inteligente'}
+          </p>
         </div>
         <Button className="bg-green-600 hover:bg-green-700" disabled>
           <Plus className="w-4 h-4 mr-2" />
@@ -375,15 +383,21 @@ const Compras = () => {
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
                   <div className="bg-blue-50 p-4 rounded-lg">
                     <h4 className="font-medium text-blue-900">Produtos Ativos</h4>
-                    <p className="text-2xl font-bold text-blue-600">1.735</p>
+                    <p className="text-2xl font-bold text-blue-600">
+                      {isLoadingMarket ? '...' : marketStats.total.toLocaleString()}
+                    </p>
                   </div>
                   <div className="bg-green-50 p-4 rounded-lg">
                     <h4 className="font-medium text-green-900">Categorias</h4>
-                    <p className="text-2xl font-bold text-green-600">8</p>
+                    <p className="text-2xl font-bold text-green-600">
+                      {isLoadingMarket ? '...' : marketStats.categories}
+                    </p>
                   </div>
                   <div className="bg-orange-50 p-4 rounded-lg">
                     <h4 className="font-medium text-orange-900">Em Promoção</h4>
-                    <p className="text-2xl font-bold text-orange-600">1</p>
+                    <p className="text-2xl font-bold text-orange-600">
+                      {isLoadingMarket ? '...' : marketStats.promotional}
+                    </p>
                   </div>
                 </div>
               </CardContent>

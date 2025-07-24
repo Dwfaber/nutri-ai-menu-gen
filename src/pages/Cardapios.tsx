@@ -13,6 +13,7 @@ import SyncMonitor from '../components/SyncMonitor/SyncMonitor';
 import NLPInput from '../components/MenuGenerator/NLPInput';
 import PreviewTabs from '../components/MenuGenerator/PreviewTabs';
 import { MenuCreationForm } from '../components/MenuGenerator/MenuCreationForm';
+import IntegratedMenuGenerator from '../components/MenuGeneration/IntegratedMenuGenerator';
 
 const Cardapios = () => {
   const [searchTerm, setSearchTerm] = useState('');
@@ -105,12 +106,16 @@ const Cardapios = () => {
         </Button>
       </div>
 
-      <Tabs defaultValue="menus" className="w-full">
-        <TabsList className="grid w-full grid-cols-2">
-          <TabsTrigger value="menus">Cardápios</TabsTrigger>
+      <Tabs defaultValue="integrated" className="w-full">
+        <TabsList className="grid w-full grid-cols-3">
+          <TabsTrigger value="integrated">Gerador Inteligente</TabsTrigger>
+          <TabsTrigger value="menus">Cardápios Salvos</TabsTrigger>
           <TabsTrigger value="sync">Sincronização</TabsTrigger>
         </TabsList>
         
+        <TabsContent value="integrated" className="space-y-6">
+          <IntegratedMenuGenerator />
+        </TabsContent>
         <TabsContent value="menus" className="space-y-6">
           <div className="flex space-x-4">
             <div className="relative flex-1">

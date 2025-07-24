@@ -1,11 +1,13 @@
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Users, ChefHat, DollarSign, TrendingUp, Clock, ShoppingCart } from 'lucide-react';
+import { Users, ChefHat, DollarSign, TrendingUp, Clock, ShoppingCart, Building2 } from 'lucide-react';
 import { useDashboardData } from '@/hooks/useDashboardData';
 import StatsCard from '@/components/Dashboard/StatsCard';
+import { useSelectedClient } from '@/contexts/SelectedClientContext';
 
 const Dashboard = () => {
   const { metrics, isLoading, error, refetch } = useDashboardData();
+  const { selectedClient } = useSelectedClient();
 
   if (error) {
     return (
@@ -34,8 +36,42 @@ const Dashboard = () => {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
-        <p className="text-gray-600">Visão geral do sistema Nutr's IA</p>
+        <p className="text-gray-600">
+          {selectedClient ? `Cliente: ${selectedClient.nome_empresa}` : 'Visão geral do sistema Nutr\'s IA'}
+        </p>
       </div>
+
+      {/* Client Information Card */}
+      {selectedClient && (
+        <Card className="bg-primary/5 border-primary/20">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-primary">
+              <Building2 className="w-5 h-5" />
+              Filial Ativa: {selectedClient.nome_empresa}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-sm">
+              <div>
+                <p className="font-medium text-gray-700">Funcionários</p>
+                <p className="text-lg font-bold text-primary">{selectedClient.total_funcionarios}</p>
+              </div>
+              <div>
+                <p className="font-medium text-gray-700">Custo Máximo/Refeição</p>
+                <p className="text-lg font-bold text-green-600">R$ {selectedClient.custo_maximo_refeicao.toFixed(2)}</p>
+              </div>
+              <div>
+                <p className="font-medium text-gray-700">Refeições/Mês</p>
+                <p className="text-lg font-bold text-blue-600">{selectedClient.total_refeicoes_mes}</p>
+              </div>
+              <div>
+                <p className="font-medium text-gray-700">Periodicidade</p>
+                <p className="text-lg font-bold text-purple-600 capitalize">{selectedClient.periodicidade}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <StatsCard
