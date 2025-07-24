@@ -13,14 +13,15 @@ import {
 
 export interface ContractClient {
   id: string;
-  cliente_id_legado: string;
-  nome_empresa: string;
-  total_funcionarios: number;
-  custo_maximo_refeicao: number;
-  restricoes_alimentares: string[];
-  periodicidade: 'diario' | 'semanal' | 'mensal';
-  total_refeicoes_mes: number;
-  ativo: boolean;
+  filial_id: number;
+  nome_fantasia: string;
+  razao_social?: string;
+  nome_filial?: string;
+  tipo_refeicao: string;
+  custo_medio_diario: number;
+  custo_dia_especial: number;
+  usa_validacao_media: boolean;
+  limite_percentual_acima_media: number;
   created_at: string;
   updated_at: string;
 }
@@ -51,41 +52,47 @@ export const ClientContractsProvider = ({ children }: { children: ReactNode }) =
       setIsLoading(true);
       setError(null);
 
-      // Select explícito das colunas necessárias
+      // Buscar dados reais da tabela custos_filiais
       const { data, error: fetchError } = await supabase
-        .from('contratos_corporativos_v2')
-        .select(`
-          id,
-          cliente_id_legado,
-          nome_empresa,
-          total_funcionarios,
-          custo_maximo_refeicao,
-          restricoes_alimentares,
-          periodicidade,
-          total_refeicoes_mes,
-          ativo,
-          created_at,
-          sync_at
-        `)
-        .order('nome_empresa');
+        .from('custos_filiais')
+        .select('*')
+        .order('nome_fantasia');
 
       if (fetchError) {
         throw fetchError;
       }
 
-      // Transform data to match ContractClient interface
-      const transformedData: ContractClient[] = (data || []).map(item => ({
+      // Agrupar por filial_id para evitar duplicatas
+      const uniqueClients = new Map<number, any>();
+      
+      (data || []).forEach(item => {
+        if (!uniqueClients.has(item.filial_id)) {
+          uniqueClients.set(item.filial_id, item);
+        }
+      });
+
+      // Transform data to match ContractClient interface usando apenas dados reais
+      const transformedData: ContractClient[] = Array.from(uniqueClients.values()).map(item => ({
         id: item.id,
-        cliente_id_legado: item.cliente_id_legado,
-        nome_empresa: item.nome_empresa,
-        total_funcionarios: item.total_funcionarios,
-        custo_maximo_refeicao: Number(item.custo_maximo_refeicao),
-        restricoes_alimentares: item.restricoes_alimentares || [],
-        periodicidade: item.periodicidade as 'diario' | 'semanal' | 'mensal',
-        total_refeicoes_mes: item.total_refeicoes_mes,
-        ativo: item.ativo,
+        filial_id: item.filial_id,
+        nome_fantasia: item.nome_fantasia || `Filial ${item.filial_id}`,
+        razao_social: item.razao_social,
+        nome_filial: item.nome_filial,
+        tipo_refeicao: item.solicitacao_compra_tipo_descricao || 'REFEIÇÃO',
+        custo_medio_diario: (
+          Number(item.RefCustoSegunda || 0) + 
+          Number(item.RefCustoTerca || 0) + 
+          Number(item.RefCustoQuarta || 0) + 
+          Number(item.RefCustoQuinta || 0) + 
+          Number(item.RefCustoSexta || 0) + 
+          Number(item.RefCustoSabado || 0) + 
+          Number(item.RefCustoDomingo || 0)
+        ) / 7,
+        custo_dia_especial: Number(item.RefCustoDiaEspecial || 0),
+        usa_validacao_media: item.QtdeRefeicoesUsarMediaValidarSimNao || false,
+        limite_percentual_acima_media: Number(item.PorcentagemLimiteAcimaMedia || 0),
         created_at: item.created_at,
-        updated_at: item.sync_at // Using sync_at as updated_at since that's what exists in the table
+        updated_at: item.updated_at
       }));
 
       setClients(transformedData);
@@ -140,24 +147,11 @@ export const ClientContractsProvider = ({ children }: { children: ReactNode }) =
 
   const getClientContract = async (clientId: string): Promise<ContractClient | null> => {
     try {
-        // Select explícito das colunas necessárias
-        const { data, error } = await supabase
-          .from('contratos_corporativos_v2')
-          .select(`
-            id,
-            cliente_id_legado,
-            nome_empresa,
-            total_funcionarios,
-            custo_maximo_refeicao,
-            restricoes_alimentares,
-            periodicidade,
-            total_refeicoes_mes,
-            ativo,
-            created_at,
-            sync_at
-          `)
-          .eq('id', clientId)
-          .single();
+      const { data, error } = await supabase
+        .from('custos_filiais')
+        .select('*')
+        .eq('id', clientId)
+        .single();
 
       if (error) {
         throw error;
@@ -165,25 +159,33 @@ export const ClientContractsProvider = ({ children }: { children: ReactNode }) =
 
       if (!data) return null;
 
-        // Transform single record to match ContractClient interface
-        return {
-          id: data.id,
-          cliente_id_legado: data.cliente_id_legado,
-          nome_empresa: data.nome_empresa,
-          total_funcionarios: data.total_funcionarios,
-          custo_maximo_refeicao: Number(data.custo_maximo_refeicao),
-          restricoes_alimentares: data.restricoes_alimentares || [],
-          periodicidade: data.periodicidade as 'diario' | 'semanal' | 'mensal',
-          total_refeicoes_mes: data.total_refeicoes_mes,
-          ativo: data.ativo,
-          created_at: data.created_at,
-          updated_at: data.sync_at
-        };
+      // Transform single record to match ContractClient interface usando dados reais
+      return {
+        id: data.id,
+        filial_id: data.filial_id,
+        nome_fantasia: data.nome_fantasia || `Filial ${data.filial_id}`,
+        razao_social: data.razao_social,
+        nome_filial: data.nome_filial,
+        tipo_refeicao: data.solicitacao_compra_tipo_descricao || 'REFEIÇÃO',
+        custo_medio_diario: (
+          Number(data.RefCustoSegunda || 0) + 
+          Number(data.RefCustoTerca || 0) + 
+          Number(data.RefCustoQuarta || 0) + 
+          Number(data.RefCustoQuinta || 0) + 
+          Number(data.RefCustoSexta || 0) + 
+          Number(data.RefCustoSabado || 0) + 
+          Number(data.RefCustoDomingo || 0)
+        ) / 7,
+        custo_dia_especial: Number(data.RefCustoDiaEspecial || 0),
+        usa_validacao_media: data.QtdeRefeicoesUsarMediaValidarSimNao || false,
+        limite_percentual_acima_media: Number(data.PorcentagemLimiteAcimaMedia || 0),
+        created_at: data.created_at,
+        updated_at: data.updated_at
+      };
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Erro ao buscar contrato do cliente';
       console.error('Erro ao buscar contrato do cliente:', err);
       
-      // Adicionar toast para consistência na experiência do usuário
       toast({
         title: "Erro ao Buscar Contrato",
         description: errorMessage,
@@ -197,12 +199,12 @@ export const ClientContractsProvider = ({ children }: { children: ReactNode }) =
   const getClientCostDetails = async (clientId: string): Promise<ClientCostDetails[]> => {
     try {
       const client = getClientById(clientId);
-      if (!client?.cliente_id_legado) return [];
+      if (!client) return [];
 
       const { data, error } = await supabase
         .from('custos_filiais')
         .select('*')
-        .eq('cliente_id_legado', parseInt(client.cliente_id_legado))
+        .eq('filial_id', client.filial_id)
         .order('nome_filial');
 
       if (error) {
@@ -212,7 +214,7 @@ export const ClientContractsProvider = ({ children }: { children: ReactNode }) =
 
       return (data || []).map(item => ({
         id: item.id,
-        cliente_id_legado: item.cliente_id_legado,
+        cliente_id_legado: item.cliente_id_legado || 0,
         filial_id: item.filial_id,
         nome_filial: item.nome_filial || '',
         razao_social: item.razao_social || '',

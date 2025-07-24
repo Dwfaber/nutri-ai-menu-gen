@@ -1,15 +1,18 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Building2, Users, DollarSign, Calendar, AlertCircle, TrendingUp } from 'lucide-react';
+import { Building2, Users, DollarSign, Calendar, AlertCircle, TrendingUp, Info } from 'lucide-react';
 import { useClientContractsContext } from '@/contexts/ClientContractsContext';
 import { useSelectedClient } from '@/contexts/SelectedClientContext';
 import CostBreakdownCard from './CostBreakdownCard';
+import ClientInfoForm, { ClientAdditionalInfo } from './ClientInfoForm';
 
 const ClientSelector = () => {
   const { clients, clientsWithCosts, isLoading, error } = useClientContractsContext();
   const { selectedClient, setSelectedClient } = useSelectedClient();
+  const [showInfoForm, setShowInfoForm] = useState(false);
+  const [clientForForm, setClientForForm] = useState<any>(null);
 
   if (isLoading) {
     return (
@@ -34,15 +37,36 @@ const ClientSelector = () => {
     );
   }
 
-  const activeClients = clients.filter(client => client.ativo);
+  // Como não temos o campo 'ativo' nos dados reais, considerar todos os clientes
+  const activeClients = clients;
+
+  const handleClientSelect = (client: any) => {
+    setClientForForm(client);
+    setShowInfoForm(true);
+  };
+
+  const handleInfoComplete = (info: ClientAdditionalInfo) => {
+    setSelectedClient({ ...clientForForm, additionalInfo: info });
+    setShowInfoForm(false);
+    setClientForForm(null);
+  };
+
+  const handleInfoCancel = () => {
+    setShowInfoForm(false);
+    setClientForForm(null);
+  };
+
+  if (showInfoForm && clientForForm) {
+    return <ClientInfoForm client={clientForForm} onComplete={handleInfoComplete} onCancel={handleInfoCancel} />;
+  }
 
   if (activeClients.length === 0) {
     return (
       <div className="flex items-center justify-center p-8">
         <div className="text-center">
           <Building2 className="w-12 h-12 mx-auto mb-4 text-gray-400" />
-          <p className="text-lg font-medium">Nenhum cliente ativo encontrado</p>
-          <p className="text-sm text-gray-500">Configure contratos corporativos para começar</p>
+          <p className="text-lg font-medium">Nenhum cliente encontrado</p>
+          <p className="text-sm text-gray-500">Verifique a sincronização dos dados</p>
         </div>
       </div>
     );
@@ -67,18 +91,18 @@ const ClientSelector = () => {
               className={`cursor-pointer transition-all hover:shadow-lg ${
                 selectedClient?.id === client.id ? 'ring-2 ring-primary bg-primary/5' : ''
               }`}
-              onClick={() => setSelectedClient(client)}
+              onClick={() => handleClientSelect(client)}
             >
               <CardHeader className="pb-3">
                 <div className="flex items-start justify-between">
-                  <CardTitle className="text-lg">{client.nome_empresa}</CardTitle>
+                  <CardTitle className="text-lg">{client.nome_fantasia}</CardTitle>
                   <div className="flex gap-2">
-                    <Badge variant="outline" className="text-green-600 border-green-600">
-                      Ativo
+                    <Badge variant="outline" className="text-blue-600 border-blue-600">
+                      Filial {client.filial_id}
                     </Badge>
                     {clientWithCosts && clientWithCosts.totalBranches > 1 && (
                       <Badge variant="secondary" className="text-xs">
-                        {clientWithCosts.totalBranches} filiais
+                        {clientWithCosts.totalBranches} custos
                       </Badge>
                     )}
                   </div>
@@ -87,67 +111,55 @@ const ClientSelector = () => {
               <CardContent className="space-y-4">
                 <div className="space-y-3">
                   <div className="flex items-center space-x-2 text-sm">
-                    <Users className="w-4 h-4 text-gray-500" />
-                    <span className="text-gray-600">
-                      {client.total_funcionarios} funcionários
-                    </span>
-                  </div>
-                  
-                  <div className="flex items-center space-x-2 text-sm">
                     <DollarSign className="w-4 h-4 text-gray-500" />
                     <span className="text-gray-600">
-                      Máx. R$ {client.custo_maximo_refeicao.toFixed(2)} por refeição
+                      Custo médio diário: R$ {client.custo_medio_diario.toFixed(2)}
                     </span>
                   </div>
                   
                   <div className="flex items-center space-x-2 text-sm">
                     <Calendar className="w-4 h-4 text-gray-500" />
                     <span className="text-gray-600">
-                      {client.total_refeicoes_mes} refeições/mês
+                      Tipo: {client.tipo_refeicao}
                     </span>
                   </div>
+                  
+                  {client.custo_dia_especial > 0 && (
+                    <div className="flex items-center space-x-2 text-sm">
+                      <TrendingUp className="w-4 h-4 text-purple-500" />
+                      <span className="text-gray-600">
+                        Dia especial: R$ {client.custo_dia_especial.toFixed(2)}
+                      </span>
+                    </div>
+                  )}
 
                   {/* Show daily cost average */}
                   {clientWithCosts && clientWithCosts.dailyCosts.average > 0 && (
                     <div className="flex items-center space-x-2 text-sm">
                       <TrendingUp className="w-4 h-4 text-blue-500" />
                       <span className="text-gray-600">
-                        Média diária: R$ {clientWithCosts.dailyCosts.average.toFixed(2)}
+                        Média semanal: R$ {clientWithCosts.dailyCosts.average.toFixed(2)}
                       </span>
                     </div>
                   )}
                 </div>
 
-                {client.restricoes_alimentares && client.restricoes_alimentares.length > 0 && (
-                  <div className="space-y-2">
-                    <p className="text-xs font-medium text-gray-700">Restrições:</p>
-                    <div className="flex flex-wrap gap-1">
-                      {client.restricoes_alimentares.slice(0, 3).map((restricao, index) => (
-                        <Badge key={index} variant="secondary" className="text-xs">
-                          {restricao}
-                        </Badge>
-                      ))}
-                      {client.restricoes_alimentares.length > 3 && (
-                        <Badge variant="secondary" className="text-xs">
-                          +{client.restricoes_alimentares.length - 3}
-                        </Badge>
-                      )}
-                    </div>
+                {/* Informação sobre dados complementares */}
+                <div className="bg-orange-50 border border-orange-200 rounded-lg p-3">
+                  <div className="flex items-center gap-2 text-orange-700 text-sm">
+                    <Info className="w-4 h-4" />
+                    <span>Clique para preencher informações complementares</span>
                   </div>
-                )}
+                </div>
 
                 <Button 
-                  className={`w-full ${
-                    selectedClient?.id === client.id 
-                      ? 'bg-primary text-primary-foreground' 
-                      : 'bg-secondary text-secondary-foreground hover:bg-secondary/80'
-                  }`}
+                  className="w-full bg-primary text-primary-foreground hover:bg-primary/90"
                   onClick={(e) => {
                     e.stopPropagation();
-                    setSelectedClient(client);
+                    handleClientSelect(client);
                   }}
                 >
-                  {selectedClient?.id === client.id ? 'Selecionado' : 'Selecionar'}
+                  Selecionar e Configurar
                 </Button>
 
                 {/* Show detailed cost breakdown for selected client */}
