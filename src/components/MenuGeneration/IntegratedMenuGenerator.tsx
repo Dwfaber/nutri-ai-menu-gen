@@ -91,7 +91,7 @@ const IntegratedMenuGenerator = () => {
             </div>
             <div>
               <p className="font-medium text-gray-700">Custo Médio Diário</p>
-              <p className="text-lg font-bold text-green-600">R$ {selectedClient.custo_medio_diario.toFixed(2)}</p>
+              <p className="text-lg font-bold text-green-600">R$ {(selectedClient.custo_medio_diario || 0).toFixed(2)}</p>
             </div>
             <div>
               <p className="font-medium text-gray-700">Filial</p>
