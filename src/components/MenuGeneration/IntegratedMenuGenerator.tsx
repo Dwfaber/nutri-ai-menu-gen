@@ -80,41 +80,30 @@ const IntegratedMenuGenerator = () => {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Users className="w-5 h-5" />
-            Cliente Selecionado: {selectedClient.nome_empresa}
+            Cliente Selecionado: {selectedClient.nome_fantasia}
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-sm">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
             <div>
-              <p className="font-medium text-gray-700">Funcionários</p>
-              <p className="text-lg font-bold">{selectedClient.total_funcionarios}</p>
+              <p className="font-medium text-gray-700">Tipo de Refeição</p>
+              <p className="text-lg font-bold">{selectedClient.tipo_refeicao}</p>
             </div>
             <div>
-              <p className="font-medium text-gray-700">Custo Máximo/Refeição</p>
-              <p className="text-lg font-bold text-green-600">R$ {selectedClient.custo_maximo_refeicao.toFixed(2)}</p>
+              <p className="font-medium text-gray-700">Custo Médio Diário</p>
+              <p className="text-lg font-bold text-green-600">R$ {selectedClient.custo_medio_diario.toFixed(2)}</p>
             </div>
             <div>
-              <p className="font-medium text-gray-700">Refeições/Mês</p>
-              <p className="text-lg font-bold">{selectedClient.total_refeicoes_mes}</p>
-            </div>
-            <div>
-              <p className="font-medium text-gray-700">Periodicidade</p>
-              <p className="text-lg font-bold capitalize">{selectedClient.periodicidade}</p>
+              <p className="font-medium text-gray-700">Filial</p>
+              <p className="text-lg font-bold">{selectedClient.nome_filial || 'Principal'}</p>
             </div>
           </div>
           
-          {selectedClient.restricoes_alimentares && selectedClient.restricoes_alimentares.length > 0 && (
-            <div className="mt-4">
-              <p className="font-medium text-gray-700 mb-2">Restrições Alimentares:</p>
-              <div className="flex flex-wrap gap-2">
-                {selectedClient.restricoes_alimentares.map((restricao, index) => (
-                  <Badge key={index} variant="outline" className="text-orange-600 border-orange-600">
-                    {restricao}
-                  </Badge>
-                ))}
-              </div>
-            </div>
-          )}
+          <div className="mt-4 p-3 bg-amber-50 rounded-lg">
+            <p className="text-sm text-amber-700">
+              <strong>Nota:</strong> Para gerar cardápios, você precisará informar dados adicionais como número de funcionários e restrições alimentares.
+            </p>
+          </div>
         </CardContent>
       </Card>
 

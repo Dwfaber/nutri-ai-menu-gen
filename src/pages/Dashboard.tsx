@@ -37,7 +37,7 @@ const Dashboard = () => {
       <div>
         <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
         <p className="text-gray-600">
-          {selectedClient ? `Cliente: ${selectedClient.nome_empresa}` : 'Visão geral do sistema Nutr\'s IA'}
+          {selectedClient ? `Cliente: ${selectedClient.nome_fantasia}` : 'Visão geral do sistema Nutr\'s IA'}
         </p>
       </div>
 
@@ -47,26 +47,22 @@ const Dashboard = () => {
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-primary">
               <Building2 className="w-5 h-5" />
-              Filial Ativa: {selectedClient.nome_empresa}
+              Filial Ativa: {selectedClient.nome_fantasia}
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-sm">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
               <div>
-                <p className="font-medium text-gray-700">Funcionários</p>
-                <p className="text-lg font-bold text-primary">{selectedClient.total_funcionarios}</p>
+                <p className="font-medium text-gray-700">Filial ID</p>
+                <p className="text-lg font-bold text-primary">{selectedClient.filial_id}</p>
               </div>
               <div>
-                <p className="font-medium text-gray-700">Custo Máximo/Refeição</p>
-                <p className="text-lg font-bold text-green-600">R$ {selectedClient.custo_maximo_refeicao.toFixed(2)}</p>
+                <p className="font-medium text-gray-700">Custo Médio Diário</p>
+                <p className="text-lg font-bold text-green-600">R$ {selectedClient.custo_medio_diario.toFixed(2)}</p>
               </div>
               <div>
-                <p className="font-medium text-gray-700">Refeições/Mês</p>
-                <p className="text-lg font-bold text-blue-600">{selectedClient.total_refeicoes_mes}</p>
-              </div>
-              <div>
-                <p className="font-medium text-gray-700">Periodicidade</p>
-                <p className="text-lg font-bold text-purple-600 capitalize">{selectedClient.periodicidade}</p>
+                <p className="font-medium text-gray-700">Tipo Refeição</p>
+                <p className="text-lg font-bold text-blue-600">{selectedClient.tipo_refeicao}</p>
               </div>
             </div>
           </CardContent>

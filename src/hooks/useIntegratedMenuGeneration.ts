@@ -113,12 +113,12 @@ export const useIntegratedMenuGeneration = () => {
       // Prepare generation request
       const generationRequest: MenuGenerationRequest = {
         clientId: selectedClient.id,
-        clientName: selectedClient.nome_empresa,
+        clientName: selectedClient.nome_fantasia,
         weekPeriod,
-        maxCostPerMeal: selectedClient.custo_maximo_refeicao,
-        totalEmployees: selectedClient.total_funcionarios,
-        mealsPerMonth: selectedClient.total_refeicoes_mes,
-        dietaryRestrictions: selectedClient.restricoes_alimentares || [],
+        maxCostPerMeal: selectedClient.custo_medio_diario,
+        totalEmployees: 50, // Default value - should be collected from form
+        mealsPerMonth: 100, // Default value - should be calculated
+        dietaryRestrictions: [], // Should be collected from form
         preferences: preferences || [],
         marketProducts: marketProducts || []
       };
@@ -131,11 +131,11 @@ export const useIntegratedMenuGeneration = () => {
           action: 'generate_menu',
           client_data: {
             id: selectedClient.id,
-            name: selectedClient.nome_empresa,
-            max_cost_per_meal: selectedClient.custo_maximo_refeicao,
-            total_employees: selectedClient.total_funcionarios,
-            meals_per_month: selectedClient.total_refeicoes_mes,
-            dietary_restrictions: selectedClient.restricoes_alimentares || [],
+            name: selectedClient.nome_fantasia,
+            max_cost_per_meal: selectedClient.custo_medio_diario,
+            total_employees: 50, // Default value
+            meals_per_month: 100, // Default value
+            dietary_restrictions: [], // Default value
             preferences: preferences || []
           },
           week_period: weekPeriod,
@@ -155,7 +155,7 @@ export const useIntegratedMenuGeneration = () => {
       const menu: GeneratedMenu = {
         id: `menu_${Date.now()}`,
         clientId: selectedClient.id,
-        clientName: selectedClient.nome_empresa,
+        clientName: selectedClient.nome_fantasia,
         weekPeriod,
         status: 'pending_approval',
         totalCost: gptResponse.menu?.total_cost || 0,
@@ -168,7 +168,7 @@ export const useIntegratedMenuGeneration = () => {
 
       toast({
         title: "Cardápio Gerado com Sucesso",
-        description: `Cardápio para ${selectedClient.nome_empresa} criado e aguarda aprovação`,
+        description: `Cardápio para ${selectedClient.nome_fantasia} criado e aguarda aprovação`,
         variant: "default"
       });
 
@@ -248,7 +248,7 @@ export const useIntegratedMenuGeneration = () => {
       const { data: shoppingResponse, error: shoppingError } = await supabase.functions.invoke('generate-shopping-list', {
         body: {
           client_id: selectedClient.id,
-          client_name: selectedClient.nome_empresa,
+          client_name: selectedClient.nome_fantasia,
           menu_id: menu.id,
           recipes: menu.recipes,
           budget_predicted: menu.totalCost,

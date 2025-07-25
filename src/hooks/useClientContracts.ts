@@ -23,7 +23,9 @@ export const useClientContracts = () => {
   const calculateEstimatedMeals = (
     contract: ContractClient,
     startDate: string,
-    endDate: string
+    endDate: string,
+    employeeCount: number = 50,
+    periodicidade: string = 'diario'
   ): number => {
     const start = new Date(startDate);
     const end = new Date(endDate);
@@ -33,15 +35,15 @@ export const useClientContracts = () => {
     const workingDays = Math.ceil((days / 7) * 5);
     
     // Calculate based on contract frequency
-    switch (contract.periodicidade) {
+    switch (periodicidade) {
       case 'diario':
-        return workingDays * contract.total_funcionarios;
+        return workingDays * employeeCount;
       case 'semanal':
-        return Math.ceil(workingDays / 7) * contract.total_funcionarios;
+        return Math.ceil(workingDays / 7) * employeeCount;
       case 'mensal':
-        return Math.ceil(days / 30) * contract.total_refeicoes_mes;
+        return Math.ceil(days / 30) * employeeCount;
       default:
-        return workingDays * contract.total_funcionarios;
+        return workingDays * employeeCount;
     }
   };
 
@@ -52,24 +54,16 @@ export const useClientContracts = () => {
   } => {
     const warnings: string[] = [];
 
-    if (!contract.ativo) {
-      warnings.push('Contrato inativo');
+    if (contract.custo_medio_diario <= 0) {
+      warnings.push('Custo médio diário não definido');
     }
 
-    if (contract.custo_maximo_refeicao <= 0) {
-      warnings.push('Custo máximo por refeição não definido');
+    if (!contract.nome_fantasia) {
+      warnings.push('Nome da empresa não definido');
     }
 
-    if (contract.total_funcionarios <= 0) {
-      warnings.push('Número de funcionários não definido');
-    }
-
-    if (!contract.restricoes_alimentares || contract.restricoes_alimentares.length === 0) {
-      warnings.push('Restrições alimentares não definidas');
-    }
-
-    if (!contract.periodicidade) {
-      warnings.push('Periodicidade do contrato não definida');
+    if (!contract.tipo_refeicao) {
+      warnings.push('Tipo de refeição não definido');
     }
 
     return {
@@ -93,10 +87,10 @@ export const useClientContracts = () => {
 
     const periodText = `período de ${new Date(formData.period.start).toLocaleDateString()} a ${new Date(formData.period.end).toLocaleDateString()}`;
 
-    return `Cliente ${contract.nome_empresa} requer ${formData.estimatedMeals} refeições no ${periodText}. ` +
+    return `Cliente ${contract.nome_fantasia} requer ${formData.estimatedMeals} refeições no ${periodText}. ` +
            `Orçamento total de R$ ${formData.totalBudget.toFixed(2)} (R$ ${formData.budgetPerMeal.toFixed(2)} por refeição). ` +
            `Contrato com ${restrictionsText}. ${preferencesText}. ` +
-           `Periodicidade: ${contract.periodicidade}. ${contract.total_funcionarios} funcionários.`;
+           `Tipo de refeição: ${contract.tipo_refeicao}. Custo médio diário: R$ ${contract.custo_medio_diario.toFixed(2)}.`;
   };
 
   return {

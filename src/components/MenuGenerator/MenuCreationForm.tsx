@@ -74,8 +74,8 @@ export const MenuCreationForm = ({ onSubmit, onCancel, isGenerating, error }: Me
         ...prev,
         clientId,
         contractData: contract,
-        budgetPerMeal: contract.custo_maximo_refeicao,
-        restrictions: contract.restricoes_alimentares || []
+        budgetPerMeal: contract.custo_medio_diario,
+        restrictions: [] // Will be collected from form
       }));
     }
     
@@ -152,8 +152,8 @@ export const MenuCreationForm = ({ onSubmit, onCancel, isGenerating, error }: Me
                 <SelectContent>
                   {clients.map(client => (
                     <SelectItem key={client.id} value={client.id}>
-                      {client.nome_empresa} - R$ {client.custo_maximo_refeicao.toFixed(2)} 
-                      ({client.total_funcionarios} funcionários)
+                      {client.nome_fantasia} - R$ {client.custo_medio_diario.toFixed(2)}
+                      (Filial: {client.filial_id})
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -167,19 +167,19 @@ export const MenuCreationForm = ({ onSubmit, onCancel, isGenerating, error }: Me
                 <div className="grid grid-cols-2 gap-4 text-sm">
                   <div className="flex items-center space-x-2">
                     <Users className="w-4 h-4 text-gray-500" />
-                    <span>{formData.contractData.total_funcionarios} funcionários</span>
+                    <span>Filial: {formData.contractData.filial_id}</span>
                   </div>
                   <div className="flex items-center space-x-2">
                     <Clock className="w-4 h-4 text-gray-500" />
-                    <span>Periodicidade: {formData.contractData.periodicidade}</span>
+                    <span>Tipo: {formData.contractData.tipo_refeicao}</span>
                   </div>
                   <div className="flex items-center space-x-2">
                     <DollarSign className="w-4 h-4 text-gray-500" />
-                    <span>Custo máximo: R$ {formData.contractData.custo_maximo_refeicao.toFixed(2)}</span>
+                    <span>Custo médio diário: R$ {formData.contractData.custo_medio_diario.toFixed(2)}</span>
                   </div>
                   <div className="flex items-center space-x-2">
                     <CheckCircle className="w-4 h-4 text-green-500" />
-                    <span>Status: {formData.contractData.ativo ? 'Ativo' : 'Inativo'}</span>
+                    <span>Validação: {formData.contractData.usa_validacao_media ? 'Ativa' : 'Inativa'}</span>
                   </div>
                 </div>
               </div>

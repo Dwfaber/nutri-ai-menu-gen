@@ -148,7 +148,7 @@ const Compras = () => {
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Sistema de Compras</h1>
           <p className="text-gray-600">
-            {selectedClient ? `Cliente: ${selectedClient.nome_empresa}` : 'Gerencie listas de compras com otimização inteligente'}
+            {selectedClient ? `Cliente: ${selectedClient.nome_fantasia}` : 'Gerencie listas de compras com otimização inteligente'}
           </p>
         </div>
         <Button className="bg-green-600 hover:bg-green-700" disabled>

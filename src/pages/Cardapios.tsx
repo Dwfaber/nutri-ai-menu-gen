@@ -61,7 +61,7 @@ const Cardapios = () => {
       return;
     }
 
-    await createFromMenu(menu.id, client.nome_empresa, menu.totalCost);
+    await createFromMenu(menu.id, client.nome_fantasia, menu.totalCost);
     setSelectedMenuForShopping(null);
   };
 
@@ -69,7 +69,7 @@ const Cardapios = () => {
     const client = clients.find(c => c.id === menu.clientId);
     if (!client) return 'unknown';
     
-    const budgetPercentage = (menu.totalCost / client.custo_maximo_refeicao) * 100;
+    const budgetPercentage = (menu.totalCost / client.custo_medio_diario) * 100;
     
     if (budgetPercentage <= 90) return 'good';
     if (budgetPercentage <= 100) return 'warning';
