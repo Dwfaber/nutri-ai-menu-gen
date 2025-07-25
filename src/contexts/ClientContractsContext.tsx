@@ -95,6 +95,8 @@ export const ClientContractsProvider = ({ children }: { children: ReactNode }) =
         updated_at: item.updated_at
       }));
 
+      console.log('Clientes carregados:', transformedData.length);
+      console.log('Primeiros 3 clientes:', transformedData.slice(0, 3));
       setClients(transformedData);
 
       // Load cost details for each client

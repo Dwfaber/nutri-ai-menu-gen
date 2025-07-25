@@ -26,6 +26,11 @@ const Cardapios = () => {
   const { createFromMenu, isLoading: isCreatingList } = useShoppingList();
   const { clients, generateAIContextSummary } = useClientContracts();
 
+  console.log('Estado dos clientes na página Cardapios:', { 
+    clientsLength: clients.length, 
+    clients: clients.slice(0, 2) 
+  });
+
   const handleCreateMenu = async (formData: ContractFormData) => {
     if (!formData.contractData) return;
     
