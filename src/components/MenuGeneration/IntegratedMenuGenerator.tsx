@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { DateRangePicker } from '@/components/ui/date-range-picker';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
@@ -120,11 +121,10 @@ const IntegratedMenuGenerator = () => {
           <CardContent className="space-y-4">
             <div>
               <Label htmlFor="weekPeriod">Período do Cardápio *</Label>
-              <Input
-                id="weekPeriod"
-                placeholder="Ex: Semana de 27/01 a 31/01/2025"
+              <DateRangePicker
                 value={weekPeriod}
-                onChange={(e) => setWeekPeriod(e.target.value)}
+                onChange={setWeekPeriod}
+                placeholder="Ex: Semana de 27/01 a 31/01/2025"
               />
             </div>
             
