@@ -9,6 +9,7 @@ import { Separator } from '@/components/ui/separator';
 import { ChefHat, Clock, DollarSign, Users, CheckCircle, XCircle, ShoppingCart, Calendar } from 'lucide-react';
 import { useIntegratedMenuGeneration } from '@/hooks/useIntegratedMenuGeneration';
 import { useSelectedClient } from '@/contexts/SelectedClientContext';
+import MenuTable from '@/components/MenuTable/MenuTable';
 
 const IntegratedMenuGenerator = () => {
   const [weekPeriod, setWeekPeriod] = useState('');
@@ -206,26 +207,23 @@ const IntegratedMenuGenerator = () => {
               </div>
             </div>
 
-            {/* Recipes List */}
-            <div>
-              <h4 className="font-medium text-gray-900 mb-3">Receitas do Cardápio:</h4>
-              <div className="space-y-2">
-                {generatedMenu.recipes.map((recipe, index) => (
-                  <div key={recipe.id || index} className="flex justify-between items-center p-3 bg-white border rounded-lg">
-                    <div>
-                      <p className="font-medium">{recipe.name}</p>
-                      <p className="text-sm text-gray-600">
-                        {recipe.day} • {recipe.mealType} • {recipe.servings} porções
-                      </p>
-                    </div>
-                    <div className="text-right">
-                      <p className="font-medium">R$ {recipe.totalCost.toFixed(2)}</p>
-                      <p className="text-sm text-gray-600">R$ {recipe.costPerServing.toFixed(2)}/porção</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
+            {/* Menu Table */}
+            <MenuTable
+              title="CARDÁPIO"
+              weekPeriod={generatedMenu.weekPeriod}
+              totalCost={generatedMenu.totalCost}
+              recipes={generatedMenu.recipes.map(recipe => ({
+                id: recipe.id || '',
+                name: recipe.name,
+                category: recipe.mealType || 'PP1',
+                day: recipe.day,
+                cost: recipe.totalCost,
+                servings: recipe.servings
+              }))}
+              onEdit={(recipeId) => console.log('Edit recipe:', recipeId)}
+              onExport={() => console.log('Export menu')}
+              onCopy={() => console.log('Copy menu')}
+            />
 
             <Separator />
 

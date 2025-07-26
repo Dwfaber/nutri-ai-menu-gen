@@ -8,6 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useMenuAI } from '../hooks/useMenuAI';
 import { useShoppingList } from '../hooks/useShoppingList';
 import { useClientContracts, ContractFormData } from '../hooks/useClientContracts';
+import { useSelectedClient } from '@/contexts/SelectedClientContext';
 import { Client, Menu } from '../types/client';
 import SyncMonitor from '../components/SyncMonitor/SyncMonitor';
 import NLPInput from '../components/MenuGenerator/NLPInput';
@@ -25,11 +26,7 @@ const Cardapios = () => {
   const { generateMenu, editMenuWithNLP, isGenerating, error } = useMenuAI();
   const { createFromMenu, isLoading: isCreatingList } = useShoppingList();
   const { clients, generateAIContextSummary } = useClientContracts();
-
-  console.log('Estado dos clientes na página Cardapios:', { 
-    clientsLength: clients.length, 
-    clients: clients.slice(0, 2) 
-  });
+  const { selectedClient } = useSelectedClient();
 
   const handleCreateMenu = async (formData: ContractFormData) => {
     if (!formData.contractData) return;
@@ -104,7 +101,7 @@ const Cardapios = () => {
         <Button 
           onClick={() => setShowCreateForm(true)}
           className="bg-green-600 hover:bg-green-700"
-          disabled={clients.length === 0}
+          disabled={!selectedClient}
         >
           <Plus className="w-4 h-4 mr-2" />
           Novo Cardápio
@@ -138,7 +135,7 @@ const Cardapios = () => {
             </Button>
           </div>
 
-          {showCreateForm && clients.length > 0 && (
+          {showCreateForm && selectedClient && (
             <MenuCreationForm
               onSubmit={handleCreateMenu}
               onCancel={() => setShowCreateForm(false)}
@@ -194,14 +191,14 @@ const Cardapios = () => {
                 <Database className="w-12 h-12 mx-auto mb-4 text-gray-300" />
                 <p className="text-lg font-medium mb-2">Nenhum cardápio encontrado</p>
                 <p className="text-sm mb-4">
-                  {clients.length === 0 
-                    ? 'Sincronize os dados do sistema legado para começar' 
+                  {!selectedClient 
+                    ? 'Selecione um cliente para começar a gerar cardápios' 
                     : 'Crie seu primeiro cardápio com IA'
                   }
                 </p>
-                {clients.length === 0 && (
-                  <Button variant="outline" onClick={() => window.location.hash = '#sync'}>
-                    Ir para Sincronização
+                {!selectedClient && (
+                  <Button variant="outline" onClick={() => window.location.pathname = '/'}>
+                    Selecionar Cliente
                   </Button>
                 )}
               </CardContent>
