@@ -25,9 +25,9 @@ serve(async (req) => {
 
     console.log(`GPT Assistant action: ${action}`);
 
-    if (action === 'generateMenu') {
+    if (action === 'generateMenu' || action === 'generate_menu') {
       return await generateMenuWithAssistant(supabaseClient, clientId, budget, restrictions, preferences);
-    } else if (action === 'editMenu') {
+    } else if (action === 'editMenu' || action === 'edit_menu') {
       return await editMenuWithAssistant(supabaseClient, menuId, command);
     } else {
       throw new Error('Invalid action');
