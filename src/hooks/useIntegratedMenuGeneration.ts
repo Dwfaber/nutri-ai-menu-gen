@@ -122,7 +122,7 @@ export const useIntegratedMenuGeneration = () => {
         preferences: preferences || [],
         marketProducts: (marketProducts || []).map(p => ({ 
           ...p, 
-          id: `temp-${p.solicitacao_produto_listagem_id}`,
+          id: p.solicitacao_produto_listagem_id.toString(),
           descricao: p.descricao || '',
           unidade: p.unidade || '',
           preco: p.preco || 0

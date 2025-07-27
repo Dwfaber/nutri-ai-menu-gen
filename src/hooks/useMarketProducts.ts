@@ -3,8 +3,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 
 export interface MarketProduct {
-  id: string; // Now using produtos_base.id (UUID) as primary identifier
-  solicitacao_produto_listagem_id: number;
+  id: string; // Primary identifier - using solicitacao_produto_listagem_id as string
+  solicitacao_produto_listagem_id: number; // Original market listing ID (e.g., 4450 for abacate)
   solicitacao_id?: number;
   categoria_descricao?: string;
   grupo?: string;
@@ -17,15 +17,15 @@ export interface MarketProduct {
   descricao?: string;
   unidade?: string;
   preco_compra?: number;
-  produto_base_id?: number;
-  produto_base_uuid?: string; // produtos_base.id reference
+  produto_base_id?: number; // Reference to produtos_base.produto_base_id (e.g., 1 for abacate)
+  produto_base_uuid?: string; // produtos_base.id UUID reference
   quantidade_embalagem?: number;
   apenas_valor_inteiro_sim_nao?: boolean;
   em_promocao_sim_nao?: boolean;
   produto_base_quantidade_embalagem?: number;
   criado_em?: string;
   produtos_base?: {
-    id: string;
+    id: string; // UUID from produtos_base
     descricao: string;
     unidade: string;
   };
@@ -72,12 +72,12 @@ export const useMarketProducts = () => {
         (produtosBaseData || []).map(pb => [pb.produto_base_id, pb])
       );
 
-      // Transform data to include produtos_base.id as the primary ID
+      // Transform data to use solicitacao_produto_listagem_id as primary ID
       const productsData = (data || []).map(product => {
         const produtoBase = produtosBaseMap.get(product.produto_base_id);
         return {
           ...product,
-          id: produtoBase?.id || `temp-${product.solicitacao_produto_listagem_id}`,
+          id: product.solicitacao_produto_listagem_id.toString(), // Use market listing ID as primary ID
           produto_base_uuid: produtoBase?.id,
           descricao: product.descricao || produtoBase?.descricao || '',
           unidade: product.unidade || produtoBase?.unidade || '',
@@ -157,10 +157,12 @@ export const useMarketProducts = () => {
   };
 
   const getProductById = (id: string | number) => {
-    if (typeof id === 'string') {
-      return products.find(p => p.id === id || p.produto_base_uuid === id);
-    }
-    return products.find(p => p.solicitacao_produto_listagem_id === id);
+    const searchId = id.toString();
+    return products.find(p => 
+      p.id === searchId || 
+      p.solicitacao_produto_listagem_id.toString() === searchId ||
+      p.produto_base_uuid === searchId
+    );
   };
 
   const getProductStats = () => {
