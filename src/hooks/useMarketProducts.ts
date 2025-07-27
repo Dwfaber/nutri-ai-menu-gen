@@ -3,6 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 
 export interface MarketProduct {
+  id: string; // Now using produtos_base.id (UUID) as primary identifier
   solicitacao_produto_listagem_id: number;
   solicitacao_id?: number;
   categoria_descricao?: string;
@@ -17,11 +18,17 @@ export interface MarketProduct {
   unidade?: string;
   preco_compra?: number;
   produto_base_id?: number;
+  produto_base_uuid?: string; // produtos_base.id reference
   quantidade_embalagem?: number;
   apenas_valor_inteiro_sim_nao?: boolean;
   em_promocao_sim_nao?: boolean;
   produto_base_quantidade_embalagem?: number;
   criado_em?: string;
+  produtos_base?: {
+    id: string;
+    descricao: string;
+    unidade: string;
+  };
 }
 
 export interface MarketFilters {
@@ -45,6 +52,7 @@ export const useMarketProducts = () => {
       setIsLoading(true);
       setError(null);
 
+      // First get data from co_solicitacao_produto_listagem
       const { data, error: fetchError } = await supabase
         .from('co_solicitacao_produto_listagem')
         .select('*')
@@ -54,7 +62,33 @@ export const useMarketProducts = () => {
         throw fetchError;
       }
 
-      const productsData = data || [];
+      // Get produtos_base data for mapping
+      const { data: produtosBaseData } = await supabase
+        .from('produtos_base')
+        .select('id, produto_base_id, descricao, unidade');
+
+      // Create a map for easier lookup
+      const produtosBaseMap = new Map(
+        (produtosBaseData || []).map(pb => [pb.produto_base_id, pb])
+      );
+
+      // Transform data to include produtos_base.id as the primary ID
+      const productsData = (data || []).map(product => {
+        const produtoBase = produtosBaseMap.get(product.produto_base_id);
+        return {
+          ...product,
+          id: produtoBase?.id || `temp-${product.solicitacao_produto_listagem_id}`,
+          produto_base_uuid: produtoBase?.id,
+          descricao: product.descricao || produtoBase?.descricao || '',
+          unidade: product.unidade || produtoBase?.unidade || '',
+          produtos_base: produtoBase ? {
+            id: produtoBase.id,
+            descricao: produtoBase.descricao || '',
+            unidade: produtoBase.unidade || ''
+          } : undefined
+        };
+      });
+      
       setProducts(productsData);
       
       // Extract unique categories
@@ -122,7 +156,10 @@ export const useMarketProducts = () => {
     return products.filter(p => p.em_promocao_sim_nao === true);
   };
 
-  const getProductById = (id: number) => {
+  const getProductById = (id: string | number) => {
+    if (typeof id === 'string') {
+      return products.find(p => p.id === id || p.produto_base_uuid === id);
+    }
     return products.find(p => p.solicitacao_produto_listagem_id === id);
   };
 

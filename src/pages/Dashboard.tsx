@@ -4,6 +4,7 @@ import { Users, ChefHat, DollarSign, TrendingUp, Clock, ShoppingCart, Building2 
 import { useDashboardData } from '@/hooks/useDashboardData';
 import StatsCard from '@/components/Dashboard/StatsCard';
 import { useSelectedClient } from '@/contexts/SelectedClientContext';
+import ClientSelectorDropdown from '@/components/Dashboard/ClientSelectorDropdown';
 
 const Dashboard = () => {
   const { metrics, isLoading, error, refetch } = useDashboardData();
@@ -34,11 +35,16 @@ const Dashboard = () => {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
-        <p className="text-gray-600">
-          {selectedClient ? `Cliente: ${selectedClient.nome_fantasia}` : 'Visão geral do sistema Nutr\'s IA'}
-        </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
+          <p className="text-gray-600">
+            {selectedClient ? `Cliente: ${selectedClient.nome_fantasia}` : 'Visão geral do sistema Nutr\'s IA'}
+          </p>
+        </div>
+        <div className="w-80">
+          <ClientSelectorDropdown />
+        </div>
       </div>
 
       {/* Client Information Card */}

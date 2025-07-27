@@ -10,11 +10,7 @@ const Index = () => {
 
   // Redirect to dashboard after a brief moment to show the landing page
   useEffect(() => {
-    const timer = setTimeout(() => {
-      navigate('/');
-    }, 3000);
-
-    return () => clearTimeout(timer);
+    // Don't auto-redirect, let user choose when to proceed
   }, [navigate]);
 
   return (

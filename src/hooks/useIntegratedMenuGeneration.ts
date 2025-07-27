@@ -120,7 +120,13 @@ export const useIntegratedMenuGeneration = () => {
         mealsPerMonth: 100, // Default value - should be calculated
         dietaryRestrictions: [], // Should be collected from form
         preferences: preferences || [],
-        marketProducts: marketProducts || []
+        marketProducts: (marketProducts || []).map(p => ({ 
+          ...p, 
+          id: `temp-${p.solicitacao_produto_listagem_id}`,
+          descricao: p.descricao || '',
+          unidade: p.unidade || '',
+          preco: p.preco || 0
+        }))
       };
 
       console.log('Generating menu with request:', generationRequest);

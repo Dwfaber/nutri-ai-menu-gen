@@ -38,7 +38,6 @@ const App = () => {
             <Sonner />
             <BrowserRouter>
               <Routes>
-                <Route path="/welcome" element={<Index />} />
                 <Route path="/*" element={
                   <ClientSelectionWrapper>
                     <div className="flex min-h-screen w-full bg-gray-50">
@@ -51,6 +50,7 @@ const App = () => {
                           <Route path="/relatorios" element={<Relatorios />} />
                           <Route path="/arquitetura" element={<SystemArchitecture />} />
                           <Route path="/configuracoes" element={<Dashboard />} />
+                          <Route path="/welcome" element={<Index />} />
                           <Route path="*" element={<NotFound />} />
                         </Routes>
                       </main>
