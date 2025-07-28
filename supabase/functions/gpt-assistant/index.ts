@@ -251,27 +251,72 @@ Retorne em JSON com esta estrutura:
       };
     }
 
-    // Create menu object
+    // Convert menuItems to recipes format expected by frontend
+    const recipes = menuItems.map((item: any, index: number) => ({
+      id: `recipe_${index + 1}`,
+      name: item.name || `Receita ${index + 1}`,
+      description: item.description || 'Prato nutritivo e saboroso',
+      category: item.category || 'Principal',
+      costPerServing: item.cost || 0,
+      prepTime: item.prepTime || 30,
+      difficulty: item.difficulty || 'Médio',
+      nutritionalInfo: {
+        calories: item.nutritionalInfo?.calories || 450,
+        protein: item.nutritionalInfo?.protein || 25,
+        carbs: item.nutritionalInfo?.carbs || 45,
+        fat: item.nutritionalInfo?.fat || 15,
+        fiber: item.nutritionalInfo?.fiber || 8
+      },
+      ingredients: item.ingredients || [
+        { name: 'Ingrediente principal', quantity: 200, unit: 'g' },
+        { name: 'Temperos', quantity: 10, unit: 'g' }
+      ],
+      instructions: item.instructions || 'Seguir receita padrão'
+    }));
+
+    // Create menu object in the format expected by frontend
     const menu = {
       id: Date.now().toString(),
-      clientId,
-      name: `Cardápio ${clientData?.nome_empresa || 'Empresa'} - ${new Date().toLocaleDateString()}`,
-      week: new Date().toISOString().split('T')[0],
-      items: menuItems,
-      summary,
-      totalCost: summary.total_cost || 0,
-      createdAt: new Date().toISOString(),
+      total_cost: summary.total_cost || 0,
+      cost_per_meal: summary.average_cost_per_person || 0,
+      within_budget: summary.within_budget || true,
+      recipes: recipes,
+      summary: {
+        total_recipes: recipes.length,
+        total_cost: summary.total_cost || 0,
+        average_cost_per_meal: summary.average_cost_per_person || 0,
+        within_budget: summary.within_budget || true,
+        promotions_used: summary.promotions_used || 0
+      },
+      // Three different versions for different audiences
       versions: {
-        nutritionist: menuItems,
-        kitchen: menuItems.map((item: any) => ({ 
-          ...item, 
-          name: `${item.name} (Tempo: ${item.prepTime || 20}min)`,
-          instructions: item.instructions || 'Seguir receita padrão'
+        nutritionist: recipes.map(recipe => ({
+          ...recipe,
+          nutritionalInfo: recipe.nutritionalInfo,
+          costPerServing: recipe.costPerServing,
+          allergens: recipe.allergens || [],
+          substitutions: recipe.substitutions || []
         })),
-        client: menuItems.map((item: any) => ({ 
-          ...item, 
-          name: item.name.split(' ').slice(0, 2).join(' ') + ' Especial',
-          description: item.description || 'Prato saboroso e nutritivo'
+        kitchen: recipes.map(recipe => ({
+          ...recipe,
+          name: `${recipe.name} (Tempo: ${recipe.prepTime}min)`,
+          prepTime: recipe.prepTime,
+          instructions: recipe.instructions,
+          ingredients: recipe.ingredients,
+          difficulty: recipe.difficulty,
+          servings: recipe.servings || totalFuncionarios
+        })),
+        client: recipes.map(recipe => ({
+          ...recipe,
+          name: recipe.name,
+          description: recipe.description,
+          category: recipe.category,
+          // Remove cost and detailed info for client version
+          costPerServing: undefined,
+          instructions: undefined,
+          nutritionalInfo: {
+            calories: recipe.nutritionalInfo.calories
+          }
         }))
       }
     };
