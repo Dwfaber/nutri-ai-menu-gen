@@ -25,13 +25,10 @@ const IntegratedMenuGenerator = () => {
     generateMenu,
     approveMenu,
     rejectMenu,
-    generateShoppingListFromMenu
+    generateShoppingListFromMenu,
+    clearGeneratedMenu
   } = useIntegratedMenuGeneration();
 
-  const clearGeneratedMenu = () => {
-    // This would typically call a reset function from the hook
-    window.location.reload(); // Simple solution for now
-  };
 
   const handleGenerateMenu = async () => {
     if (!weekPeriod.trim()) {
@@ -198,7 +195,7 @@ const IntegratedMenuGenerator = () => {
               <div className="text-center">
                 <Users className="w-8 h-8 mx-auto mb-2 text-blue-600" />
                 <p className="font-medium text-gray-700">Custo por Refeição</p>
-                <p className="text-xl font-bold text-blue-600">R$ {generatedMenu.estimatedCostPerMeal.toFixed(2)}</p>
+                <p className="text-xl font-bold text-blue-600">R$ {generatedMenu.costPerMeal.toFixed(2)}</p>
               </div>
               <div className="text-center">
                 <ChefHat className="w-8 h-8 mx-auto mb-2 text-purple-600" />
@@ -216,17 +213,14 @@ const IntegratedMenuGenerator = () => {
                   title="CARDÁPIO"
                   weekPeriod={generatedMenu.weekPeriod}
                   totalCost={generatedMenu.totalCost}
-                  recipes={generatedMenu.recipes.map((recipe: any, index) => {
-                    console.log(`Recipe ${index}:`, recipe);
-                    return {
-                      id: recipe.id || `recipe-${index}`,
-                      name: recipe.name || 'Receita sem nome',
-                      category: recipe.category || 'PP1',
-                      day: ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta'][index % 5] || '',
-                      cost: (recipe.costPerServing || 0) / 100, // API retorna em centavos
-                      servings: 50 // Valor padrão baseado no número de funcionários
-                    };
-                  })}
+                  recipes={generatedMenu.recipes.map((recipe: any, index) => ({
+                    id: recipe.id || `recipe-${index}`,
+                    name: recipe.name || 'Receita sem nome',
+                    category: recipe.category || 'PP1',
+                    day: recipe.day || '',
+                    cost: recipe.cost || 0,
+                    servings: recipe.servings || 50
+                  }))}
                   onEdit={(recipeId) => console.log('Edit recipe:', recipeId)}
                   onExport={() => console.log('Export menu')}
                   onCopy={() => console.log('Copy menu')}
@@ -327,7 +321,7 @@ const IntegratedMenuGenerator = () => {
             {generatedMenu.status === 'rejected' && (
               <div className="p-4 bg-red-50 rounded-lg">
                 <h4 className="font-medium text-red-900">Cardápio Rejeitado</h4>
-                <p className="text-sm text-red-700 mt-1">{generatedMenu.notes}</p>
+                <p className="text-sm text-red-700 mt-1">{generatedMenu.rejectedReason}</p>
                 <Button 
                   onClick={clearGeneratedMenu}
                   variant="outline"

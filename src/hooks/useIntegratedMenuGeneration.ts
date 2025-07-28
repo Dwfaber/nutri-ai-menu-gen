@@ -1,10 +1,9 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useSelectedClient } from '@/contexts/SelectedClientContext';
 import { useClientContractsContext } from '@/contexts/ClientContractsContext';
 import { MarketProduct } from './useMarketProducts';
-import { getDayOfWeekCost } from '@/types/clientCosts';
 
 export interface MenuGenerationRequest {
   clientId: string;
@@ -25,49 +24,161 @@ export interface GeneratedMenu {
   weekPeriod: string;
   status: 'draft' | 'pending_approval' | 'approved' | 'rejected';
   totalCost: number;
-  estimatedCostPerMeal: number;
+  costPerMeal: number;
+  totalRecipes: number;
   recipes: MenuRecipe[];
   createdAt: string;
   approvedAt?: string;
   approvedBy?: string;
-  notes?: string;
+  rejectedReason?: string;
 }
 
 export interface MenuRecipe {
   id: string;
   name: string;
   day: string;
-  mealType: 'lunch' | 'dinner' | 'snack';
-  ingredients: MenuIngredient[];
+  category: string;
+  cost: number;
   servings: number;
-  costPerServing: number;
-  totalCost: number;
-  nutritionalInfo?: {
-    calories: number;
-    protein: number;
-    carbs: number;
-    fat: number;
-  };
-}
-
-export interface MenuIngredient {
-  id: string;
-  name: string;
-  quantity: number;
-  unit: string;
-  costPerUnit: number;
-  totalCost: number;
-  productId?: number;
-  isPromotional?: boolean;
+  ingredients?: any[];
+  nutritionalInfo?: any;
 }
 
 export const useIntegratedMenuGeneration = () => {
   const [isGenerating, setIsGenerating] = useState(false);
   const [generatedMenu, setGeneratedMenu] = useState<GeneratedMenu | null>(null);
+  const [savedMenus, setSavedMenus] = useState<GeneratedMenu[]>([]);
   const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
   const { selectedClient } = useSelectedClient();
   const { getClientWithCosts } = useClientContractsContext();
+
+  // Função para mapear categorias da API para tipos de refeição
+  const mapCategoryToMealType = (category: string): string => {
+    const categoryMap: { [key: string]: string } = {
+      'protein': 'PP1',
+      'carb': 'ACOMPANHAMENTO',
+      'vegetable': 'SALADA 1',
+      'fruit': 'SOBREMESA',
+      'dairy': 'BEBIDA',
+      'other': 'DIVERSOS'
+    };
+    return categoryMap[category] || 'PP1';
+  };
+
+  // Função para distribuir receitas pelos dias da semana
+  const distributeRecipesByDay = (recipes: any[]): MenuRecipe[] => {
+    const days = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta'];
+    
+    return recipes.map((recipe: any, index: number) => {
+      const dayIndex = index % days.length;
+      
+      return {
+        id: recipe.id || `recipe-${index}`,
+        name: recipe.name || 'Receita sem nome',
+        category: mapCategoryToMealType(recipe.category) || 'PP1',
+        day: days[dayIndex],
+        cost: typeof recipe.costPerServing === 'number' ? recipe.costPerServing / 100 : (recipe.cost || 0),
+        servings: recipe.servings || 50,
+        ingredients: recipe.ingredients || [],
+        nutritionalInfo: recipe.nutritionalInfo || {}
+      };
+    });
+  };
+
+  // Carregar cardápios salvos
+  const loadSavedMenus = async () => {
+    try {
+      const { data: menus, error: menusError } = await supabase
+        .from('generated_menus')
+        .select(`
+          *,
+          menu_recipes (*)
+        `)
+        .order('created_at', { ascending: false });
+
+      if (menusError) throw menusError;
+
+      const formattedMenus = menus?.map(menu => ({
+        id: menu.id,
+        clientId: menu.client_id,
+        clientName: menu.client_name,
+        weekPeriod: menu.week_period,
+        totalCost: menu.total_cost,
+        costPerMeal: menu.cost_per_meal,
+        totalRecipes: menu.total_recipes,
+        status: menu.status as 'pending_approval' | 'approved' | 'rejected',
+        approvedBy: menu.approved_by,
+        rejectedReason: menu.rejected_reason,
+        recipes: menu.menu_recipes.map((recipe: any) => ({
+          id: recipe.recipe_id,
+          name: recipe.name,
+          category: recipe.category,
+          day: recipe.day,
+          cost: recipe.cost,
+          servings: recipe.servings,
+          ingredients: recipe.ingredients || [],
+          nutritionalInfo: recipe.nutritional_info || {}
+        })),
+        createdAt: menu.created_at
+      })) || [];
+
+      setSavedMenus(formattedMenus);
+    } catch (error) {
+      console.error('Erro ao carregar cardápios salvos:', error);
+    }
+  };
+
+  // Salvar cardápio no banco
+  const saveMenuToDatabase = async (menu: GeneratedMenu): Promise<string | null> => {
+    try {
+      // Salvar cardápio principal
+      const { data: savedMenu, error: menuError } = await supabase
+        .from('generated_menus')
+        .insert({
+          client_id: menu.clientId,
+          client_name: menu.clientName,
+          week_period: menu.weekPeriod,
+          total_cost: menu.totalCost,
+          cost_per_meal: menu.costPerMeal,
+          total_recipes: menu.totalRecipes,
+          status: menu.status
+        })
+        .select('id')
+        .single();
+
+      if (menuError) throw menuError;
+
+      // Salvar receitas
+      const recipesToSave = menu.recipes.map(recipe => ({
+        menu_id: savedMenu.id,
+        recipe_id: recipe.id,
+        name: recipe.name,
+        category: recipe.category,
+        day: recipe.day,
+        cost: recipe.cost,
+        servings: recipe.servings,
+        ingredients: recipe.ingredients || [],
+        nutritional_info: recipe.nutritionalInfo || {}
+      }));
+
+      const { error: recipesError } = await supabase
+        .from('menu_recipes')
+        .insert(recipesToSave);
+
+      if (recipesError) throw recipesError;
+
+      return savedMenu.id;
+    } catch (error) {
+      console.error('Erro ao salvar cardápio:', error);
+      return null;
+    }
+  };
+
+  // Carregar cardápios ao montar o componente
+  useEffect(() => {
+    loadSavedMenus();
+  }, []);
 
   const generateMenu = async (
     weekPeriod: string,
@@ -90,7 +201,8 @@ export const useIntegratedMenuGeneration = () => {
       const { data: marketProducts, error: marketError } = await supabase
         .from('co_solicitacao_produto_listagem')
         .select('*')
-        .eq('em_promocao_sim_nao', false); // Get all available products
+        .eq('em_promocao_sim_nao', false)
+        .limit(100);
 
       if (marketError) {
         throw new Error(`Erro ao buscar produtos do mercado: ${marketError.message}`);
@@ -99,7 +211,6 @@ export const useIntegratedMenuGeneration = () => {
       // Get client costs and cost details
       const clientWithCosts = getClientWithCosts(selectedClient.id);
       
-      // Enhance cost information with daily breakdown
       let enhancedCostData = null;
       if (clientWithCosts) {
         enhancedCostData = {
@@ -110,26 +221,7 @@ export const useIntegratedMenuGeneration = () => {
         };
       }
 
-      // Prepare generation request
-      const generationRequest: MenuGenerationRequest = {
-        clientId: selectedClient.id,
-        clientName: selectedClient.nome_fantasia,
-        weekPeriod,
-        maxCostPerMeal: selectedClient.custo_medio_diario,
-        totalEmployees: 50, // Default value - should be collected from form
-        mealsPerMonth: 100, // Default value - should be calculated
-        dietaryRestrictions: [], // Should be collected from form
-        preferences: preferences || [],
-        marketProducts: (marketProducts || []).map(p => ({ 
-          ...p, 
-          id: p.produto_base_id?.toString() || `temp-${p.solicitacao_produto_listagem_id}`,
-          descricao: p.descricao || '',
-          unidade: p.unidade || '',
-          preco: p.preco || 0
-        }))
-      };
-
-      console.log('Generating menu with request:', generationRequest);
+      console.log('Generating menu with request for client:', selectedClient.nome_fantasia);
 
       // Call GPT Assistant for menu generation
       const { data: gptResponse, error: gptError } = await supabase.functions.invoke('gpt-assistant', {
@@ -138,14 +230,14 @@ export const useIntegratedMenuGeneration = () => {
           client_data: {
             id: selectedClient.id,
             name: selectedClient.nome_fantasia,
-            max_cost_per_meal: selectedClient.custo_medio_diario,
-            total_employees: 50, // Default value
-            meals_per_month: 100, // Default value
-            dietary_restrictions: [], // Default value
+            max_cost_per_meal: selectedClient.custo_medio_diario || 7.30,
+            total_employees: 50,
+            meals_per_month: 100,
+            dietary_restrictions: [],
             preferences: preferences || []
           },
           week_period: weekPeriod,
-          market_products: (marketProducts || []).slice(0, 100), // Limit for API
+          market_products: (marketProducts || []).slice(0, 50),
           enhanced_cost_data: enhancedCostData
         }
       });
@@ -154,9 +246,18 @@ export const useIntegratedMenuGeneration = () => {
         throw new Error(`Erro na geração do cardápio: ${gptError.message}`);
       }
 
+      console.log('GPT Response received:', gptResponse);
+
       if (!gptResponse?.success) {
         throw new Error(gptResponse?.error || 'Erro desconhecido na geração do cardápio');
       }
+
+      // Processar resposta da API
+      const apiRecipes = gptResponse.menu?.recipes || [];
+      const processedRecipes = distributeRecipesByDay(apiRecipes);
+      
+      const totalCost = processedRecipes.reduce((sum, recipe) => sum + recipe.cost, 0);
+      const costPerMeal = totalCost / processedRecipes.length;
 
       const menu: GeneratedMenu = {
         id: `menu_${Date.now()}`,
@@ -164,17 +265,28 @@ export const useIntegratedMenuGeneration = () => {
         clientName: selectedClient.nome_fantasia,
         weekPeriod,
         status: 'pending_approval',
-        totalCost: gptResponse.menu?.total_cost || 0,
-        estimatedCostPerMeal: gptResponse.menu?.cost_per_meal || 0,
-        recipes: gptResponse.menu?.recipes || [],
+        totalCost,
+        costPerMeal,
+        totalRecipes: processedRecipes.length,
+        recipes: processedRecipes,
         createdAt: new Date().toISOString()
       };
+
+      console.log('Processed menu:', menu);
+
+      // Salvar no banco automaticamente
+      const savedId = await saveMenuToDatabase(menu);
+      if (savedId) {
+        menu.id = savedId;
+        // Recarregar lista de cardápios salvos
+        await loadSavedMenus();
+      }
 
       setGeneratedMenu(menu);
 
       toast({
-        title: "Cardápio Gerado com Sucesso",
-        description: `Cardápio para ${selectedClient.nome_fantasia} criado e aguarda aprovação`,
+        title: "Cardápio Gerado e Salvo",
+        description: `Cardápio para ${selectedClient.nome_fantasia} criado com sucesso`,
         variant: "default"
       });
 
@@ -195,24 +307,36 @@ export const useIntegratedMenuGeneration = () => {
 
   const approveMenu = async (menuId: string, approvedBy: string): Promise<boolean> => {
     try {
+      // Atualizar no banco
+      const { error } = await supabase
+        .from('generated_menus')
+        .update({
+          status: 'approved',
+          approved_by: approvedBy
+        })
+        .eq('id', menuId);
+
+      if (error) throw error;
+
+      // Atualizar estado local
       if (generatedMenu && generatedMenu.id === menuId) {
-        const updatedMenu = {
+        setGeneratedMenu({
           ...generatedMenu,
-          status: 'approved' as const,
-          approvedAt: new Date().toISOString(),
+          status: 'approved',
           approvedBy
-        };
-        setGeneratedMenu(updatedMenu);
-
-        toast({
-          title: "Cardápio Aprovado",
-          description: "O cardápio foi aprovado e pode ser usado para gerar lista de compras",
-          variant: "default"
         });
-
-        return true;
       }
-      return false;
+
+      // Recarregar lista
+      await loadSavedMenus();
+
+      toast({
+        title: "Cardápio Aprovado",
+        description: "O cardápio foi aprovado e pode ser usado para gerar lista de compras",
+        variant: "default"
+      });
+
+      return true;
     } catch (err) {
       console.error('Erro ao aprovar cardápio:', err);
       return false;
@@ -221,23 +345,36 @@ export const useIntegratedMenuGeneration = () => {
 
   const rejectMenu = async (menuId: string, reason: string): Promise<boolean> => {
     try {
+      // Atualizar no banco
+      const { error } = await supabase
+        .from('generated_menus')
+        .update({
+          status: 'rejected',
+          rejected_reason: reason
+        })
+        .eq('id', menuId);
+
+      if (error) throw error;
+
+      // Atualizar estado local
       if (generatedMenu && generatedMenu.id === menuId) {
-        const updatedMenu = {
+        setGeneratedMenu({
           ...generatedMenu,
-          status: 'rejected' as const,
-          notes: reason
-        };
-        setGeneratedMenu(updatedMenu);
-
-        toast({
-          title: "Cardápio Rejeitado",
-          description: "O cardápio foi rejeitado. Você pode gerar um novo.",
-          variant: "default"
+          status: 'rejected',
+          rejectedReason: reason
         });
-
-        return true;
       }
-      return false;
+
+      // Recarregar lista
+      await loadSavedMenus();
+
+      toast({
+        title: "Cardápio Rejeitado",
+        description: "O cardápio foi rejeitado. Você pode gerar um novo.",
+        variant: "default"
+      });
+
+      return true;
     } catch (err) {
       console.error('Erro ao rejeitar cardápio:', err);
       return false;
@@ -250,7 +387,6 @@ export const useIntegratedMenuGeneration = () => {
     try {
       setIsGenerating(true);
 
-      // Call shopping list generation
       const { data: shoppingResponse, error: shoppingError } = await supabase.functions.invoke('generate-shopping-list', {
         body: {
           client_id: selectedClient.id,
@@ -292,14 +428,22 @@ export const useIntegratedMenuGeneration = () => {
     }
   };
 
+  const clearGeneratedMenu = () => {
+    setGeneratedMenu(null);
+    setError(null);
+  };
+
   return {
     isGenerating,
     generatedMenu,
+    savedMenus,
     error,
     generateMenu,
     approveMenu,
     rejectMenu,
     generateShoppingListFromMenu,
+    clearGeneratedMenu,
+    loadSavedMenus,
     selectedClient
   };
 };

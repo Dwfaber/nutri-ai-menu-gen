@@ -314,6 +314,101 @@ export type Database = {
         }
         Relationships: []
       }
+      generated_menus: {
+        Row: {
+          approved_by: string | null
+          client_id: string
+          client_name: string
+          cost_per_meal: number
+          created_at: string
+          id: string
+          rejected_reason: string | null
+          status: string
+          total_cost: number
+          total_recipes: number
+          updated_at: string
+          week_period: string
+        }
+        Insert: {
+          approved_by?: string | null
+          client_id: string
+          client_name: string
+          cost_per_meal?: number
+          created_at?: string
+          id?: string
+          rejected_reason?: string | null
+          status?: string
+          total_cost?: number
+          total_recipes?: number
+          updated_at?: string
+          week_period: string
+        }
+        Update: {
+          approved_by?: string | null
+          client_id?: string
+          client_name?: string
+          cost_per_meal?: number
+          created_at?: string
+          id?: string
+          rejected_reason?: string | null
+          status?: string
+          total_cost?: number
+          total_recipes?: number
+          updated_at?: string
+          week_period?: string
+        }
+        Relationships: []
+      }
+      menu_recipes: {
+        Row: {
+          category: string
+          cost: number
+          created_at: string
+          day: string
+          id: string
+          ingredients: Json | null
+          menu_id: string
+          name: string
+          nutritional_info: Json | null
+          recipe_id: string
+          servings: number
+        }
+        Insert: {
+          category: string
+          cost?: number
+          created_at?: string
+          day: string
+          id?: string
+          ingredients?: Json | null
+          menu_id: string
+          name: string
+          nutritional_info?: Json | null
+          recipe_id: string
+          servings?: number
+        }
+        Update: {
+          category?: string
+          cost?: number
+          created_at?: string
+          day?: string
+          id?: string
+          ingredients?: Json | null
+          menu_id?: string
+          name?: string
+          nutritional_info?: Json | null
+          recipe_id?: string
+          servings?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "menu_recipes_menu_id_fkey"
+            columns: ["menu_id"]
+            isOneToOne: false
+            referencedRelation: "generated_menus"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       produtos_base: {
         Row: {
           created_at: string
