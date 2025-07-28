@@ -47,7 +47,7 @@ const MenuTable: React.FC<MenuTableProps> = ({
 }) => {
   const getRecipeForDayAndCategory = (day: string, category: string) => {
     return recipes.find(recipe => 
-      recipe.day.toLowerCase().includes(day.toLowerCase()) && 
+      recipe.day && recipe.day.toLowerCase().includes(day.toLowerCase()) && 
       recipe.category === category
     );
   };
