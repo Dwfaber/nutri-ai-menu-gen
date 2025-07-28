@@ -62,12 +62,13 @@ export const ClientContractsProvider = ({ children }: { children: ReactNode }) =
         throw fetchError;
       }
 
-      // Agrupar por filial_id para evitar duplicatas
-      const uniqueClients = new Map<number, any>();
+      // Agrupar por nome_fantasia para evitar duplicatas de clientes
+      const uniqueClients = new Map<string, any>();
       
       (data || []).forEach(item => {
-        if (!uniqueClients.has(item.filial_id)) {
-          uniqueClients.set(item.filial_id, item);
+        const key = item.nome_fantasia || `Cliente_${item.id}`;
+        if (!uniqueClients.has(key)) {
+          uniqueClients.set(key, item);
         }
       });
 
