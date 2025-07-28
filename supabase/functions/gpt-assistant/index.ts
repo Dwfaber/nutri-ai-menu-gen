@@ -86,7 +86,7 @@ async function generateMenuWithAssistant(supabaseClient: any, clientId: string, 
       .limit(50); // Limit to avoid token overflow
 
     // Get available recipes
-    const { data: recipes } = await supabaseClient
+    const { data: receitasLegado } = await supabaseClient
       .from('receitas_legado')
       .select('*')
       .limit(10);
@@ -132,7 +132,7 @@ ${Object.entries(productsByCategory || {}).map(([category, products]: [string, a
 ).join('\n')}
 
 **Receitas Base Disponíveis:**
-${recipes?.slice(0, 5).map(r => `- ${r.nome_receita} (${r.categoria_receita}) - Porções: ${r.porcoes}`).join('\n') || 'Nenhuma receita cadastrada'}
+${receitasLegado?.slice(0, 5).map(r => `- ${r.nome_receita} (${r.categoria_receita}) - Porções: ${r.porcoes}`).join('\n') || 'Nenhuma receita cadastrada'}
 
 INSTRUÇÕES IMPORTANTES:
 1. Use APENAS produtos da lista acima
