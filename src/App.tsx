@@ -43,7 +43,6 @@ const App = () => {
               <Routes>
                 <Route path="/auth" element={<Auth />} />
                 <Route path="/*" element={
-                  <ProtectedRoute>
                     <ClientSelectionWrapper>
                       <div className="flex min-h-screen w-full bg-gray-50">
                         <Sidebar />
@@ -52,18 +51,10 @@ const App = () => {
                           <main className="flex-1 p-6 overflow-auto">
                           <Routes>
                             <Route path="/" element={<Dashboard />} />
-                            <Route path="/cardapios" element={
-                              <ProtectedRoute requireRole="nutritionist">
-                                <Cardapios />
-                              </ProtectedRoute>
-                            } />
+                            <Route path="/cardapios" element={<Cardapios />} />
                             <Route path="/compras" element={<Compras />} />
                             <Route path="/relatorios" element={<Relatorios />} />
-                            <Route path="/arquitetura" element={
-                              <ProtectedRoute requireRole="admin">
-                                <SystemArchitecture />
-                              </ProtectedRoute>
-                            } />
+                            <Route path="/arquitetura" element={<SystemArchitecture />} />
                             <Route path="/configuracoes" element={<Dashboard />} />
                             <Route path="/welcome" element={<Index />} />
                             <Route path="*" element={<NotFound />} />
@@ -72,7 +63,6 @@ const App = () => {
                         </div>
                       </div>
                     </ClientSelectionWrapper>
-                  </ProtectedRoute>
                 } />
               </Routes>
             </BrowserRouter>
