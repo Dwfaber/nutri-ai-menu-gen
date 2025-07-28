@@ -54,6 +54,23 @@ serve(async (req) => {
 
 async function generateMenuWithAssistant(supabaseClient: any, clientId: string, budget: number, restrictions: string[], preferences?: string) {
   try {
+    console.log(`Generating menu for client ${clientId} with budget ${budget}`);
+    
+    // Validate OpenAI API Key
+    if (!openAIApiKey) {
+      console.error('OpenAI API Key not configured');
+      return new Response(
+        JSON.stringify({ 
+          success: false, 
+          error: 'OpenAI API Key not configured. Please set OPENAI_API_KEY in Supabase secrets.' 
+        }),
+        { 
+          status: 500, 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+        }
+      );
+    }
+    
     // Get client data
     const { data: clientData } = await supabaseClient
       .from('contratos_corporativos')
@@ -162,6 +179,7 @@ Retorne em JSON com esta estrutura:
 }
     `;
 
+    console.log('Making OpenAI API request...');
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -185,7 +203,28 @@ Retorne em JSON com esta estrutura:
       }),
     });
 
+    console.log('OpenAI response status:', response.status);
+    
+    if (!response.ok) {
+      const errorData = await response.text();
+      console.error('OpenAI API error:', errorData);
+      throw new Error(`OpenAI API error: ${response.status} - ${errorData}`);
+    }
+
     const data = await response.json();
+    console.log('OpenAI response received, processing...');
+    
+    // Validate OpenAI response structure
+    if (!data || !data.choices || !Array.isArray(data.choices) || data.choices.length === 0) {
+      console.error('Invalid OpenAI response structure:', data);
+      throw new Error('Invalid response from OpenAI API');
+    }
+    
+    if (!data.choices[0] || !data.choices[0].message || !data.choices[0].message.content) {
+      console.error('Missing content in OpenAI response:', data.choices[0]);
+      throw new Error('No content received from OpenAI API');
+    }
+    
     const assistantResponse = data.choices[0].message.content;
 
     // Try to parse JSON response
@@ -287,7 +326,25 @@ Analise o comando e retorne em JSON:
       }),
     });
 
+    if (!response.ok) {
+      const errorData = await response.text();
+      console.error('OpenAI API error in editMenu:', errorData);
+      throw new Error(`OpenAI API error: ${response.status} - ${errorData}`);
+    }
+
     const data = await response.json();
+    
+    // Validate response structure for edit menu
+    if (!data || !data.choices || !Array.isArray(data.choices) || data.choices.length === 0) {
+      console.error('Invalid OpenAI response structure in editMenu:', data);
+      throw new Error('Invalid response from OpenAI API');
+    }
+    
+    if (!data.choices[0] || !data.choices[0].message || !data.choices[0].message.content) {
+      console.error('Missing content in OpenAI response for editMenu:', data.choices[0]);
+      throw new Error('No content received from OpenAI API');
+    }
+    
     const assistantResponse = data.choices[0].message.content;
 
     return new Response(
