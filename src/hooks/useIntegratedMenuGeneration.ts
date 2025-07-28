@@ -55,35 +55,113 @@ export const useIntegratedMenuGeneration = () => {
 
   // Função para mapear categorias da API para tipos de refeição
   const mapCategoryToMealType = (category: string): string => {
-    const categoryMap: { [key: string]: string } = {
-      'protein': 'PP1',
-      'carb': 'ACOMPANHAMENTO',
-      'vegetable': 'SALADA 1',
-      'fruit': 'SOBREMESA',
-      'dairy': 'BEBIDA',
-      'other': 'DIVERSOS'
-    };
-    return categoryMap[category] || 'PP1';
+    const normalizedCategory = category.toLowerCase().trim();
+    
+    // Proteínas (PP1)
+    if (normalizedCategory.includes('proteín') || 
+        normalizedCategory.includes('carne') || 
+        normalizedCategory.includes('frango') || 
+        normalizedCategory.includes('peixe') || 
+        normalizedCategory.includes('boi') || 
+        normalizedCategory.includes('porco') || 
+        normalizedCategory.includes('ave') ||
+        normalizedCategory.includes('protein') ||
+        normalizedCategory === 'pp1') {
+      return 'PP1';
+    }
+    
+    // Saladas
+    if (normalizedCategory.includes('salada') || 
+        normalizedCategory.includes('verdura') || 
+        normalizedCategory.includes('folha') || 
+        normalizedCategory.includes('vegetal') ||
+        normalizedCategory.includes('hortaliça') ||
+        normalizedCategory.includes('vegetable')) {
+      return 'SALADA 1';
+    }
+    
+    // Sobremesas
+    if (normalizedCategory.includes('sobremesa') || 
+        normalizedCategory.includes('doce') || 
+        normalizedCategory.includes('fruta') ||
+        normalizedCategory.includes('dessert') ||
+        normalizedCategory.includes('fruit')) {
+      return 'SOBREMESA';
+    }
+    
+    // Acompanhamentos (default para carboidratos, cereais, etc.)
+    return 'ACOMPANHAMENTO';
   };
 
-  // Função para distribuir receitas pelos dias da semana
+  // Função para distribuir receitas pelos dias da semana com balanceamento
   const distributeRecipesByDay = (recipes: any[]): MenuRecipe[] => {
     const days = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta'];
+    const requiredCategories = ['PP1', 'SALADA 1', 'ACOMPANHAMENTO', 'SOBREMESA'];
     
-    return recipes.map((recipe: any, index: number) => {
-      const dayIndex = index % days.length;
-      
-      return {
-        id: recipe.id || `recipe-${index}`,
-        name: recipe.name || 'Receita sem nome',
-        category: mapCategoryToMealType(recipe.category) || 'PP1',
-        day: days[dayIndex],
-        cost: typeof recipe.costPerServing === 'number' ? recipe.costPerServing / 100 : (recipe.cost || 0),
-        servings: recipe.servings || 50,
-        ingredients: recipe.ingredients || [],
-        nutritionalInfo: recipe.nutritionalInfo || {}
-      };
+    // Primeiro, categorizar as receitas
+    const categorizedRecipes: { [key: string]: any[] } = {};
+    recipes.forEach(recipe => {
+      const category = mapCategoryToMealType(recipe.category || 'other');
+      if (!categorizedRecipes[category]) {
+        categorizedRecipes[category] = [];
+      }
+      categorizedRecipes[category].push(recipe);
     });
+    
+    console.log('Receitas categorizadas:', categorizedRecipes);
+    
+    // Distribuir receitas garantindo diversidade por dia
+    const menuRecipes: MenuRecipe[] = [];
+    let recipeIndex = 0;
+    
+    // Para cada dia, tentar ter pelo menos uma de cada categoria
+    days.forEach((day, dayIndex) => {
+      requiredCategories.forEach(category => {
+        const categoryRecipes = categorizedRecipes[category] || [];
+        if (categoryRecipes.length > 0) {
+          const recipeForDay = categoryRecipes[dayIndex % categoryRecipes.length];
+          if (recipeForDay) {
+            const cost = typeof recipeForDay.costPerServing === 'number' 
+              ? recipeForDay.costPerServing 
+              : (typeof recipeForDay.cost === 'number' ? recipeForDay.cost : 5.0);
+            
+            menuRecipes.push({
+              id: recipeForDay.id || `recipe-${recipeIndex++}`,
+              name: recipeForDay.name || `Receita ${category}`,
+              category,
+              day,
+              cost: Math.max(cost, 1.0), // Mínimo de R$ 1,00 por receita
+              servings: recipeForDay.servings || 50,
+              ingredients: recipeForDay.ingredients || [],
+              nutritionalInfo: recipeForDay.nutritionalInfo || {}
+            });
+          }
+        }
+      });
+    });
+    
+    // Se não temos receitas suficientes, distribuir o que temos
+    if (menuRecipes.length === 0) {
+      return recipes.map((recipe: any, index: number) => {
+        const dayIndex = index % days.length;
+        const cost = typeof recipe.costPerServing === 'number' 
+          ? recipe.costPerServing 
+          : (typeof recipe.cost === 'number' ? recipe.cost : 5.0);
+        
+        return {
+          id: recipe.id || `recipe-${index}`,
+          name: recipe.name || 'Receita sem nome',
+          category: mapCategoryToMealType(recipe.category || 'other'),
+          day: days[dayIndex],
+          cost: Math.max(cost, 1.0),
+          servings: recipe.servings || 50,
+          ingredients: recipe.ingredients || [],
+          nutritionalInfo: recipe.nutritionalInfo || {}
+        };
+      });
+    }
+    
+    return menuRecipes;
   };
 
   // Carregar cardápios salvos

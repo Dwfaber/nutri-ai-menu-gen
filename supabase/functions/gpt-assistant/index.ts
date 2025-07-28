@@ -116,7 +116,7 @@ async function generateMenuWithAssistant(supabaseClient: any, clientId: string, 
     const budgetPerPerson = budget || 0;
 
     const prompt = `
-Como nutricionista corporativo especializado, crie um cardápio semanal para:
+Você é um nutricionista corporativo especializado. Crie um cardápio COMPLETO E BALANCEADO para a semana.
 
 **Cliente:** ${clientData?.nome_empresa || 'Empresa'}
 **Funcionários:** ${totalFuncionarios}
@@ -124,59 +124,61 @@ Como nutricionista corporativo especializado, crie um cardápio semanal para:
 **Restrições:** ${restrictions.join(', ') || 'Nenhuma'}
 **Preferências:** ${preferences || 'Não especificadas'}
 
-**Produtos Disponíveis no Mercado Digital:**
+**Produtos Disponíveis:**
 ${Object.entries(productsByCategory || {}).map(([category, products]: [string, any]) => 
   `\n**${category}:**\n${products.slice(0, 5).map((p: any) => 
-    `- ${p.nome} (${p.unidade}) - R$ ${(p.preco || 0).toFixed(2)} - Per capita: ${p.per_capita} ${p.promocao ? '(PROMOÇÃO)' : ''}`
+    `- ${p.nome} (${p.unidade}) - R$ ${(p.preco || 0).toFixed(2)} ${p.promocao ? '(PROMOÇÃO)' : ''}`
   ).join('\n')}`
 ).join('\n')}
 
-**Receitas Base Disponíveis:**
-${receitasLegado?.slice(0, 5).map(r => `- ${r.nome_receita} (${r.categoria_receita}) - Porções: ${r.porcoes}`).join('\n') || 'Nenhuma receita cadastrada'}
+**CRIE UM CARDÁPIO COMPLETO:** 20 receitas balanceadas (4 por dia × 5 dias)
 
-INSTRUÇÕES IMPORTANTES:
-1. Use APENAS produtos da lista acima
-2. Calcule custos usando per capita × ${totalFuncionarios} funcionários
-3. Considere produtos em promoção para otimizar orçamento
-4. Atenda às restrições alimentares especificadas
-5. Crie 5 pratos variados para a semana
+**REGRAS OBRIGATÓRIAS:**
+1. Para CADA DIA (Segunda a Sexta), inclua EXATAMENTE:
+   - 1 Proteína Principal (category: "protein")
+   - 1 Salada/Verdura (category: "vegetable") 
+   - 1 Acompanhamento (category: "carb")
+   - 1 Sobremesa/Fruta (category: "fruit")
 
-Retorne em JSON com esta estrutura:
+2. CUSTO: R$ 3,00 a R$ 8,00 por receita
+3. VARIEDADE: Receitas diferentes a cada dia
+4. QUALIDADE: Use produtos da lista disponível
+
+**Retorne EXATAMENTE este formato JSON:**
 {
   "items": [
     {
       "id": "1",
-      "name": "Nome do Prato",
-      "category": "protein|carb|vegetable|beverage",
-      "ingredients": [
-        {
-          "produto_id": 123,
-          "nome": "Ingrediente",
-          "quantidade": 0.5,
-          "unidade": "kg",
-          "preco_unitario": 10.00,
-          "custo_total": 5.00
-        }
-      ],
-      "nutritionalInfo": {
-        "calories": 450,
-        "protein": 35,
-        "carbs": 25,
-        "fat": 12
-      },
-      "cost": 12.50,
+      "name": "Frango Grelhado",
+      "category": "protein",
+      "cost": 6.50,
       "servings": ${totalFuncionarios},
-      "restrictions": ["gluten-free"],
-      "description": "Descrição do prato"
+      "day": "Segunda",
+      "nutritionalInfo": {"calories": 350, "protein": 30, "carbs": 5, "fat": 15},
+      "ingredients": [{"nome": "Peito de frango", "quantidade": 200, "unidade": "g"}],
+      "description": "Frango temperado e grelhado"
+    },
+    {
+      "id": "2", 
+      "name": "Salada Mista",
+      "category": "vegetable",
+      "cost": 3.20,
+      "servings": ${totalFuncionarios},
+      "day": "Segunda",
+      "nutritionalInfo": {"calories": 50, "protein": 2, "carbs": 8, "fat": 1},
+      "ingredients": [{"nome": "Alface", "quantidade": 100, "unidade": "g"}],
+      "description": "Salada fresca com verduras"
     }
   ],
   "summary": {
-    "total_cost": 62.50,
-    "average_cost_per_person": 12.50,
+    "total_cost": 120.00,
+    "average_cost_per_person": 6.00,
     "within_budget": true,
-    "promotions_used": 2
+    "total_recipes": 20
   }
 }
+
+**CRÍTICO:** Gere TODAS as 20 receitas (4 categorias × 5 dias) com custos realistas!
     `;
 
     console.log('Making OpenAI API request...');
