@@ -216,15 +216,15 @@ const IntegratedMenuGenerator = () => {
                   title="CARDÁPIO"
                   weekPeriod={generatedMenu.weekPeriod}
                   totalCost={generatedMenu.totalCost}
-                  recipes={generatedMenu.recipes.map((recipe, index) => {
+                  recipes={generatedMenu.recipes.map((recipe: any, index) => {
                     console.log(`Recipe ${index}:`, recipe);
                     return {
                       id: recipe.id || `recipe-${index}`,
                       name: recipe.name || 'Receita sem nome',
-                      category: recipe.mealType || 'PP1',
-                      day: recipe.day || '',
-                      cost: recipe.totalCost || 0,
-                      servings: recipe.servings || 1
+                      category: recipe.category || 'PP1',
+                      day: ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta'][index % 5] || '',
+                      cost: (recipe.costPerServing || 0) / 100, // API retorna em centavos
+                      servings: 50 // Valor padrão baseado no número de funcionários
                     };
                   })}
                   onEdit={(recipeId) => console.log('Edit recipe:', recipeId)}
