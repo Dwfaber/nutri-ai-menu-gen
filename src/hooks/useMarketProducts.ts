@@ -3,8 +3,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 
 export interface MarketProduct {
-  id: string; // Primary identifier - using solicitacao_produto_listagem_id as string
-  solicitacao_produto_listagem_id: number; // Original market listing ID (e.g., 4450 for abacate)
+  id: string; // Primary identifier - using produto_base_id (legacy ID) as string  
+  solicitacao_produto_listagem_id: number; // Market listing ID (e.g., 4450 for abacate)
   solicitacao_id?: number;
   categoria_descricao?: string;
   grupo?: string;
@@ -72,12 +72,12 @@ export const useMarketProducts = () => {
         (produtosBaseData || []).map(pb => [pb.produto_base_id, pb])
       );
 
-      // Transform data to use solicitacao_produto_listagem_id as primary ID
+      // Transform data to use produto_base_id (legacy ID) as primary ID
       const productsData = (data || []).map(product => {
         const produtoBase = produtosBaseMap.get(product.produto_base_id);
         return {
           ...product,
-          id: product.solicitacao_produto_listagem_id.toString(), // Use market listing ID as primary ID
+          id: product.produto_base_id?.toString() || `temp-${product.solicitacao_produto_listagem_id}`, // Use legacy ID as primary ID
           produto_base_uuid: produtoBase?.id,
           descricao: product.descricao || produtoBase?.descricao || '',
           unidade: product.unidade || produtoBase?.unidade || '',
@@ -160,6 +160,7 @@ export const useMarketProducts = () => {
     const searchId = id.toString();
     return products.find(p => 
       p.id === searchId || 
+      p.produto_base_id?.toString() === searchId ||
       p.solicitacao_produto_listagem_id.toString() === searchId ||
       p.produto_base_uuid === searchId
     );
