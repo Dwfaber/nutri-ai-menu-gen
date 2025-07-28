@@ -29,6 +29,7 @@ export interface MenuItem {
   id: string;
   name: string;
   category: 'protein' | 'carb' | 'vegetable' | 'fruit' | 'dairy' | 'other';
+  description?: string;
   nutritionalInfo: {
     calories: number;
     protein: number;
@@ -37,6 +38,13 @@ export interface MenuItem {
   };
   cost: number;
   restrictions: string[];
+  prepTime?: number;
+  instructions?: string;
+  ingredients?: Array<{
+    name: string;
+    quantity: number;
+    unit: string;
+  }>;
 }
 
 export interface Menu {
