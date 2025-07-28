@@ -209,26 +209,38 @@ const IntegratedMenuGenerator = () => {
 
             {/* Menu Table */}
             {generatedMenu.recipes && generatedMenu.recipes.length > 0 ? (
-              <MenuTable
-                title="CARDÁPIO"
-                weekPeriod={generatedMenu.weekPeriod}
-                totalCost={generatedMenu.totalCost}
-                recipes={generatedMenu.recipes.map(recipe => ({
-                  id: recipe.id || '',
-                  name: recipe.name,
-                  category: recipe.mealType || 'PP1',
-                  day: recipe.day || '',
-                  cost: recipe.totalCost || 0,
-                  servings: recipe.servings || 1
-                }))}
-                onEdit={(recipeId) => console.log('Edit recipe:', recipeId)}
-                onExport={() => console.log('Export menu')}
-                onCopy={() => console.log('Copy menu')}
-              />
+              <>
+                {console.log('Generated Menu:', generatedMenu)}
+                {console.log('Recipes:', generatedMenu.recipes)}
+                <MenuTable
+                  title="CARDÁPIO"
+                  weekPeriod={generatedMenu.weekPeriod}
+                  totalCost={generatedMenu.totalCost}
+                  recipes={generatedMenu.recipes.map((recipe, index) => {
+                    console.log(`Recipe ${index}:`, recipe);
+                    return {
+                      id: recipe.id || `recipe-${index}`,
+                      name: recipe.name || 'Receita sem nome',
+                      category: recipe.mealType || 'PP1',
+                      day: recipe.day || '',
+                      cost: recipe.totalCost || 0,
+                      servings: recipe.servings || 1
+                    };
+                  })}
+                  onEdit={(recipeId) => console.log('Edit recipe:', recipeId)}
+                  onExport={() => console.log('Export menu')}
+                  onCopy={() => console.log('Copy menu')}
+                />
+              </>
             ) : (
               <div className="p-8 text-center text-gray-500">
                 <ChefHat className="w-12 h-12 mx-auto mb-3 text-gray-300" />
                 <p>Nenhuma receita encontrada no cardápio</p>
+                {generatedMenu && (
+                  <pre className="mt-4 text-xs text-left bg-gray-100 p-4 rounded">
+                    {JSON.stringify(generatedMenu, null, 2)}
+                  </pre>
+                )}
               </div>
             )}
 
