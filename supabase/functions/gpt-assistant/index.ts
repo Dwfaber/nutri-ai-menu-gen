@@ -21,12 +21,19 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_ANON_KEY') ?? ''
     );
 
-    const { action, clientId, budget, restrictions, preferences, menuId, command } = await req.json();
+    const body = await req.json();
+    const { action, clientId, budget, restrictions, preferences, menuId, command, client_data, week_period, market_products, enhanced_cost_data } = body;
 
     console.log(`GPT Assistant action: ${action}`);
 
     if (action === 'generateMenu' || action === 'generate_menu') {
-      return await generateMenuWithAssistant(supabaseClient, clientId, budget, restrictions, preferences);
+      // Handle new payload structure
+      const actualClientId = clientId || client_data?.id;
+      const actualBudget = budget || client_data?.max_cost_per_meal || 10;
+      const actualRestrictions = restrictions || client_data?.dietary_restrictions || [];
+      const actualPreferences = preferences || client_data?.preferences || [];
+      
+      return await generateMenuWithAssistant(supabaseClient, actualClientId, actualBudget, actualRestrictions, actualPreferences);
     } else if (action === 'editMenu' || action === 'edit_menu') {
       return await editMenuWithAssistant(supabaseClient, menuId, command);
     } else {
@@ -89,7 +96,7 @@ async function generateMenuWithAssistant(supabaseClient: any, clientId: string, 
     }, {});
 
     const totalFuncionarios = clientData?.total_funcionarios || 100;
-    const budgetPerPerson = budget;
+    const budgetPerPerson = budget || 0;
 
     const prompt = `
 Como nutricionista corporativo especializado, crie um cardápio semanal para:
@@ -103,7 +110,7 @@ Como nutricionista corporativo especializado, crie um cardápio semanal para:
 **Produtos Disponíveis no Mercado Digital:**
 ${Object.entries(productsByCategory || {}).map(([category, products]: [string, any]) => 
   `\n**${category}:**\n${products.slice(0, 5).map((p: any) => 
-    `- ${p.nome} (${p.unidade}) - R$ ${p.preco?.toFixed(2)} - Per capita: ${p.per_capita} ${p.promocao ? '(PROMOÇÃO)' : ''}`
+    `- ${p.nome} (${p.unidade}) - R$ ${(p.preco || 0).toFixed(2)} - Per capita: ${p.per_capita} ${p.promocao ? '(PROMOÇÃO)' : ''}`
   ).join('\n')}`
 ).join('\n')}
 
