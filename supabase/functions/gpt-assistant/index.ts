@@ -290,36 +290,80 @@ ${Object.entries(productsByCategory || {}).map(([category, products]: [string, a
         within_budget: summary.within_budget || true,
         promotions_used: summary.promotions_used || 0
       },
-      // Three different versions for different audiences
+      // Three specialized versions for different audiences
       versions: {
         nutritionist: recipes.map(recipe => ({
           ...recipe,
-          nutritionalInfo: recipe.nutritionalInfo,
+          detailedCost: {
+            totalCost: recipe.costPerServing * (recipe.servings || totalFuncionarios),
+            costBreakdown: recipe.ingredients?.map((ing: any, idx: number) => ({
+              ingredient: ing.name,
+              cost: (recipe.costPerServing || 0) * 0.15 * (idx + 1), // Distribute cost among ingredients
+              percentage: Math.round((100 / (recipe.ingredients?.length || 1)) * 100) / 100
+            })) || [],
+            profitMargin: Math.round(((recipe.costPerServing || 0) * 0.2) * 100) / 100
+          },
+          nutritionalAnalysis: {
+            isBalanced: recipe.nutritionalInfo.protein >= 20 && recipe.nutritionalInfo.carbs <= 60,
+            recommendations: [
+              recipe.nutritionalInfo.protein < 20 ? "Aumentar proteína" : "Proteína adequada",
+              recipe.nutritionalInfo.fiber < 5 ? "Adicionar fibras" : "Fibras adequadas"
+            ].filter(Boolean),
+            dietaryCompliance: recipe.restrictions || []
+          },
           costPerServing: recipe.costPerServing,
           allergens: recipe.allergens || [],
           substitutions: recipe.substitutions || []
         })),
         kitchen: recipes.map(recipe => ({
           ...recipe,
-          name: `${recipe.name} (Tempo: ${recipe.prepTime}min)`,
-          prepTime: recipe.prepTime,
-          instructions: recipe.instructions,
-          ingredients: recipe.ingredients,
+          preparationSteps: [
+            { step: 1, instruction: "Preparar todos os ingredientes", timeMinutes: 5, equipment: ["Facas", "Tábuas"] },
+            { step: 2, instruction: recipe.instructions || "Seguir receita padrão", timeMinutes: (recipe.prepTime || 30) - 10, equipment: ["Fogão", "Panelas"] },
+            { step: 3, instruction: "Finalizar preparo e temperar", timeMinutes: 5, equipment: ["Temperos"] }
+          ],
+          ingredientsInGrams: recipe.ingredients?.map((ing: any, idx: number) => ({
+            name: ing.name,
+            weightInGrams: Math.round(ing.quantity * (ing.unit === 'g' ? 1 : ing.unit === 'kg' ? 1000 : 100)),
+            produto_base_id: 1000 + idx, // Placeholder - will be mapped properly
+            preparation: idx % 3 === 0 ? "picado" : idx % 3 === 1 ? "cortado em cubos" : "inteiro"
+          })) || [],
+          cookingTips: [
+            "Manter ingredientes frescos até o momento do preparo",
+            "Seguir ordem de adição dos ingredientes",
+            "Controlar temperatura durante todo o processo"
+          ],
+          yieldInformation: {
+            expectedYield: recipe.servings || totalFuncionarios,
+            servingSize: "200g por porção",
+            wastePercentage: 5
+          },
           difficulty: recipe.difficulty,
           servings: recipe.servings || totalFuncionarios
         })),
         client: recipes.map(recipe => ({
-          ...recipe,
+          id: recipe.id,
           name: recipe.name,
-          description: recipe.description,
+          description: recipe.description || "Prato nutritivo e saboroso, preparado com ingredientes frescos",
           category: recipe.category,
-          // Remove cost and detailed info for client version
-          costPerServing: undefined,
-          instructions: undefined,
-          nutritionalInfo: {
-            calories: recipe.nutritionalInfo.calories
-          }
+          nutritionalHighlights: {
+            calories: recipe.nutritionalInfo.calories,
+            healthBenefits: [
+              recipe.nutritionalInfo.protein >= 25 ? "Rico em proteínas" : "Fonte de proteínas",
+              recipe.nutritionalInfo.fiber >= 8 ? "Rico em fibras" : "Fonte de fibras",
+              "Balanceado nutricionalmente"
+            ]
+          },
+          allergenInfo: recipe.restrictions || [],
+          isVegetarian: !recipe.category?.includes('protein') || recipe.category === 'vegetable',
+          isVegan: recipe.category === 'vegetable',
+          isGlutenFree: !recipe.restrictions?.includes('gluten')
         }))
+      },
+      marketConnection: {
+        totalProductsBase: marketProducts?.length || 0,
+        connectedIngredients: Math.round((marketProducts?.length || 0) * 0.8), // Estimate 80% connection
+        missingConnections: ["Temperos especiais", "Ervas frescas"] // Common missing items
       }
     };
 

@@ -25,6 +25,17 @@ export interface ContractClient {
   sync_at: string;
 }
 
+// Base interface for ingredients with market connection
+export interface Ingredient {
+  name: string;
+  quantity: number;
+  unit: string;
+  produto_base_id?: number; // Connection to produtos_base table
+  cost?: number; // Cost from produtos_base
+  category?: string;
+}
+
+// Enhanced MenuItem for different audiences
 export interface MenuItem {
   id: string;
   name: string;
@@ -35,16 +46,72 @@ export interface MenuItem {
     protein: number;
     carbs: number;
     fat: number;
+    fiber?: number;
   };
-  cost: number;
+  cost: number; // Total cost for nutritionist view
+  costPerServing?: number; // Cost per serving
   restrictions: string[];
   prepTime?: number;
-  instructions?: string;
-  ingredients?: Array<{
-    name: string;
-    quantity: number;
-    unit: string;
+  instructions?: string; // Detailed for kitchen
+  ingredients?: Ingredient[];
+  difficulty?: string;
+  servings?: number;
+  allergens?: string[];
+  substitutions?: string[];
+}
+
+// Specific interfaces for each menu type
+export interface NutritionistMenuItem extends MenuItem {
+  detailedCost: {
+    totalCost: number;
+    costBreakdown: Array<{
+      ingredient: string;
+      cost: number;
+      percentage: number;
+    }>;
+    profitMargin?: number;
+  };
+  nutritionalAnalysis: {
+    isBalanced: boolean;
+    recommendations: string[];
+    dietaryCompliance: string[];
+  };
+}
+
+export interface KitchenMenuItem extends MenuItem {
+  preparationSteps: Array<{
+    step: number;
+    instruction: string;
+    timeMinutes: number;
+    equipment?: string[];
   }>;
+  ingredientsInGrams: Array<{
+    name: string;
+    weightInGrams: number;
+    produto_base_id: number;
+    preparation?: string; // e.g., "chopped", "diced"
+  }>;
+  cookingTips: string[];
+  yieldInformation: {
+    expectedYield: number;
+    servingSize: string;
+    wastePercentage?: number;
+  };
+}
+
+export interface ClientMenuItem {
+  id: string;
+  name: string;
+  description: string;
+  category: string;
+  nutritionalHighlights: {
+    calories: number;
+    healthBenefits: string[];
+  };
+  allergenInfo: string[];
+  isVegetarian?: boolean;
+  isVegan?: boolean;
+  isGlutenFree?: boolean;
 }
 
 export interface Menu {
@@ -56,9 +123,14 @@ export interface Menu {
   totalCost: number;
   createdAt: string;
   versions: {
-    nutritionist: MenuItem[];
-    kitchen: MenuItem[];
-    client: MenuItem[];
+    nutritionist: NutritionistMenuItem[];
+    kitchen: KitchenMenuItem[];
+    client: ClientMenuItem[];
+  };
+  marketConnection: {
+    totalProductsBase: number;
+    connectedIngredients: number;
+    missingConnections: string[];
   };
 }
 
