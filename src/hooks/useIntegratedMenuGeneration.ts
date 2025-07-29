@@ -465,19 +465,21 @@ export const useIntegratedMenuGeneration = () => {
     try {
       setIsGenerating(true);
 
+      // Preparar receitas com ingredientes mapeados para produtos do mercado
+      const recipesWithMappedIngredients = await mapRecipesToMarketProducts(menu.recipes);
+
       const { data: shoppingResponse, error: shoppingError } = await supabase.functions.invoke('generate-shopping-list', {
         body: {
-          client_id: selectedClient.id,
-          client_name: selectedClient.nome_fantasia,
-          menu_id: menu.id,
-          recipes: menu.recipes,
-          budget_predicted: menu.totalCost,
-          optimization_settings: {
-            prioritize_promotions: true,
-            max_surplus_percentage: 10,
-            prefer_whole_numbers: true,
-            max_package_types: 3,
-            use_purchase_price: false
+          menuId: menu.id,
+          clientName: selectedClient.nome_fantasia,
+          budgetPredicted: menu.totalCost,
+          menuItems: recipesWithMappedIngredients,
+          optimizationConfig: {
+            prioridade_promocao: 'alta',
+            tolerancia_sobra_percentual: 10,
+            preferir_produtos_integrais: false,
+            maximo_tipos_embalagem_por_produto: 3,
+            considerar_custo_compra: false
           }
         }
       });
@@ -488,7 +490,7 @@ export const useIntegratedMenuGeneration = () => {
 
       toast({
         title: "Lista de Compras Gerada",
-        description: "Lista de compras criada com base no cardápio aprovado",
+        description: "Lista de compras criada com base no cardápio aprovado usando produtos do mercado",
         variant: "default"
       });
 
@@ -503,6 +505,118 @@ export const useIntegratedMenuGeneration = () => {
       return false;
     } finally {
       setIsGenerating(false);
+    }
+  };
+
+  // Função para mapear receitas para produtos do mercado
+  const mapRecipesToMarketProducts = async (recipes: MenuRecipe[]) => {
+    try {
+      // Buscar produtos do mercado
+      const { data: marketProducts, error } = await supabase
+        .from('co_solicitacao_produto_listagem')
+        .select('*')
+        .eq('em_promocao_sim_nao', false);
+
+      if (error) throw error;
+
+      // Criar mapeamento de produtos por descrição/categoria
+      const productMap = new Map();
+      marketProducts?.forEach(product => {
+        const key = product.descricao?.toLowerCase().trim();
+        if (key && !productMap.has(key)) {
+          productMap.set(key, product);
+        }
+      });
+
+      // Mapear receitas com ingredientes do mercado
+      return recipes.map(recipe => {
+        const mappedIngredients = [];
+        
+        // Criar ingredientes baseados na categoria da receita
+        if (recipe.category === 'PP1') {
+          // Proteínas
+          const proteinProducts = marketProducts?.filter(p => 
+            p.categoria_descricao?.toLowerCase().includes('proteín') ||
+            p.categoria_descricao?.toLowerCase().includes('carne') ||
+            p.descricao?.toLowerCase().includes('frango') ||
+            p.descricao?.toLowerCase().includes('boi')
+          ).slice(0, 3) || [];
+
+          proteinProducts.forEach(product => {
+            mappedIngredients.push({
+              produto_id: product.produto_id || product.solicitacao_produto_listagem_id,
+              produto_base_id: product.produto_base_id,
+              nome: product.descricao,
+              quantidade: product.per_capita * 50 || 2.5, // Para 50 porções
+              unidade: product.unidade || 'kg'
+            });
+          });
+        } else if (recipe.category === 'SALADA 1') {
+          // Vegetais e verduras
+          const vegetableProducts = marketProducts?.filter(p => 
+            p.categoria_descricao?.toLowerCase().includes('vegetal') ||
+            p.categoria_descricao?.toLowerCase().includes('verdura') ||
+            p.categoria_descricao?.toLowerCase().includes('hortaliça') ||
+            p.descricao?.toLowerCase().includes('alface') ||
+            p.descricao?.toLowerCase().includes('tomate')
+          ).slice(0, 4) || [];
+
+          vegetableProducts.forEach(product => {
+            mappedIngredients.push({
+              produto_id: product.produto_id || product.solicitacao_produto_listagem_id,
+              produto_base_id: product.produto_base_id,
+              nome: product.descricao,
+              quantidade: product.per_capita * 50 || 1.5,
+              unidade: product.unidade || 'kg'
+            });
+          });
+        } else if (recipe.category === 'ACOMPANHAMENTO') {
+          // Carboidratos e cereais
+          const carbProducts = marketProducts?.filter(p => 
+            p.descricao?.toLowerCase().includes('arroz') ||
+            p.descricao?.toLowerCase().includes('feijão') ||
+            p.descricao?.toLowerCase().includes('macarrão') ||
+            p.descricao?.toLowerCase().includes('batata')
+          ).slice(0, 3) || [];
+
+          carbProducts.forEach(product => {
+            mappedIngredients.push({
+              produto_id: product.produto_id || product.solicitacao_produto_listagem_id,
+              produto_base_id: product.produto_base_id,
+              nome: product.descricao,
+              quantidade: product.per_capita * 50 || 3.0,
+              unidade: product.unidade || 'kg'
+            });
+          });
+        } else if (recipe.category === 'SOBREMESA') {
+          // Frutas e doces
+          const dessertProducts = marketProducts?.filter(p => 
+            p.categoria_descricao?.toLowerCase().includes('fruta') ||
+            p.descricao?.toLowerCase().includes('banana') ||
+            p.descricao?.toLowerCase().includes('maçã') ||
+            p.descricao?.toLowerCase().includes('açúcar')
+          ).slice(0, 2) || [];
+
+          dessertProducts.forEach(product => {
+            mappedIngredients.push({
+              produto_id: product.produto_id || product.solicitacao_produto_listagem_id,
+              produto_base_id: product.produto_base_id,
+              nome: product.descricao,
+              quantidade: product.per_capita * 50 || 1.0,
+              unidade: product.unidade || 'kg'
+            });
+          });
+        }
+
+        return {
+          ...recipe,
+          ingredients: mappedIngredients
+        };
+      });
+
+    } catch (error) {
+      console.error('Erro ao mapear receitas para produtos do mercado:', error);
+      return recipes; // Retorna receitas originais se houver erro
     }
   };
 
