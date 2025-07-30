@@ -116,7 +116,7 @@ async function generateMenuWithAssistant(supabaseClient: any, clientId: string, 
     const budgetPerPerson = budget || 0;
 
     const prompt = `
-Você é um nutricionista corporativo especializado. Crie um cardápio COMPLETO E BALANCEADO para a semana.
+Você é um nutricionista corporativo especializado. Crie um cardápio COMPLETO E BALANCEADO para a semana usando dados reais do sistema.
 
 **Cliente:** ${clientData?.nome_empresa || 'Empresa'}
 **Funcionários:** ${totalFuncionarios}
@@ -124,12 +124,17 @@ Você é um nutricionista corporativo especializado. Crie um cardápio COMPLETO 
 **Restrições:** ${restrictions.join(', ') || 'Nenhuma'}
 **Preferências:** ${preferences || 'Não especificadas'}
 
-**Produtos Disponíveis:**
-${Object.entries(productsByCategory || {}).map(([category, products]: [string, any]) => 
-  `\n**${category}:**\n${products.slice(0, 5).map((p: any) => 
-    `- ${p.nome} (${p.unidade}) - R$ ${(p.preco || 0).toFixed(2)} ${p.promocao ? '(PROMOÇÃO)' : ''}`
-  ).join('\n')}`
-).join('\n')}
+**INSTRUÇÕES ESPECIAIS:**
+1. **PRIMEIRO:** Use get_produtos_base() para buscar ingredientes reais por categoria
+2. **SEGUNDO:** Use get_promotional_products() para identificar produtos em promoção
+3. **TERCEIRO:** Use validate_recipe_ingredients() para validar cada ingrediente
+4. **QUARTO:** Use calculate_real_costs() para calcular custos exatos
+
+**PROCESSO OBRIGATÓRIO:**
+1. Busque produtos base para cada categoria: carnes, verduras, carboidratos, frutas
+2. Identifique produtos em promoção para economizar
+3. Valide TODOS os ingredientes das receitas
+4. Calcule custos reais usando produtos_base_id corretos
 
 **CRIE UM CARDÁPIO COMPLETO:** 20 receitas balanceadas (4 por dia × 5 dias)
 
@@ -142,7 +147,7 @@ ${Object.entries(productsByCategory || {}).map(([category, products]: [string, a
 
 2. CUSTO: R$ 3,00 a R$ 8,00 por receita
 3. VARIEDADE: Receitas diferentes a cada dia
-4. QUALIDADE: Use produtos da lista disponível
+4. QUALIDADE: Use APENAS produtos validados com produtos_base_id corretos
 
 **Retorne EXATAMENTE este formato JSON:**
 {
@@ -155,33 +160,94 @@ ${Object.entries(productsByCategory || {}).map(([category, products]: [string, a
       "servings": ${totalFuncionarios},
       "day": "Segunda",
       "nutritionalInfo": {"calories": 350, "protein": 30, "carbs": 5, "fat": 15},
-      "ingredients": [{"nome": "Peito de frango", "quantidade": 200, "unidade": "g"}],
+      "ingredients": [{"nome": "Peito de frango", "produto_base_id": 123, "quantidade": 200, "unidade": "g"}],
       "description": "Frango temperado e grelhado"
-    },
-    {
-      "id": "2", 
-      "name": "Salada Mista",
-      "category": "vegetable",
-      "cost": 3.20,
-      "servings": ${totalFuncionarios},
-      "day": "Segunda",
-      "nutritionalInfo": {"calories": 50, "protein": 2, "carbs": 8, "fat": 1},
-      "ingredients": [{"nome": "Alface", "quantidade": 100, "unidade": "g"}],
-      "description": "Salada fresca com verduras"
     }
   ],
   "summary": {
     "total_cost": 120.00,
     "average_cost_per_person": 6.00,
     "within_budget": true,
-    "total_recipes": 20
+    "total_recipes": 20,
+    "products_validated": true,
+    "promotions_used": 5
   }
 }
 
-**CRÍTICO:** Gere TODAS as 20 receitas (4 categorias × 5 dias) com custos realistas!
+**CRÍTICO:** Use as funções disponíveis para garantir dados reais e custos precisos!
     `;
 
-    console.log('Making OpenAI API request...');
+    // Define function tools for precise database queries
+    const functions = [
+      {
+        name: "get_produtos_base",
+        description: "Busca produtos base disponíveis no sistema legado",
+        parameters: {
+          type: "object",
+          properties: {
+            categoria: {
+              type: "string",
+              description: "Categoria do produto (opcional)"
+            },
+            limit: {
+              type: "number",
+              description: "Limite de resultados (padrão: 50)"
+            }
+          }
+        }
+      },
+      {
+        name: "get_promotional_products",
+        description: "Busca produtos em promoção disponíveis",
+        parameters: {
+          type: "object",
+          properties: {
+            categoria: {
+              type: "string",
+              description: "Categoria do produto (opcional)"
+            }
+          }
+        }
+      },
+      {
+        name: "calculate_real_costs",
+        description: "Calcula custos reais baseado em produtos_base e quantidades",
+        parameters: {
+          type: "object",
+          properties: {
+            ingredients: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  produto_base_id: { type: "number" },
+                  quantidade: { type: "number" },
+                  unidade: { type: "string" }
+                }
+              }
+            },
+            total_funcionarios: { type: "number" }
+          },
+          required: ["ingredients", "total_funcionarios"]
+        }
+      },
+      {
+        name: "validate_recipe_ingredients",
+        description: "Valida se ingredientes existem na base de produtos",
+        parameters: {
+          type: "object",
+          properties: {
+            ingredient_names: {
+              type: "array",
+              items: { type: "string" }
+            }
+          },
+          required: ["ingredient_names"]
+        }
+      }
+    ];
+
+    console.log('Making OpenAI API request with function calling...');
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -193,13 +259,25 @@ ${Object.entries(productsByCategory || {}).map(([category, products]: [string, a
         messages: [
           {
             role: 'system',
-            content: `Você é um nutricionista corporativo especializado em criar cardápios balanceados usando dados reais do mercado. Sempre retorne JSON válido com custos calculados usando per capita × número de funcionários.`
+            content: `Você é um nutricionista corporativo especializado com acesso a funções para consultar dados reais do sistema. 
+            Use as funções disponíveis para:
+            1. Buscar produtos_base reais (get_produtos_base)
+            2. Identificar promoções (get_promotional_products) 
+            3. Calcular custos precisos (calculate_real_costs)
+            4. Validar ingredientes (validate_recipe_ingredients)
+            
+            SEMPRE use dados reais das funções em vez de estimativas. Retorne JSON válido com produtos_base_id corretos.`
           },
           {
             role: 'user',
             content: prompt
           }
         ],
+        tools: functions.map(func => ({
+          type: "function",
+          function: func
+        })),
+        tool_choice: "auto",
         temperature: 0.7,
         max_tokens: 3000
       }),
@@ -215,6 +293,85 @@ ${Object.entries(productsByCategory || {}).map(([category, products]: [string, a
 
     const data = await response.json();
     console.log('OpenAI response received, processing...');
+    
+    // Handle function calls if present
+    if (data.choices[0]?.message?.tool_calls) {
+      console.log('Processing function calls...');
+      
+      const messages = [
+        {
+          role: 'system',
+          content: `Você é um nutricionista corporativo especializado com acesso a funções para consultar dados reais do sistema.`
+        },
+        {
+          role: 'user',
+          content: prompt
+        },
+        data.choices[0].message
+      ];
+
+      // Process each function call
+      for (const toolCall of data.choices[0].message.tool_calls) {
+        const functionName = toolCall.function.name;
+        const functionArgs = JSON.parse(toolCall.function.arguments);
+        
+        console.log(`Executing function: ${functionName} with args:`, functionArgs);
+        
+        let functionResult;
+        try {
+          switch (functionName) {
+            case 'get_produtos_base':
+              functionResult = await executeFunctionGetProdutosBase(supabaseClient, functionArgs);
+              break;
+            case 'get_promotional_products':
+              functionResult = await executeFunctionGetPromotionalProducts(supabaseClient, functionArgs);
+              break;
+            case 'calculate_real_costs':
+              functionResult = await executeFunctionCalculateRealCosts(supabaseClient, functionArgs);
+              break;
+            case 'validate_recipe_ingredients':
+              functionResult = await executeFunctionValidateIngredients(supabaseClient, functionArgs);
+              break;
+            default:
+              functionResult = { error: `Function ${functionName} not implemented` };
+          }
+        } catch (error) {
+          console.error(`Error executing function ${functionName}:`, error);
+          functionResult = { error: error.message };
+        }
+
+        messages.push({
+          role: 'tool',
+          tool_call_id: toolCall.id,
+          content: JSON.stringify(functionResult)
+        });
+      }
+
+      // Make a follow-up call with function results
+      const followUpResponse = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${openAIApiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'gpt-4o-mini',
+          messages: messages,
+          temperature: 0.7,
+          max_tokens: 3000
+        }),
+      });
+
+      if (followUpResponse.ok) {
+        const followUpData = await followUpResponse.json();
+        const assistantResponse = followUpData.choices[0]?.message?.content;
+        
+        // Continue with normal processing using the enhanced response
+        if (assistantResponse) {
+          return await processMenuResponse(assistantResponse, marketProducts, budget, restrictions, totalFuncionarios, {});
+        }
+      }
+    }
     
     // Validate OpenAI response structure
     if (!data || !data.choices || !Array.isArray(data.choices) || data.choices.length === 0) {
@@ -481,4 +638,232 @@ function getCategoryType(categoria: string) {
     'Cantina': 'beverage'
   };
   return categoryMap[categoria] || 'protein';
+}
+
+// Function implementations for GPT function calling
+async function executeFunctionGetProdutosBase(supabaseClient: any, args: any) {
+  try {
+    console.log('Executing get_produtos_base function with args:', args);
+    
+    let query = supabaseClient
+      .from('produtos_base')
+      .select('produto_base_id, descricao, unidade');
+    
+    if (args.categoria) {
+      query = query.ilike('descricao', `%${args.categoria}%`);
+    }
+    
+    query = query.limit(args.limit || 50);
+    
+    const { data, error } = await query;
+    
+    if (error) {
+      console.error('Error fetching produtos_base:', error);
+      return { error: error.message };
+    }
+    
+    console.log(`Found ${data?.length || 0} produtos_base`);
+    return { produtos: data || [] };
+    
+  } catch (error) {
+    console.error('Error in executeFunctionGetProdutosBase:', error);
+    return { error: error.message };
+  }
+}
+
+async function executeFunctionGetPromotionalProducts(supabaseClient: any, args: any) {
+  try {
+    console.log('Executing get_promotional_products function with args:', args);
+    
+    let query = supabaseClient
+      .from('co_solicitacao_produto_listagem')
+      .select('produto_id, descricao, preco, preco_compra, per_capita, unidade, categoria_descricao, promocao, em_promocao')
+      .or('promocao.eq.true,em_promocao.eq.true');
+    
+    if (args.categoria) {
+      query = query.ilike('categoria_descricao', `%${args.categoria}%`);
+    }
+    
+    query = query.limit(20);
+    
+    const { data, error } = await query;
+    
+    if (error) {
+      console.error('Error fetching promotional products:', error);
+      return { error: error.message };
+    }
+    
+    console.log(`Found ${data?.length || 0} promotional products`);
+    return { produtos_promocao: data || [] };
+    
+  } catch (error) {
+    console.error('Error in executeFunctionGetPromotionalProducts:', error);
+    return { error: error.message };
+  }
+}
+
+async function executeFunctionCalculateRealCosts(supabaseClient: any, args: any) {
+  try {
+    console.log('Executing calculate_real_costs function with args:', args);
+    
+    const { ingredients, total_funcionarios } = args;
+    let totalCost = 0;
+    const costBreakdown = [];
+    
+    for (const ingredient of ingredients) {
+      // Get product details from produtos_base
+      const { data: produtoBase } = await supabaseClient
+        .from('produtos_base')
+        .select('produto_base_id, descricao, unidade')
+        .eq('produto_base_id', ingredient.produto_base_id)
+        .single();
+      
+      if (produtoBase) {
+        // Get market price from co_solicitacao_produto_listagem
+        const { data: marketProduct } = await supabaseClient
+          .from('co_solicitacao_produto_listagem')
+          .select('preco, preco_compra, per_capita, promocao')
+          .eq('produto_base_id', ingredient.produto_base_id)
+          .single();
+        
+        if (marketProduct) {
+          const unitPrice = marketProduct.preco_compra || marketProduct.preco || 0;
+          const totalQuantity = ingredient.quantidade * total_funcionarios;
+          const itemCost = totalQuantity * unitPrice;
+          
+          totalCost += itemCost;
+          costBreakdown.push({
+            produto_base_id: ingredient.produto_base_id,
+            nome: produtoBase.descricao,
+            quantidade_total: totalQuantity,
+            preco_unitario: unitPrice,
+            custo_total: itemCost,
+            promocao: marketProduct.promocao || false
+          });
+        }
+      }
+    }
+    
+    return {
+      custo_total: totalCost,
+      custo_por_pessoa: totalCost / total_funcionarios,
+      detalhamento: costBreakdown
+    };
+    
+  } catch (error) {
+    console.error('Error in executeFunctionCalculateRealCosts:', error);
+    return { error: error.message };
+  }
+}
+
+async function executeFunctionValidateIngredients(supabaseClient: any, args: any) {
+  try {
+    console.log('Executing validate_recipe_ingredients function with args:', args);
+    
+    const { ingredient_names } = args;
+    const validatedIngredients = [];
+    const missingIngredients = [];
+    
+    for (const ingredientName of ingredient_names) {
+      // Search for ingredient in produtos_base
+      const { data: found } = await supabaseClient
+        .from('produtos_base')
+        .select('produto_base_id, descricao, unidade')
+        .ilike('descricao', `%${ingredientName}%`)
+        .limit(3);
+      
+      if (found && found.length > 0) {
+        validatedIngredients.push({
+          nome_procurado: ingredientName,
+          encontrados: found.map(item => ({
+            produto_base_id: item.produto_base_id,
+            descricao: item.descricao,
+            unidade: item.unidade
+          }))
+        });
+      } else {
+        missingIngredients.push(ingredientName);
+      }
+    }
+    
+    return {
+      ingredientes_validados: validatedIngredients,
+      ingredientes_nao_encontrados: missingIngredients,
+      taxa_sucesso: (validatedIngredients.length / ingredient_names.length) * 100
+    };
+    
+  } catch (error) {
+    console.error('Error in executeFunctionValidateIngredients:', error);
+    return { error: error.message };
+  }
+}
+
+async function processMenuResponse(assistantResponse: string, marketProducts: any[], budget: number, restrictions: string[], totalFuncionarios: number, summary: any) {
+  // Try to parse JSON response
+  let menuItems;
+  try {
+    const jsonMatch = assistantResponse.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      const parsedResponse = JSON.parse(jsonMatch[0]);
+      menuItems = parsedResponse.items || [];
+      summary = parsedResponse.summary || summary;
+    } else {
+      throw new Error('No JSON found in response');
+    }
+  } catch (parseError) {
+    console.error('JSON parsing error:', parseError);
+    // Fallback: create structured menu from available products
+    menuItems = createFallbackMenu(marketProducts || [], budget, restrictions, totalFuncionarios);
+    summary = {
+      total_cost: menuItems.reduce((sum: number, item: any) => sum + (item.cost || 0), 0),
+      average_cost_per_person: budget,
+      within_budget: true,
+      promotions_used: 0
+    };
+  }
+
+  // Convert menuItems to recipes format expected by frontend
+  const recipes = menuItems.map((item: any, index: number) => ({
+    id: `recipe_${index + 1}`,
+    name: item.name || `Receita ${index + 1}`,
+    description: item.description || 'Prato nutritivo e saboroso',
+    category: item.category || 'Principal',
+    costPerServing: item.cost || 0,
+    prepTime: item.prepTime || 30,
+    difficulty: item.difficulty || 'Médio',
+    nutritionalInfo: {
+      calories: item.nutritionalInfo?.calories || 450,
+      protein: item.nutritionalInfo?.protein || 25,
+      carbs: item.nutritionalInfo?.carbs || 45,
+      fat: item.nutritionalInfo?.fat || 15,
+      fiber: item.nutritionalInfo?.fiber || 8
+    },
+    ingredients: item.ingredients || [
+      { name: 'Ingrediente principal', quantity: 200, unit: 'g' },
+      { name: 'Temperos', quantity: 10, unit: 'g' }
+    ],
+    instructions: item.instructions || 'Seguir receita padrão'
+  }));
+
+  // Create menu object in the format expected by frontend
+  const menu = {
+    id: Date.now().toString(),
+    total_cost: summary.total_cost || 0,
+    cost_per_meal: summary.average_cost_per_person || 0,
+    within_budget: summary.within_budget || true,
+    recipes: recipes,
+    summary: {
+      total_recipes: recipes.length,
+      total_cost: summary.total_cost || 0,
+      average_cost_per_meal: summary.average_cost_per_person || 0,
+      within_budget: summary.within_budget || true,
+      promotions_used: summary.promotions_used || 0
+    },
+    functionsUsed: true // Flag to indicate function calling was used
+  };
+
+  return new Response(
+    JSON.stringify({ success: true, menu, assistantResponse }),
+    { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+  );
 }
