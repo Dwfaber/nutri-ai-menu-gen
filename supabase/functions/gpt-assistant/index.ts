@@ -125,16 +125,18 @@ Você é um nutricionista corporativo especializado. Crie um cardápio COMPLETO 
 **Preferências:** ${preferences || 'Não especificadas'}
 
 **INSTRUÇÕES ESPECIAIS:**
-1. **PRIMEIRO:** Use get_produtos_base() para buscar ingredientes reais por categoria
-2. **SEGUNDO:** Use get_promotional_products() para identificar produtos em promoção
-3. **TERCEIRO:** Use validate_recipe_ingredients() para validar cada ingrediente
-4. **QUARTO:** Use calculate_real_costs() para calcular custos exatos
+1. **PRIMEIRO:** Use get_produtos_carnes() para buscar proteínas (41 disponíveis)
+2. **SEGUNDO:** Use get_produtos_hortifruti() para buscar frutas/vegetais (61 disponíveis)
+3. **TERCEIRO:** Use get_produtos_generos() para buscar grãos/carboidratos (94 disponíveis)
+4. **QUARTO:** Use get_produtos_frios() para buscar laticínios (6 disponíveis)
+5. **QUINTO:** Use get_promotional_products() para identificar promoções
+6. **SEXTO:** Use calculate_real_costs() para calcular custos exatos
 
 **PROCESSO OBRIGATÓRIO:**
-1. Busque produtos base para cada categoria: carnes, verduras, carboidratos, frutas
+1. Busque produtos por categoria específica usando functions corretas
 2. Identifique produtos em promoção para economizar
 3. Valide TODOS os ingredientes das receitas
-4. Calcule custos reais usando produtos_base_id corretos
+4. Calcule custos reais usando produto_base_id corretos
 
 **CRIE UM CARDÁPIO COMPLETO:** 20 receitas balanceadas (4 por dia × 5 dias)
 
@@ -180,18 +182,53 @@ Você é um nutricionista corporativo especializado. Crie um cardápio COMPLETO 
     // Define function tools for precise database queries
     const functions = [
       {
-        name: "get_produtos_base",
-        description: "Busca produtos base disponíveis no sistema legado",
+        name: "get_produtos_carnes",
+        description: "Busca produtos de carne disponíveis (proteínas)",
         parameters: {
           type: "object",
           properties: {
-            categoria: {
-              type: "string",
-              description: "Categoria do produto (opcional)"
-            },
             limit: {
               type: "number",
-              description: "Limite de resultados (padrão: 50)"
+              description: "Limite de resultados (padrão: 20)"
+            }
+          }
+        }
+      },
+      {
+        name: "get_produtos_hortifruti",
+        description: "Busca produtos de hortifruti (frutas e vegetais)",
+        parameters: {
+          type: "object",
+          properties: {
+            limit: {
+              type: "number",
+              description: "Limite de resultados (padrão: 20)"
+            }
+          }
+        }
+      },
+      {
+        name: "get_produtos_generos",
+        description: "Busca produtos de gêneros (arroz, feijão, grãos, óleos)",
+        parameters: {
+          type: "object",
+          properties: {
+            limit: {
+              type: "number",
+              description: "Limite de resultados (padrão: 20)"
+            }
+          }
+        }
+      },
+      {
+        name: "get_produtos_frios",
+        description: "Busca produtos frios (laticínios, queijos, embutidos)",
+        parameters: {
+          type: "object",
+          properties: {
+            limit: {
+              type: "number",
+              description: "Limite de resultados (padrão: 10)"
             }
           }
         }
@@ -261,10 +298,13 @@ Você é um nutricionista corporativo especializado. Crie um cardápio COMPLETO 
             role: 'system',
             content: `Você é um nutricionista corporativo especializado com acesso a funções para consultar dados reais do sistema. 
             Use as funções disponíveis para:
-            1. Buscar produtos_base reais (get_produtos_base)
-            2. Identificar promoções (get_promotional_products) 
-            3. Calcular custos precisos (calculate_real_costs)
-            4. Validar ingredientes (validate_recipe_ingredients)
+            1. Buscar carnes e proteínas (get_produtos_carnes)
+            2. Buscar frutas e vegetais (get_produtos_hortifruti)  
+            3. Buscar arroz, feijão e grãos (get_produtos_generos)
+            4. Buscar laticínios e queijos (get_produtos_frios)
+            5. Identificar promoções (get_promotional_products)
+            6. Calcular custos precisos (calculate_real_costs)
+            7. Validar ingredientes (validate_recipe_ingredients)
             
             SEMPRE use dados reais das funções em vez de estimativas. Retorne JSON válido com produtos_base_id corretos.`
           },
@@ -320,8 +360,17 @@ Você é um nutricionista corporativo especializado. Crie um cardápio COMPLETO 
         let functionResult;
         try {
           switch (functionName) {
-            case 'get_produtos_base':
-              functionResult = await executeFunctionGetProdutosBase(supabaseClient, functionArgs);
+            case 'get_produtos_carnes':
+              functionResult = await executeFunctionGetProdutosCarnes(supabaseClient, functionArgs);
+              break;
+            case 'get_produtos_hortifruti':
+              functionResult = await executeFunctionGetProdutosHortifruti(supabaseClient, functionArgs);
+              break;
+            case 'get_produtos_generos':
+              functionResult = await executeFunctionGetProdutosGeneros(supabaseClient, functionArgs);
+              break;
+            case 'get_produtos_frios':
+              functionResult = await executeFunctionGetProdutosFrios(supabaseClient, functionArgs);
               break;
             case 'get_promotional_products':
               functionResult = await executeFunctionGetPromotionalProducts(supabaseClient, functionArgs);
@@ -640,33 +689,103 @@ function getCategoryType(categoria: string) {
   return categoryMap[categoria] || 'protein';
 }
 
-// Function implementations for GPT function calling
-async function executeFunctionGetProdutosBase(supabaseClient: any, args: any) {
+// Function implementations for GPT function calling - Category Specific Functions
+async function executeFunctionGetProdutosCarnes(supabaseClient: any, args: any) {
   try {
-    console.log('Executing get_produtos_base function with args:', args);
+    console.log('Executing get_produtos_carnes function with args:', args);
     
-    let query = supabaseClient
-      .from('produtos_base')
-      .select('produto_base_id, descricao, unidade');
-    
-    if (args.categoria) {
-      query = query.ilike('descricao', `%${args.categoria}%`);
-    }
-    
-    query = query.limit(args.limit || 50);
-    
-    const { data, error } = await query;
+    const { data, error } = await supabaseClient
+      .from('co_solicitacao_produto_listagem')
+      .select('produto_base_id, descricao, preco, preco_compra, per_capita, unidade, categoria_descricao, promocao, em_promocao')
+      .eq('categoria_descricao', 'Carnes')
+      .not('produto_base_id', 'is', null)
+      .limit(args.limit || 20);
     
     if (error) {
-      console.error('Error fetching produtos_base:', error);
+      console.error('Error fetching produtos carnes:', error);
       return { error: error.message };
     }
     
-    console.log(`Found ${data?.length || 0} produtos_base`);
+    console.log(`Found ${data?.length || 0} produtos de carnes`);
     return { produtos: data || [] };
     
   } catch (error) {
-    console.error('Error in executeFunctionGetProdutosBase:', error);
+    console.error('Error in executeFunctionGetProdutosCarnes:', error);
+    return { error: error.message };
+  }
+}
+
+async function executeFunctionGetProdutosHortifruti(supabaseClient: any, args: any) {
+  try {
+    console.log('Executing get_produtos_hortifruti function with args:', args);
+    
+    const { data, error } = await supabaseClient
+      .from('co_solicitacao_produto_listagem')
+      .select('produto_base_id, descricao, preco, preco_compra, per_capita, unidade, categoria_descricao, promocao, em_promocao')
+      .eq('categoria_descricao', 'Hortifruti')
+      .not('produto_base_id', 'is', null)
+      .limit(args.limit || 20);
+    
+    if (error) {
+      console.error('Error fetching produtos hortifruti:', error);
+      return { error: error.message };
+    }
+    
+    console.log(`Found ${data?.length || 0} produtos de hortifruti`);
+    return { produtos: data || [] };
+    
+  } catch (error) {
+    console.error('Error in executeFunctionGetProdutosHortifruti:', error);
+    return { error: error.message };
+  }
+}
+
+async function executeFunctionGetProdutosGeneros(supabaseClient: any, args: any) {
+  try {
+    console.log('Executing get_produtos_generos function with args:', args);
+    
+    const { data, error } = await supabaseClient
+      .from('co_solicitacao_produto_listagem')
+      .select('produto_base_id, descricao, preco, preco_compra, per_capita, unidade, categoria_descricao, promocao, em_promocao')
+      .eq('categoria_descricao', 'Gêneros')
+      .not('produto_base_id', 'is', null)
+      .limit(args.limit || 20);
+    
+    if (error) {
+      console.error('Error fetching produtos generos:', error);
+      return { error: error.message };
+    }
+    
+    console.log(`Found ${data?.length || 0} produtos de gêneros`);
+    return { produtos: data || [] };
+    
+  } catch (error) {
+    console.error('Error in executeFunctionGetProdutosGeneros:', error);
+    return { error: error.message };
+  }
+}
+
+async function executeFunctionGetProdutosFrios(supabaseClient: any, args: any) {
+  try {
+    console.log('Executing get_produtos_frios function with args:', args);
+    
+    const { data, error } = await supabaseClient
+      .from('co_solicitacao_produto_listagem')
+      .select('produto_base_id, descricao, preco, preco_compra, per_capita, unidade, categoria_descricao, promocao, em_promocao')
+      .eq('categoria_descricao', 'Frios')
+      .not('produto_base_id', 'is', null)
+      .limit(args.limit || 10);
+    
+    if (error) {
+      console.error('Error fetching produtos frios:', error);
+      return { error: error.message };
+    }
+    
+    console.log(`Found ${data?.length || 0} produtos frios`);
+    return { produtos: data || [] };
+    
+  } catch (error) {
+    console.error('Error in executeFunctionGetProdutosFrios:', error);
     return { error: error.message };
   }
 }
