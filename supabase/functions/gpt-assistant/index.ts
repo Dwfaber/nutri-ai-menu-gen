@@ -73,10 +73,20 @@ async function generateMenuWithAssistant(supabaseClient: any, clientId: string, 
     
     // Get client data
     const { data: clientData } = await supabaseClient
-      .from('contratos_corporativos')
+      .from('contratos_corporativos_v2')
       .select('*')
       .eq('cliente_id_legado', clientId)
       .single();
+
+    // Get daily costs for the client's filiais
+    const { data: dailyCosts } = await supabaseClient
+      .from('custos_filiais')
+      .select('*')
+      .eq('cliente_id_legado', parseInt(clientId))
+      .order('created_at', { ascending: false })
+      .limit(10);
+
+    console.log(`Found ${dailyCosts?.length || 0} cost records for client ${clientId}`);
 
     // Get available products from the digital market
     const { data: marketProducts } = await supabaseClient
@@ -115,6 +125,27 @@ async function generateMenuWithAssistant(supabaseClient: any, clientId: string, 
     const totalFuncionarios = clientData?.total_funcionarios || 100;
     const budgetPerPerson = budget || 0;
 
+    // Calculate daily costs for adaptation
+    const dailyCostConstraints = dailyCosts?.length > 0 ? {
+      segunda: dailyCosts[0]?.RefCustoSegunda || budgetPerPerson,
+      terca: dailyCosts[0]?.RefCustoTerca || budgetPerPerson,
+      quarta: dailyCosts[0]?.RefCustoQuarta || budgetPerPerson,
+      quinta: dailyCosts[0]?.RefCustoQuinta || budgetPerPerson,
+      sexta: dailyCosts[0]?.RefCustoSexta || budgetPerPerson,
+      custo_medio_semanal: dailyCosts[0]?.custo_medio_semanal || budgetPerPerson,
+      porcentagem_limite: dailyCosts[0]?.PorcentagemLimiteAcimaMedia || 10,
+      usar_media_validacao: dailyCosts[0]?.QtdeRefeicoesUsarMediaValidarSimNao || false
+    } : {
+      segunda: budgetPerPerson,
+      terca: budgetPerPerson,
+      quarta: budgetPerPerson,
+      quinta: budgetPerPerson,
+      sexta: budgetPerPerson,
+      custo_medio_semanal: budgetPerPerson,
+      porcentagem_limite: 10,
+      usar_media_validacao: false
+    };
+
     // Get receitas legado data to include in prompt
     const receitasFormatted = receitasLegado?.map(receita => ({
       id: receita.receita_id_legado,
@@ -136,29 +167,48 @@ Você é um nutricionista corporativo especializado. Crie um cardápio COMPLETO 
 **Restrições:** ${restrictions.join(', ') || 'Nenhuma'}
 **Preferências:** ${preferences || 'Não especificadas'}
 
+**CUSTOS DIÁRIOS ESPECÍFICOS POR DIA DA SEMANA:**
+- Segunda-feira: R$ ${dailyCostConstraints.segunda.toFixed(2)} por refeição
+- Terça-feira: R$ ${dailyCostConstraints.terca.toFixed(2)} por refeição
+- Quarta-feira: R$ ${dailyCostConstraints.quarta.toFixed(2)} por refeição
+- Quinta-feira: R$ ${dailyCostConstraints.quinta.toFixed(2)} por refeição
+- Sexta-feira: R$ ${dailyCostConstraints.sexta.toFixed(2)} por refeição
+- Custo médio semanal: R$ ${dailyCostConstraints.custo_medio_semanal.toFixed(2)}
+- Tolerância máxima: ${dailyCostConstraints.porcentagem_limite}% acima da média
+- Validação por média: ${dailyCostConstraints.usar_media_validacao ? 'SIM' : 'NÃO'}
+
 **RECEITAS LEGADO DISPONÍVEIS (${receitasFormatted.length} receitas validadas):**
-${receitasFormatted.map(r => `- ${r.nome} (ID: ${r.id}, Categoria: ${r.categoria}, Tempo: ${r.tempo_preparo}min, Custo: R$${r.custo_total})`).join('\n')}
+${receitasFormatted.map(r => `- ${r.nome} (ID: ${r.id}, Categoria: ${r.categoria}, Tempo: ${r.tempo_preparo}min, Custo Original: R$${r.custo_total})`).join('\n')}
 
-**INSTRUÇÕES ESPECIAIS - PRIORIDADE DE USO:**
-1. **PRIMEIRO:** PRIORIZE receitas legado existentes! Adapte quantidades para ${totalFuncionarios} funcionários
-2. **SEGUNDO:** Use get_produtos_carnes() para buscar proteínas (41 disponíveis)
-3. **TERCEIRO:** Use get_produtos_hortifruti() para buscar frutas/vegetais (61 disponíveis)
-4. **QUARTO:** Use get_produtos_generos() para buscar grãos/carboidratos (94 disponíveis)
-5. **QUINTO:** Use get_produtos_frios() para buscar laticínios (6 disponíveis)
-6. **SEXTO:** Use get_promotional_products() para identificar promoções
-7. **SÉTIMO:** Use calculate_real_costs() para calcular custos exatos
+**INSTRUÇÕES ESPECIAIS - SISTEMA DE ADAPTAÇÃO POR CUSTO DIÁRIO:**
+1. **PRIMEIRO:** Para CADA DIA, use adapt_recipe_to_daily_cost() para adaptar receitas legado ao custo específico do dia
+2. **SEGUNDO:** Use validate_daily_budget() para validar se o cardápio do dia cabe no orçamento
+3. **TERCEIRO:** PRIORIZE receitas legado existentes! Adapte quantidades para ${totalFuncionarios} funcionários
+4. **QUARTO:** Use get_produtos_carnes() para buscar proteínas complementares
+5. **QUINTO:** Use get_produtos_hortifruti() para buscar frutas/vegetais frescos
+6. **SEXTO:** Use get_produtos_generos() para buscar grãos/carboidratos
+7. **SÉTIMO:** Use get_promotional_products() para identificar promoções
+8. **OITAVO:** Use calculate_real_costs() para calcular custos exatos finais
 
-**PROCESSO OBRIGATÓRIO:**
-1. Para CADA receita do cardápio:
-   - Se existe receita legado similar, USE como base e adapte quantidade
-   - Se não existe, crie nova receita com produtos validados
+**PROCESSO OBRIGATÓRIO - ADAPTAÇÃO POR CUSTO DIÁRIO:**
+1. Para CADA DIA da semana (Segunda a Sexta):
+   - Use adapt_recipe_to_daily_cost() para adaptar receitas ao custo específico do dia
+   - Valide com validate_daily_budget() se o cardápio cabe no orçamento diário
+   - Se exceder, reduza porções ou substitua ingredientes mais baratos
+   - Se sobrar orçamento, melhore qualidade dos ingredientes
+
+2. Para CADA receita do cardápio:
+   - PRIMEIRO: Tente adaptar receita legado existente com adapt_recipe_to_daily_cost()
+   - Se não existe receita adequada, crie nova dentro do custo diário
    - Valide TODOS os ingredientes das receitas
    - Calcule custos reais usando produto_base_id corretos
 
-**ADAPTAÇÃO DE RECEITAS LEGADO:**
-- Receita para ${totalFuncionarios} pessoas = receita_original_porcoes × (${totalFuncionarios} ÷ porcoes_originais)
-- Exemplo: "Frango Assado" (10 porções) → adaptar para ${totalFuncionarios} = ingredientes × ${totalFuncionarios/10}
-- Mantenha proporções nutricionais e sabor original
+**ADAPTAÇÃO INTELIGENTE DE RECEITAS:**
+- Receita adaptada = receita_original × fator_adaptacao_custo × fator_funcionarios
+- Fator custo = custo_alvo_dia ÷ custo_original_receita
+- Fator funcionários = ${totalFuncionarios} ÷ porcoes_originais
+- Limite: Não reduzir abaixo de 30% nem aumentar acima de 200% das quantidades originais
+- SEMPRE mantenha proporções nutricionais e sabor original
 
 **CRIE UM CARDÁPIO COMPLETO:** 20 receitas balanceadas (4 por dia × 5 dias)
 
@@ -173,7 +223,7 @@ ${receitasFormatted.map(r => `- ${r.nome} (ID: ${r.id}, Categoria: ${r.categoria
 3. VARIEDADE: Receitas diferentes a cada dia
 4. QUALIDADE: Use APENAS produtos validados com produtos_base_id corretos
 
-**Retorne EXATAMENTE este formato JSON ENRIQUECIDO:**
+**Retorne EXATAMENTE este formato JSON ENRIQUECIDO COM ADAPTAÇÃO POR CUSTO DIÁRIO:**
 {
   "items": [
     {
@@ -183,23 +233,39 @@ ${receitasFormatted.map(r => `- ${r.nome} (ID: ${r.id}, Categoria: ${r.categoria
       "cost": 6.50,
       "servings": ${totalFuncionarios},
       "day": "Segunda",
+      "custo_alvo_dia": ${dailyCostConstraints.segunda.toFixed(2)},
+      "custo_dentro_limite": true,
+      "fator_adaptacao": 0.85,
       "nutritionalInfo": {"calories": 350, "protein": 30, "carbs": 5, "fat": 15},
-      "ingredients": [{"nome": "Peito de frango", "produto_base_id": 123, "quantidade": 200, "unidade": "g"}],
+      "ingredients": [{"nome": "Peito de frango", "produto_base_id": 123, "quantidade": 200, "unidade": "g", "quantidade_adaptada": 170}],
       "description": "Frango temperado e grelhado",
       "receita_legado_id": "12345",
       "receita_original": true,
-      "adaptacao_observacoes": "Quantidade adaptada de 10 para ${totalFuncionarios} porções"
+      "adaptacao_observacoes": "Receita reduzida em 15% para caber no orçamento de Segunda-feira",
+      "custo_original": 7.65,
+      "economia_obtida": 1.15
     }
   ],
+  "daily_breakdown": {
+    "segunda": {"custo_alvo": ${dailyCostConstraints.segunda.toFixed(2)}, "custo_real": 0, "receitas": [], "status": "OK"},
+    "terca": {"custo_alvo": ${dailyCostConstraints.terca.toFixed(2)}, "custo_real": 0, "receitas": [], "status": "OK"},
+    "quarta": {"custo_alvo": ${dailyCostConstraints.quarta.toFixed(2)}, "custo_real": 0, "receitas": [], "status": "OK"},
+    "quinta": {"custo_alvo": ${dailyCostConstraints.quinta.toFixed(2)}, "custo_real": 0, "receitas": [], "status": "OK"},
+    "sexta": {"custo_alvo": ${dailyCostConstraints.sexta.toFixed(2)}, "custo_real": 0, "receitas": [], "status": "OK"}
+  },
   "summary": {
     "total_cost": 120.00,
     "average_cost_per_person": 6.00,
     "within_budget": true,
     "total_recipes": 20,
     "receitas_legado_utilizadas": 15,
+    "receitas_adaptadas": 12,
     "receitas_novas_criadas": 5,
     "products_validated": true,
-    "promotions_used": 5
+    "promotions_used": 5,
+    "economia_total_adaptacao": 15.60,
+    "dias_dentro_orcamento": 5,
+    "adaptacao_media_percentual": 12.5
   }
 }
 
@@ -311,6 +377,43 @@ ${receitasFormatted.map(r => `- ${r.nome} (ID: ${r.id}, Categoria: ${r.categoria
           },
           required: ["ingredient_names"]
         }
+      },
+      {
+        name: "adapt_recipe_to_daily_cost",
+        description: "Adapta receita existente para caber no custo diário específico",
+        parameters: {
+          type: "object",
+          properties: {
+            receita_id: { type: "string", description: "ID da receita legado" },
+            custo_alvo: { type: "number", description: "Custo alvo por refeição" },
+            total_funcionarios: { type: "number", description: "Total de funcionários" },
+            dia_semana: { type: "string", description: "Dia da semana (segunda, terca, etc.)" }
+          },
+          required: ["receita_id", "custo_alvo", "total_funcionarios", "dia_semana"]
+        }
+      },
+      {
+        name: "validate_daily_budget",
+        description: "Valida se cardápio do dia cabe no orçamento específico",
+        parameters: {
+          type: "object",
+          properties: {
+            receitas_dia: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  receita_id: { type: "string" },
+                  custo_estimado: { type: "number" }
+                }
+              }
+            },
+            custo_dia: { type: "number" },
+            tolerancia_percentual: { type: "number" },
+            dia_semana: { type: "string" }
+          },
+          required: ["receitas_dia", "custo_dia", "dia_semana"]
+        }
       }
     ];
 
@@ -410,6 +513,12 @@ ${receitasFormatted.map(r => `- ${r.nome} (ID: ${r.id}, Categoria: ${r.categoria
               break;
             case 'validate_recipe_ingredients':
               functionResult = await executeFunctionValidateIngredients(supabaseClient, functionArgs);
+              break;
+            case 'adapt_recipe_to_daily_cost':
+              functionResult = await executeFunctionAdaptRecipeToDailyCost(supabaseClient, functionArgs);
+              break;
+            case 'validate_daily_budget':
+              functionResult = await executeFunctionValidateDailyBudget(supabaseClient, functionArgs);
               break;
             default:
               functionResult = { error: `Function ${functionName} not implemented` };
@@ -1123,4 +1232,158 @@ async function processMenuResponse(assistantResponse: string, marketProducts: an
     JSON.stringify({ success: true, menu, assistantResponse }),
     { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
   );
+}
+
+// NEW FUNCTIONS FOR DAILY COST ADAPTATION SYSTEM
+
+async function executeFunctionAdaptRecipeToDailyCost(supabaseClient: any, args: any) {
+  try {
+    console.log('Executing adapt_recipe_to_daily_cost function with args:', args);
+    
+    const { receita_id, custo_alvo, total_funcionarios, dia_semana } = args;
+    
+    // Get the original recipe from receitas_legado
+    const { data: receitaOriginal } = await supabaseClient
+      .from('receitas_legado')
+      .select('*')
+      .eq('receita_id_legado', receita_id)
+      .single();
+    
+    if (!receitaOriginal) {
+      return { error: `Receita ${receita_id} não encontrada` };
+    }
+    
+    // Get recipe ingredients
+    const { data: ingredientes } = await supabaseClient
+      .from('receita_ingredientes')
+      .select('*')
+      .eq('receita_id_legado', receita_id);
+    
+    if (!ingredientes || ingredientes.length === 0) {
+      return { error: `Ingredientes da receita ${receita_id} não encontrados` };
+    }
+    
+    // Calculate original cost per serving
+    const custoOriginalTotal = receitaOriginal.custo_total || 0;
+    const porcoesOriginais = receitaOriginal.porcoes || 1;
+    const custoOriginalPorPorcao = custoOriginalTotal / porcoesOriginais;
+    
+    // Calculate adaptation factor to fit target cost
+    let fatorAdaptacao = 1;
+    if (custoOriginalPorPorcao > 0) {
+      fatorAdaptacao = custo_alvo / custoOriginalPorPorcao;
+    }
+    
+    // Limit adaptation factor to reasonable bounds (don't reduce below 30% or increase above 200%)
+    fatorAdaptacao = Math.max(0.3, Math.min(2.0, fatorAdaptacao));
+    
+    // Adapt ingredients
+    const ingredientesAdaptados = ingredientes.map(ing => ({
+      produto_base_id: ing.produto_base_id,
+      nome: ing.notas || 'Ingrediente',
+      quantidade_original: ing.quantidade,
+      quantidade_adaptada: ing.quantidade * fatorAdaptacao,
+      unidade: ing.unidade,
+      fator_adaptacao: fatorAdaptacao
+    }));
+    
+    // Calculate new cost estimation
+    const custoEstimadoAdaptado = custoOriginalPorPorcao * fatorAdaptacao;
+    const custoTotalParaFuncionarios = custoEstimadoAdaptado * total_funcionarios;
+    
+    return {
+      receita_id: receita_id,
+      nome_receita: receitaOriginal.nome_receita,
+      dia_semana: dia_semana,
+      custo_original_por_porcao: custoOriginalPorPorcao,
+      custo_alvo: custo_alvo,
+      custo_adaptado: custoEstimadoAdaptado,
+      fator_adaptacao: fatorAdaptacao,
+      porcoes_originais: porcoesOriginais,
+      total_funcionarios: total_funcionarios,
+      custo_total_funcionarios: custoTotalParaFuncionarios,
+      ingredientes_adaptados: ingredientesAdaptados,
+      observacoes: fatorAdaptacao < 0.7 ? 
+        `Receita reduzida em ${Math.round((1-fatorAdaptacao)*100)}% para caber no orçamento` :
+        fatorAdaptacao > 1.3 ? 
+        `Receita aumentada em ${Math.round((fatorAdaptacao-1)*100)}% para melhor valor` :
+        'Receita mantida próxima ao original',
+      viabilidade: custoEstimadoAdaptado <= custo_alvo ? 'VIÁVEL' : 'LIMITE_EXCEDIDO'
+    };
+    
+  } catch (error) {
+    console.error('Error in executeFunctionAdaptRecipeToDailyCost:', error);
+    return { error: error.message };
+  }
+}
+
+async function executeFunctionValidateDailyBudget(supabaseClient: any, args: any) {
+  try {
+    console.log('Executing validate_daily_budget function with args:', args);
+    
+    const { receitas_dia, custo_dia, tolerancia_percentual = 10, dia_semana } = args;
+    
+    // Calculate total cost for the day
+    const custoTotalDia = receitas_dia.reduce((total: number, receita: any) => {
+      return total + (receita.custo_estimado || 0);
+    }, 0);
+    
+    // Calculate limits
+    const limiteSuperior = custo_dia * (1 + tolerancia_percentual / 100);
+    const limiteInferior = custo_dia * 0.8; // Allow 20% below target
+    
+    // Validate budget compliance
+    const dentroOrcamento = custoTotalDia <= limiteSuperior;
+    const acimaMinimoRecomendado = custoTotalDia >= limiteInferior;
+    
+    // Calculate percentages
+    const percentualDoCusto = (custoTotalDia / custo_dia) * 100;
+    const economiaOuExcesso = custo_dia - custoTotalDia;
+    
+    // Generate recommendations
+    const recomendacoes = [];
+    
+    if (custoTotalDia > limiteSuperior) {
+      recomendacoes.push(`Custo excede o limite em R$ ${(custoTotalDia - limiteSuperior).toFixed(2)}`);
+      recomendacoes.push('Reduzir porções ou substituir ingredientes mais caros');
+    } else if (custoTotalDia < limiteInferior) {
+      recomendacoes.push(`Custo muito baixo, pode melhorar qualidade em R$ ${(limiteInferior - custoTotalDia).toFixed(2)}`);
+      recomendacoes.push('Considerar ingredientes premium ou aumentar porções');
+    } else {
+      recomendacoes.push('Custo dentro da faixa ideal para o dia');
+    }
+    
+    // Analyze individual recipes
+    const analiseReceitas = receitas_dia.map((receita: any) => {
+      const percentualDoTotal = (receita.custo_estimado / custoTotalDia) * 100;
+      return {
+        receita_id: receita.receita_id,
+        custo: receita.custo_estimado,
+        percentual_do_total: percentualDoTotal,
+        classificacao: percentualDoTotal > 40 ? 'ALTA' : 
+                      percentualDoTotal > 25 ? 'MÉDIA' : 'BAIXA'
+      };
+    });
+    
+    return {
+      dia_semana: dia_semana,
+      custo_alvo: custo_dia,
+      custo_total_dia: custoTotalDia,
+      limite_superior: limiteSuperior,
+      limite_inferior: limiteInferior,
+      percentual_do_custo: percentualDoCusto,
+      economia_ou_excesso: economiaOuExcesso,
+      dentro_orcamento: dentroOrcamento,
+      acima_minimo_recomendado: acimaMinimoRecomendado,
+      status: dentroOrcamento && acimaMinimoRecomendado ? 'APROVADO' : 
+              !dentroOrcamento ? 'EXCEDE_ORCAMENTO' : 'ABAIXO_MINIMO',
+      recomendacoes: recomendacoes,
+      analise_receitas: analiseReceitas,
+      total_receitas: receitas_dia.length
+    };
+    
+  } catch (error) {
+    console.error('Error in executeFunctionValidateDailyBudget:', error);
+    return { error: error.message };
+  }
 }
