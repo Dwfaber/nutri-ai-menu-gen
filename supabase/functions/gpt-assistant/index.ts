@@ -686,26 +686,134 @@ Analise o comando e retorne em JSON:
 }
 
 function createFallbackMenu(products: any[], budget: number, restrictions: string[], totalFuncionarios: number) {
-  const filteredProducts = products.filter(p => p.preco > 0 && p.per_capita > 0);
+  console.log('Creating realistic fallback menu...');
   
-  return filteredProducts.slice(0, 5).map((product, index) => ({
-    id: (index + 1).toString(),
-    name: product.descricao || 'Prato Especial',
-    category: getCategoryType(product.categoria_descricao),
-    ingredients: [{
-      produto_id: product.produto_id,
-      nome: product.descricao,
-      quantidade: product.per_capita * totalFuncionarios,
-      unidade: product.unidade,
-      preco_unitario: product.preco,
-      custo_total: product.per_capita * totalFuncionarios * product.preco
-    }],
-    nutritionalInfo: { calories: 400, protein: 25, carbs: 30, fat: 15 },
-    cost: product.per_capita * totalFuncionarios * product.preco,
-    servings: totalFuncionarios,
-    restrictions: restrictions.includes('vegan') ? ['vegan'] : [],
-    description: `Prato preparado com ${product.descricao}`
-  }));
+  // Filter out inappropriate products (non-food items)
+  const inappropriateTerms = ['couro', 'pele', 'saco', 'embalagem', 'papel', 'plástico', 'vidro'];
+  const validProducts = products.filter(product => {
+    const name = (product.descricao || '').toLowerCase();
+    const hasPrice = product.preco > 2 && product.preco < 50; // Reasonable price range
+    const notInappropriate = !inappropriateTerms.some(term => name.includes(term));
+    
+    return hasPrice && notInappropriate && product.produto_base_id;
+  });
+
+  const days = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta'];
+  const menuItems: any[] = [];
+
+  // Create realistic menu for each day
+  days.forEach((day, dayIndex) => {
+    // Protein - look for meat/chicken products
+    const proteins = validProducts.filter(p => {
+      const desc = (p.descricao || '').toLowerCase();
+      return desc.includes('frango') || desc.includes('boi') || desc.includes('carne') || 
+             desc.includes('peixe') || (p.categoria_descricao === 'Carnes');
+    });
+    
+    if (proteins.length > 0) {
+      const protein = proteins[dayIndex % proteins.length];
+      menuItems.push({
+        id: `protein_${dayIndex}`,
+        name: `${protein.descricao} Grelhado`,
+        category: 'protein',
+        cost: Math.min(protein.preco * 0.3, budget * 0.4),
+        servings: totalFuncionarios,
+        day: day,
+        nutritionalInfo: { calories: 350, protein: 30, carbs: 5, fat: 15 },
+        ingredients: [{
+          nome: protein.descricao,
+          produto_base_id: protein.produto_base_id,
+          quantidade: 150,
+          unidade: protein.unidade || 'g'
+        }],
+        description: `${protein.descricao} temperado e grelhado`
+      });
+    }
+
+    // Vegetables/Salads - look for vegetables
+    const vegetables = validProducts.filter(p => {
+      const desc = (p.descricao || '').toLowerCase();
+      return desc.includes('alface') || desc.includes('tomate') || desc.includes('cenoura') ||
+             desc.includes('verdura') || (p.categoria_descricao === 'Hortifruti');
+    });
+    
+    if (vegetables.length > 0) {
+      const vegetable = vegetables[dayIndex % vegetables.length];
+      menuItems.push({
+        id: `vegetable_${dayIndex}`,
+        name: `Salada de ${vegetable.descricao}`,
+        category: 'vegetable',
+        cost: Math.min(vegetable.preco * 0.2, budget * 0.25),
+        servings: totalFuncionarios,
+        day: day,
+        nutritionalInfo: { calories: 50, protein: 2, carbs: 8, fat: 1 },
+        ingredients: [{
+          nome: vegetable.descricao,
+          produto_base_id: vegetable.produto_base_id,
+          quantidade: 80,
+          unidade: vegetable.unidade || 'g'
+        }],
+        description: `Salada fresca de ${vegetable.descricao}`
+      });
+    }
+
+    // Carbohydrates - look for rice, beans, etc.
+    const carbs = validProducts.filter(p => {
+      const desc = (p.descricao || '').toLowerCase();
+      return desc.includes('arroz') || desc.includes('feijão') || desc.includes('batata') ||
+             desc.includes('macarrão') || (p.categoria_descricao === 'Gêneros');
+    });
+    
+    if (carbs.length > 0) {
+      const carb = carbs[dayIndex % carbs.length];
+      menuItems.push({
+        id: `carb_${dayIndex}`,
+        name: `${carb.descricao} Temperado`,
+        category: 'carb',
+        cost: Math.min(carb.preco * 0.2, budget * 0.25),
+        servings: totalFuncionarios,
+        day: day,
+        nutritionalInfo: { calories: 200, protein: 8, carbs: 40, fat: 2 },
+        ingredients: [{
+          nome: carb.descricao,
+          produto_base_id: carb.produto_base_id,
+          quantidade: 100,
+          unidade: carb.unidade || 'g'
+        }],
+        description: `${carb.descricao} bem temperado`
+      });
+    }
+
+    // Fruits - look for fruits
+    const fruits = validProducts.filter(p => {
+      const desc = (p.descricao || '').toLowerCase();
+      return desc.includes('banana') || desc.includes('maçã') || desc.includes('laranja') ||
+             desc.includes('fruta') || desc.includes('uva');
+    });
+    
+    if (fruits.length > 0) {
+      const fruit = fruits[dayIndex % fruits.length];
+      menuItems.push({
+        id: `fruit_${dayIndex}`,
+        name: `${fruit.descricao} Natural`,
+        category: 'fruit',
+        cost: Math.min(fruit.preco * 0.15, budget * 0.15),
+        servings: totalFuncionarios,
+        day: day,
+        nutritionalInfo: { calories: 80, protein: 1, carbs: 20, fat: 0 },
+        ingredients: [{
+          nome: fruit.descricao,
+          produto_base_id: fruit.produto_base_id,
+          quantidade: 120,
+          unidade: fruit.unidade || 'g'
+        }],
+        description: `${fruit.descricao} fresca da estação`
+      });
+    }
+  });
+
+  console.log(`Created realistic fallback menu with ${menuItems.length} items`);
+  return menuItems;
 }
 
 function getCategoryType(categoria: string) {
