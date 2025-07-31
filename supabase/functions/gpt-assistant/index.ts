@@ -115,6 +115,18 @@ async function generateMenuWithAssistant(supabaseClient: any, clientId: string, 
     const totalFuncionarios = clientData?.total_funcionarios || 100;
     const budgetPerPerson = budget || 0;
 
+    // Get receitas legado data to include in prompt
+    const receitasFormatted = receitasLegado?.map(receita => ({
+      id: receita.receita_id_legado,
+      nome: receita.nome_receita,
+      categoria: receita.categoria_descricao || 'Principal',
+      tempo_preparo: receita.tempo_preparo || 30,
+      porcoes: receita.porcoes || 1,
+      custo_total: receita.custo_total || 0,
+      modo_preparo: receita.modo_preparo,
+      ativo: !receita.inativa
+    })) || [];
+
     const prompt = `
 Você é um nutricionista corporativo especializado. Crie um cardápio COMPLETO E BALANCEADO para a semana usando dados reais do sistema.
 
@@ -124,19 +136,29 @@ Você é um nutricionista corporativo especializado. Crie um cardápio COMPLETO 
 **Restrições:** ${restrictions.join(', ') || 'Nenhuma'}
 **Preferências:** ${preferences || 'Não especificadas'}
 
-**INSTRUÇÕES ESPECIAIS:**
-1. **PRIMEIRO:** Use get_produtos_carnes() para buscar proteínas (41 disponíveis)
-2. **SEGUNDO:** Use get_produtos_hortifruti() para buscar frutas/vegetais (61 disponíveis)
-3. **TERCEIRO:** Use get_produtos_generos() para buscar grãos/carboidratos (94 disponíveis)
-4. **QUARTO:** Use get_produtos_frios() para buscar laticínios (6 disponíveis)
-5. **QUINTO:** Use get_promotional_products() para identificar promoções
-6. **SEXTO:** Use calculate_real_costs() para calcular custos exatos
+**RECEITAS LEGADO DISPONÍVEIS (${receitasFormatted.length} receitas validadas):**
+${receitasFormatted.map(r => `- ${r.nome} (ID: ${r.id}, Categoria: ${r.categoria}, Tempo: ${r.tempo_preparo}min, Custo: R$${r.custo_total})`).join('\n')}
+
+**INSTRUÇÕES ESPECIAIS - PRIORIDADE DE USO:**
+1. **PRIMEIRO:** PRIORIZE receitas legado existentes! Adapte quantidades para ${totalFuncionarios} funcionários
+2. **SEGUNDO:** Use get_produtos_carnes() para buscar proteínas (41 disponíveis)
+3. **TERCEIRO:** Use get_produtos_hortifruti() para buscar frutas/vegetais (61 disponíveis)
+4. **QUARTO:** Use get_produtos_generos() para buscar grãos/carboidratos (94 disponíveis)
+5. **QUINTO:** Use get_produtos_frios() para buscar laticínios (6 disponíveis)
+6. **SEXTO:** Use get_promotional_products() para identificar promoções
+7. **SÉTIMO:** Use calculate_real_costs() para calcular custos exatos
 
 **PROCESSO OBRIGATÓRIO:**
-1. Busque produtos por categoria específica usando functions corretas
-2. Identifique produtos em promoção para economizar
-3. Valide TODOS os ingredientes das receitas
-4. Calcule custos reais usando produto_base_id corretos
+1. Para CADA receita do cardápio:
+   - Se existe receita legado similar, USE como base e adapte quantidade
+   - Se não existe, crie nova receita com produtos validados
+   - Valide TODOS os ingredientes das receitas
+   - Calcule custos reais usando produto_base_id corretos
+
+**ADAPTAÇÃO DE RECEITAS LEGADO:**
+- Receita para ${totalFuncionarios} pessoas = receita_original_porcoes × (${totalFuncionarios} ÷ porcoes_originais)
+- Exemplo: "Frango Assado" (10 porções) → adaptar para ${totalFuncionarios} = ingredientes × ${totalFuncionarios/10}
+- Mantenha proporções nutricionais e sabor original
 
 **CRIE UM CARDÁPIO COMPLETO:** 20 receitas balanceadas (4 por dia × 5 dias)
 
@@ -151,7 +173,7 @@ Você é um nutricionista corporativo especializado. Crie um cardápio COMPLETO 
 3. VARIEDADE: Receitas diferentes a cada dia
 4. QUALIDADE: Use APENAS produtos validados com produtos_base_id corretos
 
-**Retorne EXATAMENTE este formato JSON:**
+**Retorne EXATAMENTE este formato JSON ENRIQUECIDO:**
 {
   "items": [
     {
@@ -163,7 +185,10 @@ Você é um nutricionista corporativo especializado. Crie um cardápio COMPLETO 
       "day": "Segunda",
       "nutritionalInfo": {"calories": 350, "protein": 30, "carbs": 5, "fat": 15},
       "ingredients": [{"nome": "Peito de frango", "produto_base_id": 123, "quantidade": 200, "unidade": "g"}],
-      "description": "Frango temperado e grelhado"
+      "description": "Frango temperado e grelhado",
+      "receita_legado_id": "12345",
+      "receita_original": true,
+      "adaptacao_observacoes": "Quantidade adaptada de 10 para ${totalFuncionarios} porções"
     }
   ],
   "summary": {
@@ -171,12 +196,17 @@ Você é um nutricionista corporativo especializado. Crie um cardápio COMPLETO 
     "average_cost_per_person": 6.00,
     "within_budget": true,
     "total_recipes": 20,
+    "receitas_legado_utilizadas": 15,
+    "receitas_novas_criadas": 5,
     "products_validated": true,
     "promotions_used": 5
   }
 }
 
-**CRÍTICO:** Use as funções disponíveis para garantir dados reais e custos precisos!
+**CRÍTICO:** 
+- Use PRIMEIRO as receitas legado disponíveis, adaptando para ${totalFuncionarios} pessoas
+- Só crie receitas novas se não houver legado adequado
+- Use as funções disponíveis para garantir dados reais e custos precisos!
     `;
 
     // Define function tools for precise database queries
