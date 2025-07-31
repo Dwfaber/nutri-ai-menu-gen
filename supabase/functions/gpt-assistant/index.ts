@@ -696,7 +696,7 @@ async function executeFunctionGetProdutosCarnes(supabaseClient: any, args: any) 
     
     const { data, error } = await supabaseClient
       .from('co_solicitacao_produto_listagem')
-      .select('produto_base_id, descricao, preco, preco_compra, per_capita, unidade, categoria_descricao, promocao, em_promocao')
+      .select('produto_base_id, descricao, preco, preco_compra, per_capita, unidade, categoria_descricao, promocao')
       .eq('categoria_descricao', 'Carnes')
       .not('produto_base_id', 'is', null)
       .limit(args.limit || 20);
@@ -721,7 +721,7 @@ async function executeFunctionGetProdutosHortifruti(supabaseClient: any, args: a
     
     const { data, error } = await supabaseClient
       .from('co_solicitacao_produto_listagem')
-      .select('produto_base_id, descricao, preco, preco_compra, per_capita, unidade, categoria_descricao, promocao, em_promocao')
+      .select('produto_base_id, descricao, preco, preco_compra, per_capita, unidade, categoria_descricao, promocao')
       .eq('categoria_descricao', 'Hortifruti')
       .not('produto_base_id', 'is', null)
       .limit(args.limit || 20);
@@ -746,7 +746,7 @@ async function executeFunctionGetProdutosGeneros(supabaseClient: any, args: any)
     
     const { data, error } = await supabaseClient
       .from('co_solicitacao_produto_listagem')
-      .select('produto_base_id, descricao, preco, preco_compra, per_capita, unidade, categoria_descricao, promocao, em_promocao')
+      .select('produto_base_id, descricao, preco, preco_compra, per_capita, unidade, categoria_descricao, promocao')
       .eq('categoria_descricao', 'Gêneros')
       .not('produto_base_id', 'is', null)
       .limit(args.limit || 20);
@@ -771,7 +771,7 @@ async function executeFunctionGetProdutosFrios(supabaseClient: any, args: any) {
     
     const { data, error } = await supabaseClient
       .from('co_solicitacao_produto_listagem')
-      .select('produto_base_id, descricao, preco, preco_compra, per_capita, unidade, categoria_descricao, promocao, em_promocao')
+      .select('produto_base_id, descricao, preco, preco_compra, per_capita, unidade, categoria_descricao, promocao')
       .eq('categoria_descricao', 'Frios')
       .not('produto_base_id', 'is', null)
       .limit(args.limit || 10);
@@ -796,8 +796,8 @@ async function executeFunctionGetPromotionalProducts(supabaseClient: any, args: 
     
     let query = supabaseClient
       .from('co_solicitacao_produto_listagem')
-      .select('produto_id, descricao, preco, preco_compra, per_capita, unidade, categoria_descricao, promocao, em_promocao')
-      .or('promocao.eq.true,em_promocao.eq.true');
+      .select('produto_id, descricao, preco, preco_compra, per_capita, unidade, categoria_descricao, promocao')
+      .eq('promocao', true);
     
     if (args.categoria) {
       query = query.ilike('categoria_descricao', `%${args.categoria}%`);

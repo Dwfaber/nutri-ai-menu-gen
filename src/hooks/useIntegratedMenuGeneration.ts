@@ -335,7 +335,7 @@ export const useIntegratedMenuGeneration = () => {
       const processedRecipes = distributeRecipesByDay(apiRecipes);
       
       const totalCost = processedRecipes.reduce((sum, recipe) => sum + recipe.cost, 0);
-      const costPerMeal = totalCost / processedRecipes.length;
+      const costPerMeal = processedRecipes.length > 0 ? totalCost / processedRecipes.length : 0;
 
       const menu: GeneratedMenu = {
         id: `menu_${Date.now()}`,
