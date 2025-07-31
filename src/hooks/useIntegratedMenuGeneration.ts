@@ -304,10 +304,7 @@ export const useIntegratedMenuGeneration = () => {
     try {
       const { data: menus, error: menusError } = await supabase
         .from('generated_menus')
-        .select(`
-          *,
-          menu_recipes (*)
-        `)
+        .select('*')
         .order('created_at', { ascending: false });
 
       if (menusError) throw menusError;
@@ -323,14 +320,14 @@ export const useIntegratedMenuGeneration = () => {
         status: menu.status as 'pending_approval' | 'approved' | 'rejected',
         approvedBy: menu.approved_by,
         rejectedReason: menu.rejected_reason,
-        recipes: menu.menu_recipes.map((recipe: any) => ({
-          id: recipe.recipe_id,
-          name: recipe.name,
-          category: recipe.category,
+        recipes: (Array.isArray(menu.receitas_adaptadas) ? menu.receitas_adaptadas : []).map((recipe: any) => ({
+          id: recipe.receita_id_legado,
+          name: recipe.nome_receita,
+          category: recipe.categoria_descricao,
           day: recipe.day,
-          cost: recipe.cost,
-          servings: recipe.servings,
-          ingredients: recipe.ingredients || [],
+          cost: recipe.custo_adaptado,
+          servings: recipe.porcoes,
+          ingredients: recipe.ingredientes || [],
           nutritionalInfo: recipe.nutritional_info || {}
         })),
         createdAt: menu.created_at
@@ -345,7 +342,19 @@ export const useIntegratedMenuGeneration = () => {
   // Salvar cardápio no banco
   const saveMenuToDatabase = async (menu: GeneratedMenu): Promise<string | null> => {
     try {
-      // Salvar cardápio principal
+      // Preparar receitas adaptadas para salvar
+      const receitasAdaptadas = menu.recipes.map(recipe => ({
+        receita_id_legado: recipe.id,
+        nome_receita: recipe.name,
+        categoria_descricao: recipe.category,
+        day: recipe.day,
+        custo_adaptado: recipe.cost,
+        porcoes: recipe.servings,
+        ingredientes: recipe.ingredients || [],
+        nutritional_info: recipe.nutritionalInfo || {}
+      }));
+
+      // Salvar cardápio principal com receitas adaptadas
       const { data: savedMenu, error: menuError } = await supabase
         .from('generated_menus')
         .insert({
@@ -355,31 +364,14 @@ export const useIntegratedMenuGeneration = () => {
           total_cost: menu.totalCost,
           cost_per_meal: menu.costPerMeal,
           total_recipes: menu.totalRecipes,
-          status: menu.status
+          status: menu.status,
+          receitas_ids: menu.recipes.map(r => r.id),
+          receitas_adaptadas: receitasAdaptadas
         })
         .select('id')
         .single();
 
       if (menuError) throw menuError;
-
-      // Salvar receitas
-      const recipesToSave = menu.recipes.map(recipe => ({
-        menu_id: savedMenu.id,
-        recipe_id: recipe.id,
-        name: recipe.name,
-        category: recipe.category,
-        day: recipe.day,
-        cost: recipe.cost,
-        servings: recipe.servings,
-        ingredients: recipe.ingredients || [],
-        nutritional_info: recipe.nutritionalInfo || {}
-      }));
-
-      const { error: recipesError } = await supabase
-        .from('menu_recipes')
-        .insert(recipesToSave);
-
-      if (recipesError) throw recipesError;
 
       return savedMenu.id;
     } catch (error) {

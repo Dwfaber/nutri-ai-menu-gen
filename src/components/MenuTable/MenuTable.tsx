@@ -27,12 +27,9 @@ interface MenuTableProps {
 const DAYS = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta'];
 const CATEGORIES = [
   'SALADA 1',
-  'SALADA 2', 
   'PP1',
-  'PP2',
-  'OPÇÕES',
-  'GUARNIÇÃO 1',
-  'SOBREMESA'
+  'GUARNICAO 1',
+  'SOBREMESA 1'
 ];
 
 const MenuTable: React.FC<MenuTableProps> = ({

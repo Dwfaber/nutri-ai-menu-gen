@@ -95,11 +95,34 @@ async function generateMenuWithAssistant(supabaseClient: any, clientId: string, 
       .order('categoria_descricao', { ascending: true })
       .limit(50); // Limit to avoid token overflow
 
-    // Get available recipes
+    // Get available recipes with ingredients
     const { data: receitasLegado } = await supabaseClient
       .from('receitas_legado')
-      .select('*')
-      .limit(10);
+      .select(`
+        receita_id_legado,
+        nome_receita,
+        categoria_descricao,
+        porcoes,
+        custo_total,
+        tempo_preparo,
+        modo_preparo,
+        inativa
+      `)
+      .eq('inativa', false)
+      .order('categoria_descricao')
+      .limit(50);
+
+    // Get recipe ingredients
+    const { data: receitaIngredientes } = await supabaseClient
+      .from('receita_ingredientes')
+      .select(`
+        receita_id_legado,
+        produto_base_id,
+        quantidade,
+        unidade,
+        notas
+      `)
+      .in('receita_id_legado', receitasLegado?.map(r => r.receita_id_legado) || []);
 
     // Process market data by category
     const productsByCategory = marketProducts?.reduce((acc: any, product: any) => {
@@ -178,12 +201,15 @@ Você é um nutricionista corporativo especializado. Crie um cardápio COMPLETO 
 - Validação por média: ${dailyCostConstraints.usar_media_validacao ? 'SIM' : 'NÃO'}
 
 **RECEITAS LEGADO DISPONÍVEIS (${receitasFormatted.length} receitas validadas):**
-${receitasFormatted.map(r => `- ${r.nome} (ID: ${r.id}, Categoria: ${r.categoria}, Tempo: ${r.tempo_preparo}min, Custo Original: R$${r.custo_total})`).join('\n')}
+${receitasFormatted.map(r => `- ID: ${r.id} | ${r.nome} | Categoria: ${r.categoria} | Porções: ${r.porcoes} | Custo: R$${(r.custo_total || 0).toFixed(2)} | Tempo: ${r.tempo_preparo}min`).join('\n')}
+
+**INGREDIENTES DAS RECEITAS LEGADO:**
+${receitaIngredientes?.slice(0, 30).map(ing => `Receita ${ing.receita_id_legado}: ${ing.quantidade || 0}${ing.unidade || 'un'} - Produto Base ID: ${ing.produto_base_id}`).join('\n') || 'Sem ingredientes detalhados'}
 
 **INSTRUÇÕES ESPECIAIS - SISTEMA DE ADAPTAÇÃO POR CUSTO DIÁRIO:**
 1. **PRIMEIRO:** Para CADA DIA, use adapt_recipe_to_daily_cost() para adaptar receitas legado ao custo específico do dia
 2. **SEGUNDO:** Use validate_daily_budget() para validar se o cardápio do dia cabe no orçamento
-3. **TERCEIRO:** PRIORIZE receitas legado existentes! Adapte quantidades para ${totalFuncionarios} funcionários
+3. **TERCEIRO:** UTILIZE EXCLUSIVAMENTE receitas legado! Selecione das ${receitasFormatted.length} receitas disponíveis e adapte para ${totalFuncionarios} funcionários
 4. **QUARTO:** Use get_produtos_carnes() para buscar proteínas complementares
 5. **QUINTO:** Use get_produtos_hortifruti() para buscar frutas/vegetais frescos
 6. **SEXTO:** Use get_produtos_generos() para buscar grãos/carboidratos
@@ -198,10 +224,10 @@ ${receitasFormatted.map(r => `- ${r.nome} (ID: ${r.id}, Categoria: ${r.categoria
    - Se sobrar orçamento, melhore qualidade dos ingredientes
 
 2. Para CADA receita do cardápio:
-   - PRIMEIRO: Tente adaptar receita legado existente com adapt_recipe_to_daily_cost()
-   - Se não existe receita adequada, crie nova dentro do custo diário
-   - Valide TODOS os ingredientes das receitas
-   - Calcule custos reais usando produto_base_id corretos
+   - OBRIGATÓRIO: Use APENAS receitas legado da lista (${receitasFormatted.length} disponíveis)
+   - Adapte receita selecionada com adapt_recipe_to_daily_cost()
+   - Ajuste porções de porcoes_originais para ${totalFuncionarios} pessoas
+   - Use ingredientes originais com produto_base_id corretos
 
 **ADAPTAÇÃO INTELIGENTE DE RECEITAS:**
 - Receita adaptada = receita_original × fator_adaptacao_custo × fator_funcionarios
@@ -239,9 +265,13 @@ ${receitasFormatted.map(r => `- ${r.nome} (ID: ${r.id}, Categoria: ${r.categoria
       "nutritionalInfo": {"calories": 350, "protein": 30, "carbs": 5, "fat": 15},
       "ingredients": [{"nome": "Peito de frango", "produto_base_id": 123, "quantidade": 200, "unidade": "g", "quantidade_adaptada": 170}],
       "description": "Frango temperado e grelhado",
-      "receita_legado_id": "12345",
-      "receita_original": true,
-      "adaptacao_observacoes": "Receita reduzida em 15% para caber no orçamento de Segunda-feira",
+      "receita_id_legado": "12345",
+      "nome_receita_original": "Frango Grelhado Original",
+      "categoria_original": "Proteína",
+      "porcoes_originais": 10,
+      "modo_preparo": "Tempere e grelhe por 15min",
+      "tempo_preparo": 30,
+      "adaptacao_porcoes": "De 10 para ${totalFuncionarios} porções",
       "custo_original": 7.65,
       "economia_obtida": 1.15
     }
@@ -258,9 +288,9 @@ ${receitasFormatted.map(r => `- ${r.nome} (ID: ${r.id}, Categoria: ${r.categoria
     "average_cost_per_person": 6.00,
     "within_budget": true,
     "total_recipes": 20,
-    "receitas_legado_utilizadas": 15,
-    "receitas_adaptadas": 12,
-    "receitas_novas_criadas": 5,
+    "receitas_legado_utilizadas": 20,
+    "receitas_adaptadas": 20,
+    "receitas_novas_criadas": 0,
     "products_validated": true,
     "promotions_used": 5,
     "economia_total_adaptacao": 15.60,
@@ -269,10 +299,12 @@ ${receitasFormatted.map(r => `- ${r.nome} (ID: ${r.id}, Categoria: ${r.categoria
   }
 }
 
-**CRÍTICO:** 
-- Use PRIMEIRO as receitas legado disponíveis, adaptando para ${totalFuncionarios} pessoas
-- Só crie receitas novas se não houver legado adequado
-- Use as funções disponíveis para garantir dados reais e custos precisos!
+**CRÍTICO - RECEITAS LEGADO OBRIGATÓRIAS:** 
+- Use EXCLUSIVAMENTE as ${receitasFormatted.length} receitas legado da lista acima
+- NUNCA crie receitas novas - apenas adapte as existentes
+- Cada item deve ter receita_id_legado válido da lista
+- Mantenha ingredientes originais, adapte apenas quantidades para ${totalFuncionarios} pessoas
+- Use as funções para validar custos reais!
     `;
 
     // Define function tools for precise database queries
