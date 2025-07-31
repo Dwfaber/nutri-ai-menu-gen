@@ -93,6 +93,141 @@ export const useIntegratedMenuGeneration = () => {
     return 'ACOMPANHAMENTO';
   };
 
+  // Fallback function to create a basic menu from available products
+  const createFallbackMenu = (
+    marketProducts: any[],
+    clientInfo: any,
+    weekPeriod: string
+  ): any[] => {
+    console.log('Creating fallback menu with', marketProducts.length, 'products');
+    
+    // Organize products by category
+    const carnes = marketProducts.filter(p => p.categoria_descricao === 'Carnes');
+    const hortifruti = marketProducts.filter(p => p.categoria_descricao === 'Hortifruti');
+    const generos = marketProducts.filter(p => p.categoria_descricao === 'Gêneros');
+    const frios = marketProducts.filter(p => p.categoria_descricao === 'Frios');
+    
+    const recipes: any[] = [];
+    const days = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta'];
+    const targetCostPerMeal = clientInfo?.custo_maximo_refeicao || 3.5;
+    
+    days.forEach((day, dayIndex) => {
+      // Create 4 recipes per day: PP1 (protein), SALADA 1 (vegetable), GUARNICAO 1 (carb), SOBREMESA 1 (fruit)
+      
+      // PP1 - Proteína Principal usando Carnes
+      if (carnes.length > 0) {
+        const protein = carnes[dayIndex % carnes.length];
+        recipes.push({
+          id: `fallback_pp1_${dayIndex}`,
+          name: `${protein.descricao} grelhada`,
+          category: 'PP1',
+          day: day,
+          servings: 1,
+          cost: Math.min(protein.preco || 1.5, targetCostPerMeal * 0.4),
+          ingredients: [
+            {
+              name: protein.descricao,
+              quantity: protein.per_capita || 150,
+              unit: protein.unidade || 'g',
+              cost: protein.preco || 1.5
+            }
+          ],
+          nutritional_info: {
+            calories: 200,
+            protein: 25,
+            carbs: 2,
+            fat: 8
+          }
+        });
+      }
+      
+      // SALADA 1 - Salada usando Hortifruti
+      if (hortifruti.length > 0) {
+        const vegetable = hortifruti[dayIndex % hortifruti.length];
+        recipes.push({
+          id: `fallback_salada_${dayIndex}`,
+          name: `Salada de ${vegetable.descricao}`,
+          category: 'SALADA 1',
+          day: day,
+          servings: 1,
+          cost: Math.min(vegetable.preco || 0.8, targetCostPerMeal * 0.2),
+          ingredients: [
+            {
+              name: vegetable.descricao,
+              quantity: vegetable.per_capita || 80,
+              unit: vegetable.unidade || 'g',
+              cost: vegetable.preco || 0.8
+            }
+          ],
+          nutritional_info: {
+            calories: 50,
+            protein: 2,
+            carbs: 10,
+            fat: 1
+          }
+        });
+      }
+      
+      // GUARNICAO 1 - Acompanhamento usando Gêneros
+      if (generos.length > 0) {
+        const carb = generos[dayIndex % generos.length];
+        recipes.push({
+          id: `fallback_guarnicao_${dayIndex}`,
+          name: `${carb.descricao} refogado`,
+          category: 'GUARNICAO 1',
+          day: day,
+          servings: 1,
+          cost: Math.min(carb.preco || 0.6, targetCostPerMeal * 0.25),
+          ingredients: [
+            {
+              name: carb.descricao,
+              quantity: carb.per_capita || 100,
+              unit: carb.unidade || 'g',
+              cost: carb.preco || 0.6
+            }
+          ],
+          nutritional_info: {
+            calories: 150,
+            protein: 4,
+            carbs: 30,
+            fat: 2
+          }
+        });
+      }
+      
+      // SOBREMESA 1 - Sobremesa usando Frios ou Hortifruti
+      const dessertProducts = frios.length > 0 ? frios : hortifruti;
+      if (dessertProducts.length > 0) {
+        const dessert = dessertProducts[dayIndex % dessertProducts.length];
+        recipes.push({
+          id: `fallback_sobremesa_${dayIndex}`,
+          name: `${dessert.descricao} natural`,
+          category: 'SOBREMESA 1',
+          day: day,
+          servings: 1,
+          cost: Math.min(dessert.preco || 0.5, targetCostPerMeal * 0.15),
+          ingredients: [
+            {
+              name: dessert.descricao,
+              quantity: dessert.per_capita || 60,
+              unit: dessert.unidade || 'g',
+              cost: dessert.preco || 0.5
+            }
+          ],
+          nutritional_info: {
+            calories: 80,
+            protein: 1,
+            carbs: 18,
+            fat: 1
+          }
+        });
+      }
+    });
+    
+    console.log(`Fallback menu created with ${recipes.length} recipes`);
+    return recipes;
+  };
+
   // Função para distribuir receitas pelos dias da semana com balanceamento
   const distributeRecipesByDay = (recipes: any[]): MenuRecipe[] => {
     const days = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta'];
@@ -331,7 +466,15 @@ export const useIntegratedMenuGeneration = () => {
       }
 
       // Processar resposta da API
-      const apiRecipes = gptResponse.menu?.recipes || [];
+      let apiRecipes = gptResponse.menu?.recipes || [];
+      console.log(`GPT returned ${apiRecipes.length} recipes`);
+      
+      // Se GPT não retornou receitas suficientes, usar fallback
+      if (apiRecipes.length < 5) {
+        console.log('GPT returned insufficient recipes, using fallback');
+        apiRecipes = createFallbackMenu(marketProducts || [], selectedClient, weekPeriod);
+      }
+      
       const processedRecipes = distributeRecipesByDay(apiRecipes);
       
       const totalCost = processedRecipes.reduce((sum, recipe) => sum + recipe.cost, 0);
