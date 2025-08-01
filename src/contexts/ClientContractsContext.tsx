@@ -31,7 +31,8 @@ interface ClientContractsContextType {
   clientsWithCosts: ClientWithCosts[];
   isLoading: boolean;
   error: string | null;
-  refreshClients: () => Promise<void>;
+  refreshClients: (searchTerm?: string, limit?: number) => Promise<void>;
+  searchClients: (searchTerm: string) => Promise<void>;
   getClientById: (id: string) => ContractClient | null;
   getClientWithCosts: (id: string) => ClientWithCosts | null;
   getClientContract: (clientId: string) => Promise<ContractClient | null>;
@@ -47,16 +48,46 @@ export const ClientContractsProvider = ({ children }: { children: ReactNode }) =
   const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
 
-  const refreshClients = async () => {
+  const refreshClients = async (searchTerm?: string, limit?: number) => {
     try {
       setIsLoading(true);
       setError(null);
 
-      // Buscar dados reais da tabela custos_filiais
-      const { data, error: fetchError } = await supabase
+      // Buscar dados otimizados da tabela custos_filiais
+      let query = supabase
         .from('custos_filiais')
-        .select('*')
+        .select(`
+          id,
+          filial_id,
+          nome_fantasia,
+          razao_social,
+          nome_filial,
+          solicitacao_compra_tipo_descricao,
+          RefCustoSegunda,
+          RefCustoTerca,
+          RefCustoQuarta,
+          RefCustoQuinta,
+          RefCustoSexta,
+          RefCustoSabado,
+          RefCustoDomingo,
+          RefCustoDiaEspecial,
+          QtdeRefeicoesUsarMediaValidarSimNao,
+          PorcentagemLimiteAcimaMedia,
+          created_at,
+          updated_at
+        `)
         .order('nome_fantasia');
+
+      // Adicionar filtro de busca se fornecido
+      if (searchTerm && searchTerm.trim()) {
+        query = query.or(`nome_fantasia.ilike.%${searchTerm}%,razao_social.ilike.%${searchTerm}%,nome_filial.ilike.%${searchTerm}%`);
+      }
+
+      // Definir limite (padrão: 10000 para carregar mais registros)
+      const recordLimit = limit || 10000;
+      query = query.limit(recordLimit);
+
+      const { data, error: fetchError } = await query;
 
       if (fetchError) {
         throw fetchError;
@@ -237,6 +268,10 @@ export const ClientContractsProvider = ({ children }: { children: ReactNode }) =
     }
   };
 
+  const searchClients = async (searchTerm: string) => {
+    await refreshClients(searchTerm);
+  };
+
   useEffect(() => {
     refreshClients();
   }, []);
@@ -247,6 +282,7 @@ export const ClientContractsProvider = ({ children }: { children: ReactNode }) =
     isLoading,
     error,
     refreshClients,
+    searchClients,
     getClientById,
     getClientWithCosts,
     getClientContract,

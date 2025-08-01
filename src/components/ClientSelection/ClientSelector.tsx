@@ -1,18 +1,21 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Building2, Users, DollarSign, Calendar, AlertCircle, TrendingUp, Info } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { Building2, Users, DollarSign, Calendar, AlertCircle, TrendingUp, Info, Search, X } from 'lucide-react';
 import { useClientContractsContext } from '@/contexts/ClientContractsContext';
 import { useSelectedClient } from '@/contexts/SelectedClientContext';
 import CostBreakdownCard from './CostBreakdownCard';
 import ClientInfoForm, { ClientAdditionalInfo } from './ClientInfoForm';
 
 const ClientSelector = () => {
-  const { clients, clientsWithCosts, isLoading, error } = useClientContractsContext();
+  const { clients, clientsWithCosts, isLoading, error, searchClients } = useClientContractsContext();
   const { selectedClient, setSelectedClient } = useSelectedClient();
   const [showInfoForm, setShowInfoForm] = useState(false);
   const [clientForForm, setClientForForm] = useState<any>(null);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [isSearching, setIsSearching] = useState(false);
 
   if (isLoading) {
     return (
@@ -56,6 +59,43 @@ const ClientSelector = () => {
     setClientForForm(null);
   };
 
+  const handleSearch = useCallback(async (term: string) => {
+    if (term.trim() === searchTerm.trim()) return;
+    
+    setIsSearching(true);
+    try {
+      await searchClients(term);
+      setSearchTerm(term);
+    } catch (err) {
+      console.error('Erro na busca:', err);
+    } finally {
+      setIsSearching(false);
+    }
+  }, [searchClients, searchTerm]);
+
+  const handleClearSearch = async () => {
+    setSearchTerm('');
+    setIsSearching(true);
+    try {
+      await searchClients('');
+    } catch (err) {
+      console.error('Erro ao limpar busca:', err);
+    } finally {
+      setIsSearching(false);
+    }
+  };
+
+  // Debounce search
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      if (searchTerm.length >= 2 || searchTerm.length === 0) {
+        handleSearch(searchTerm);
+      }
+    }, 500);
+
+    return () => clearTimeout(timeoutId);
+  }, [searchTerm, handleSearch]);
+
   if (showInfoForm && clientForForm) {
     return <ClientInfoForm client={clientForForm} onComplete={handleInfoComplete} onCancel={handleInfoCancel} />;
   }
@@ -81,6 +121,40 @@ const ClientSelector = () => {
         </p>
       </div>
 
+      {/* Campo de busca */}
+      <div className="max-w-md mx-auto">
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+          <Input
+            type="text"
+            placeholder="Buscar por nome da empresa, filial ou razão social..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="pl-10 pr-10"
+          />
+          {searchTerm && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleClearSearch}
+              className="absolute right-1 top-1/2 transform -translate-y-1/2 h-8 w-8 p-0"
+            >
+              <X className="w-4 h-4" />
+            </Button>
+          )}
+        </div>
+        {(isSearching || isLoading) && (
+          <p className="text-sm text-gray-500 mt-2 text-center">
+            {isSearching ? 'Buscando...' : 'Carregando...'}
+          </p>
+        )}
+        {searchTerm && !isSearching && !isLoading && (
+          <p className="text-sm text-gray-500 mt-2 text-center">
+            {clients.length} cliente(s) encontrado(s) para "{searchTerm}"
+          </p>
+        )}
+      </div>
+
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {activeClients.map((client) => {
           const clientWithCosts = clientsWithCosts.find(cwc => cwc.client.id === client.id);
@@ -95,10 +169,21 @@ const ClientSelector = () => {
             >
               <CardHeader className="pb-3">
                 <div className="flex items-start justify-between">
-                  <CardTitle className="text-lg">{client.nome_fantasia}</CardTitle>
-                  <div className="flex gap-2">
+                  <div>
+                    <CardTitle className="text-lg">{client.nome_fantasia}</CardTitle>
+                    {client.nome_filial && (
+                      <p className="text-sm text-gray-600 mt-1">{client.nome_filial}</p>
+                    )}
+                    {client.razao_social && client.razao_social !== client.nome_fantasia && (
+                      <p className="text-xs text-gray-500 mt-1">{client.razao_social}</p>
+                    )}
+                  </div>
+                  <div className="flex flex-col gap-2">
                     <Badge variant="outline" className="text-blue-600 border-blue-600">
                       Filial {client.filial_id}
+                    </Badge>
+                    <Badge variant="secondary" className="text-xs">
+                      {client.tipo_refeicao}
                     </Badge>
                     {clientWithCosts && clientWithCosts.totalBranches > 1 && (
                       <Badge variant="secondary" className="text-xs">
