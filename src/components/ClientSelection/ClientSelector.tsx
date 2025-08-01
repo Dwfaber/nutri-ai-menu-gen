@@ -150,7 +150,12 @@ const ClientSelector = () => {
         )}
         {searchTerm && !isSearching && !isLoading && (
           <p className="text-sm text-gray-500 mt-2 text-center">
-            {clients.length} cliente(s) encontrado(s) para "{searchTerm}"
+            {clients.length} resultado(s) para "{searchTerm}"
+          </p>
+        )}
+        {!searchTerm && !isSearching && !isLoading && (
+          <p className="text-sm text-gray-500 mt-2 text-center">
+            Mostrando amostra de {clients.length} empresas. Use a busca para encontrar clientes específicos.
           </p>
         )}
       </div>
@@ -180,9 +185,12 @@ const ClientSelector = () => {
                   </div>
                   <div className="flex flex-col gap-2">
                     <Badge variant="outline" className="text-blue-600 border-blue-600">
-                      Filial {client.filial_id}
+                      {client.nome_filial}
                     </Badge>
-                    <Badge variant="secondary" className="text-xs">
+                    <Badge 
+                      variant={client.tipo_refeicao?.includes('Almoço') ? 'default' : 'secondary'}
+                      className="text-xs"
+                    >
                       {client.tipo_refeicao}
                     </Badge>
                     {clientWithCosts && clientWithCosts.totalBranches > 1 && (

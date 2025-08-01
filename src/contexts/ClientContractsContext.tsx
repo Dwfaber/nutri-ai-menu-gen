@@ -59,6 +59,7 @@ export const ClientContractsProvider = ({ children }: { children: ReactNode }) =
         .select(`
           id,
           filial_id,
+          cliente_id_legado,
           nome_fantasia,
           razao_social,
           nome_filial,
@@ -75,17 +76,21 @@ export const ClientContractsProvider = ({ children }: { children: ReactNode }) =
           PorcentagemLimiteAcimaMedia,
           created_at,
           updated_at
-        `)
-        .order('nome_fantasia');
+        `);
 
-      // Adicionar filtro de busca se fornecido
+      // Estratégia diferente para busca vs. carregamento inicial
       if (searchTerm && searchTerm.trim()) {
-        query = query.or(`nome_fantasia.ilike.%${searchTerm}%,razao_social.ilike.%${searchTerm}%,nome_filial.ilike.%${searchTerm}%`);
+        // Na busca, usar filtro e ordenação alfabética
+        query = query
+          .or(`nome_fantasia.ilike.%${searchTerm}%,razao_social.ilike.%${searchTerm}%,nome_filial.ilike.%${searchTerm}%`)
+          .order('nome_fantasia')
+          .limit(limit || 1000);
+      } else {
+        // No carregamento inicial, pegar amostra diversificada
+        query = query
+          .order('cliente_id_legado')
+          .limit(limit || 2000);
       }
-
-      // Definir limite (padrão: 10000 para carregar mais registros)
-      const recordLimit = limit || 10000;
-      query = query.limit(recordLimit);
 
       const { data, error: fetchError } = await query;
 
@@ -93,13 +98,13 @@ export const ClientContractsProvider = ({ children }: { children: ReactNode }) =
         throw fetchError;
       }
 
-      // Transform data to match ContractClient interface - mostrando todas as filiais
+      // Transform data to match ContractClient interface
       const transformedData: ContractClient[] = (data || []).map(item => ({
         id: item.id,
         filial_id: item.filial_id,
-        nome_fantasia: item.nome_fantasia || `Filial ${item.filial_id}`,
+        nome_fantasia: item.nome_fantasia || `Cliente ${item.cliente_id_legado}`,
         razao_social: item.razao_social,
-        nome_filial: item.nome_filial,
+        nome_filial: item.nome_filial || `Filial ${item.filial_id}`,
         tipo_refeicao: item.solicitacao_compra_tipo_descricao || 'REFEIÇÃO',
         custo_medio_diario: (
           Number(item.RefCustoSegunda || 0) + 
@@ -117,7 +122,21 @@ export const ClientContractsProvider = ({ children }: { children: ReactNode }) =
         updated_at: item.updated_at
       }));
 
-      setClients(transformedData);
+      // Para carregamento inicial, mostrar amostra diversificada por empresa
+      let finalClients = transformedData;
+      if (!searchTerm) {
+        const uniqueCompanies = new Map<string, ContractClient>();
+        transformedData.forEach(client => {
+          const companyKey = client.nome_fantasia;
+          if (!uniqueCompanies.has(companyKey)) {
+            uniqueCompanies.set(companyKey, client);
+          }
+        });
+        // Limitar a 100 empresas diferentes para melhor performance inicial
+        finalClients = Array.from(uniqueCompanies.values()).slice(0, 100);
+      }
+
+      setClients(finalClients);
 
       // Load cost details for each client
       await loadClientsWithCosts(transformedData);
