@@ -674,8 +674,10 @@ export type Database = {
           category: string
           created_at: string
           id: string
+          optimized: boolean
           product_id_legado: string
           product_name: string
+          promocao: boolean
           quantity: number
           shopping_list_id: string
           total_price: number
@@ -687,8 +689,10 @@ export type Database = {
           category: string
           created_at?: string
           id?: string
+          optimized?: boolean
           product_id_legado: string
           product_name: string
+          promocao?: boolean
           quantity: number
           shopping_list_id: string
           total_price?: number
@@ -700,8 +704,10 @@ export type Database = {
           category?: string
           created_at?: string
           id?: string
+          optimized?: boolean
           product_id_legado?: string
           product_name?: string
+          promocao?: boolean
           quantity?: number
           shopping_list_id?: string
           total_price?: number
