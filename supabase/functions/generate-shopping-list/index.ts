@@ -91,7 +91,7 @@ serve(async (req) => {
   try {
     const { menuId, clientName, budgetPredicted, menuItems, optimizationConfig } = await req.json()
 
-    if (!menuId || !clientName || !budgetPredicted) {
+    if (!menuId || !clientName || budgetPredicted === undefined || budgetPredicted === null) {
       throw new Error('menuId, clientName e budgetPredicted são obrigatórios')
     }
 
