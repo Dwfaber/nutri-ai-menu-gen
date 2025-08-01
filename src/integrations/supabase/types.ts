@@ -314,6 +314,93 @@ export type Database = {
         }
         Relationships: []
       }
+      custos_filiais_backup_duplicatas: {
+        Row: {
+          cliente_id_legado: number | null
+          created_at: string | null
+          custo_medio_semanal: number | null
+          custo_total: number | null
+          filial_id: number | null
+          id: string | null
+          nome_fantasia: string | null
+          nome_filial: string | null
+          PorcentagemLimiteAcimaMedia: number | null
+          QtdeRefeicoesUsarMediaValidarSimNao: boolean | null
+          razao_social: string | null
+          RefCustoDiaEspecial: number | null
+          RefCustoDomingo: number | null
+          RefCustoQuarta: number | null
+          RefCustoQuinta: number | null
+          RefCustoSabado: number | null
+          RefCustoSegunda: number | null
+          RefCustoSexta: number | null
+          RefCustoTerca: number | null
+          solicitacao_compra_tipo_descricao: string | null
+          solicitacao_compra_tipo_id: number | null
+          solicitacao_filial_custo_id: number | null
+          sync_at: string | null
+          updated_at: string | null
+          user_date_time: string | null
+          user_name: string | null
+        }
+        Insert: {
+          cliente_id_legado?: number | null
+          created_at?: string | null
+          custo_medio_semanal?: number | null
+          custo_total?: number | null
+          filial_id?: number | null
+          id?: string | null
+          nome_fantasia?: string | null
+          nome_filial?: string | null
+          PorcentagemLimiteAcimaMedia?: number | null
+          QtdeRefeicoesUsarMediaValidarSimNao?: boolean | null
+          razao_social?: string | null
+          RefCustoDiaEspecial?: number | null
+          RefCustoDomingo?: number | null
+          RefCustoQuarta?: number | null
+          RefCustoQuinta?: number | null
+          RefCustoSabado?: number | null
+          RefCustoSegunda?: number | null
+          RefCustoSexta?: number | null
+          RefCustoTerca?: number | null
+          solicitacao_compra_tipo_descricao?: string | null
+          solicitacao_compra_tipo_id?: number | null
+          solicitacao_filial_custo_id?: number | null
+          sync_at?: string | null
+          updated_at?: string | null
+          user_date_time?: string | null
+          user_name?: string | null
+        }
+        Update: {
+          cliente_id_legado?: number | null
+          created_at?: string | null
+          custo_medio_semanal?: number | null
+          custo_total?: number | null
+          filial_id?: number | null
+          id?: string | null
+          nome_fantasia?: string | null
+          nome_filial?: string | null
+          PorcentagemLimiteAcimaMedia?: number | null
+          QtdeRefeicoesUsarMediaValidarSimNao?: boolean | null
+          razao_social?: string | null
+          RefCustoDiaEspecial?: number | null
+          RefCustoDomingo?: number | null
+          RefCustoQuarta?: number | null
+          RefCustoQuinta?: number | null
+          RefCustoSabado?: number | null
+          RefCustoSegunda?: number | null
+          RefCustoSexta?: number | null
+          RefCustoTerca?: number | null
+          solicitacao_compra_tipo_descricao?: string | null
+          solicitacao_compra_tipo_id?: number | null
+          solicitacao_filial_custo_id?: number | null
+          sync_at?: string | null
+          updated_at?: string | null
+          user_date_time?: string | null
+          user_name?: string | null
+        }
+        Relationships: []
+      }
       generated_menus: {
         Row: {
           approved_by: string | null
