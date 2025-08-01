@@ -385,11 +385,35 @@ export const useIntegratedMenuGeneration = () => {
     loadSavedMenus();
   }, []);
 
+  const generateMenuWithFormData = async (
+    formData: any
+  ): Promise<GeneratedMenu | null> => {
+    if (!formData.clientId || !formData.period.start || !formData.period.end) {
+      toast({
+        title: "Dados incompletos",
+        description: "Por favor, preencha todos os campos obrigatórios",
+        variant: "destructive"
+      });
+      return null;
+    }
+
+    const weekPeriod = `${formData.period.start} a ${formData.period.end}`;
+    const preferences = formData.preferences ? [formData.preferences] : [];
+    
+    // Use the selected client from context or override with form data
+    const clientToUse = selectedClient?.id === formData.clientId ? selectedClient : formData.contractData;
+    
+    return generateMenu(weekPeriod, preferences, clientToUse);
+  };
+
   const generateMenu = async (
     weekPeriod: string,
-    preferences?: string[]
+    preferences?: string[],
+    clientOverride?: any
   ): Promise<GeneratedMenu | null> => {
-    if (!selectedClient) {
+    const clientToUse = clientOverride || selectedClient;
+    
+    if (!clientToUse) {
       toast({
         title: "Cliente não selecionado",
         description: "Selecione um cliente antes de gerar o cardápio",
@@ -414,7 +438,7 @@ export const useIntegratedMenuGeneration = () => {
       }
 
       // Get client costs and cost details
-      const clientWithCosts = getClientWithCosts(selectedClient.id);
+      const clientWithCosts = getClientWithCosts(clientToUse.id);
       
       let enhancedCostData = null;
       if (clientWithCosts) {
@@ -426,16 +450,16 @@ export const useIntegratedMenuGeneration = () => {
         };
       }
 
-      console.log('Generating menu with request for client:', selectedClient.nome_fantasia);
+      console.log('Generating menu with request for client:', clientToUse.nome_fantasia);
 
       // Call GPT Assistant for menu generation
       const { data: gptResponse, error: gptError } = await supabase.functions.invoke('gpt-assistant', {
         body: {
           action: 'generate_menu',
           client_data: {
-            id: selectedClient.id,
-            name: selectedClient.nome_fantasia,
-            max_cost_per_meal: selectedClient.custo_medio_diario || 7.30,
+            id: clientToUse.id,
+            name: clientToUse.nome_fantasia,
+            max_cost_per_meal: clientToUse.custo_medio_diario || 7.30,
             total_employees: 50,
             meals_per_month: 100,
             dietary_restrictions: [],
@@ -464,7 +488,7 @@ export const useIntegratedMenuGeneration = () => {
       // Se GPT não retornou receitas suficientes, usar fallback
       if (apiRecipes.length < 5) {
         console.log('GPT returned insufficient recipes, using fallback');
-        apiRecipes = createFallbackMenu(marketProducts || [], selectedClient, weekPeriod);
+        apiRecipes = createFallbackMenu(marketProducts || [], clientToUse, weekPeriod);
       }
       
       const processedRecipes = distributeRecipesByDay(apiRecipes);
@@ -474,8 +498,8 @@ export const useIntegratedMenuGeneration = () => {
 
       const menu: GeneratedMenu = {
         id: `menu_${Date.now()}`,
-        clientId: selectedClient.id,
-        clientName: selectedClient.nome_fantasia,
+        clientId: clientToUse.id,
+        clientName: clientToUse.nome_fantasia,
         weekPeriod,
         status: 'pending_approval',
         totalCost,
@@ -766,6 +790,7 @@ export const useIntegratedMenuGeneration = () => {
     savedMenus,
     error,
     generateMenu,
+    generateMenuWithFormData,
     approveMenu,
     rejectMenu,
     generateShoppingListFromMenu,

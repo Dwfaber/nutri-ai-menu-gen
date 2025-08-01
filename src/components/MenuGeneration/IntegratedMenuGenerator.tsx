@@ -1,20 +1,20 @@
 import React, { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { DateRangePicker } from '@/components/ui/date-range-picker';
-import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
-import { ChefHat, Clock, DollarSign, Users, CheckCircle, XCircle, ShoppingCart, Calendar } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import { ChefHat, Calendar, CheckCircle, XCircle, ShoppingCart, DollarSign, Users, Plus } from 'lucide-react';
 import { useIntegratedMenuGeneration } from '@/hooks/useIntegratedMenuGeneration';
 import { useSelectedClient } from '@/contexts/SelectedClientContext';
 import MenuTable from '@/components/MenuTable/MenuTable';
+import { MenuCreationForm } from '@/components/MenuGenerator/MenuCreationForm';
+import { ContractFormData } from '@/hooks/useClientContracts';
 
 const IntegratedMenuGenerator = () => {
-  const [weekPeriod, setWeekPeriod] = useState('');
-  const [preferences, setPreferences] = useState('');
+  const [showForm, setShowForm] = useState(false);
   const [approverName, setApproverName] = useState('');
   const [rejectionReason, setRejectionReason] = useState('');
   
@@ -22,25 +22,26 @@ const IntegratedMenuGenerator = () => {
   const {
     isGenerating,
     generatedMenu,
-    generateMenu,
+    generateMenuWithFormData,
     approveMenu,
     rejectMenu,
     generateShoppingListFromMenu,
-    clearGeneratedMenu
+    clearGeneratedMenu,
+    error
   } = useIntegratedMenuGeneration();
 
 
-  const handleGenerateMenu = async () => {
-    if (!weekPeriod.trim()) {
-      return;
-    }
+  const handleGenerateMenu = async (formData: ContractFormData) => {
+    await generateMenuWithFormData(formData);
+    setShowForm(false);
+  };
 
-    const preferencesList = preferences
-      .split(',')
-      .map(p => p.trim())
-      .filter(p => p.length > 0);
+  const handleShowForm = () => {
+    setShowForm(true);
+  };
 
-    await generateMenu(weekPeriod, preferencesList);
+  const handleCancelForm = () => {
+    setShowForm(false);
   };
 
   const handleApprove = async () => {
@@ -72,6 +73,18 @@ const IntegratedMenuGenerator = () => {
     );
   }
 
+  // Show menu creation form if form is requested and no menu is generated
+  if (showForm && !generatedMenu) {
+    return (
+      <MenuCreationForm
+        onSubmit={handleGenerateMenu}
+        onCancel={handleCancelForm}
+        isGenerating={isGenerating}
+        error={error}
+      />
+    );
+  }
+
   return (
     <div className="space-y-6">
       {/* Client Information */}
@@ -97,64 +110,31 @@ const IntegratedMenuGenerator = () => {
               <p className="text-lg font-bold">{selectedClient.nome_filial || 'Principal'}</p>
             </div>
           </div>
-          
-          <div className="mt-4 p-3 bg-amber-50 rounded-lg">
-            <p className="text-sm text-amber-700">
-              <strong>Nota:</strong> Para gerar cardápios, você precisará informar dados adicionais como número de funcionários e restrições alimentares.
-            </p>
-          </div>
         </CardContent>
       </Card>
 
-      {/* Menu Generation Form */}
+      {/* Generate Menu Button */}
       {!generatedMenu && (
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <ChefHat className="w-5 h-5" />
-              Gerar Novo Cardápio
+              Gerador Inteligente de Cardápios
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div>
-              <Label htmlFor="weekPeriod">Período do Cardápio *</Label>
-              <DateRangePicker
-                value={weekPeriod}
-                onChange={setWeekPeriod}
-                placeholder="Ex: Semana de 27/01 a 31/01/2025"
-              />
-            </div>
-            
-            <div>
-              <Label htmlFor="preferences">Preferências Especiais (opcional)</Label>
-              <Textarea
-                id="preferences"
-                placeholder="Ex: mais proteínas, pratos vegetarianos, comida regional"
-                value={preferences}
-                onChange={(e) => setPreferences(e.target.value)}
-                rows={3}
-              />
-              <p className="text-xs text-gray-500 mt-1">
-                Separe múltiplas preferências por vírgula
-              </p>
-            </div>
-
+            <p className="text-gray-600 text-sm">
+              Use nosso formulário completo para gerar cardápios personalizados com informações detalhadas do cliente, 
+              restrições alimentares, orçamento e preferências especiais.
+            </p>
             <Button 
-              onClick={handleGenerateMenu}
-              disabled={isGenerating || !weekPeriod.trim()}
+              onClick={handleShowForm}
+              disabled={isGenerating}
               className="w-full"
+              size="lg"
             >
-              {isGenerating ? (
-                <>
-                  <Clock className="w-4 h-4 mr-2 animate-spin" />
-                  Gerando Cardápio...
-                </>
-              ) : (
-                <>
-                  <ChefHat className="w-4 h-4 mr-2" />
-                  Gerar Cardápio Inteligente
-                </>
-              )}
+              <Plus className="w-4 h-4 mr-2" />
+              Criar Cardápio Personalizado
             </Button>
           </CardContent>
         </Card>
@@ -322,13 +302,21 @@ const IntegratedMenuGenerator = () => {
               <div className="p-4 bg-red-50 rounded-lg">
                 <h4 className="font-medium text-red-900">Cardápio Rejeitado</h4>
                 <p className="text-sm text-red-700 mt-1">{generatedMenu.rejectedReason}</p>
-                <Button 
-                  onClick={clearGeneratedMenu}
-                  variant="outline"
-                  className="mt-3"
-                >
-                  Gerar Novo Cardápio
-                </Button>
+                <div className="flex gap-2 mt-3">
+                  <Button 
+                    onClick={clearGeneratedMenu}
+                    variant="outline"
+                  >
+                    Limpar Cardápio
+                  </Button>
+                  <Button 
+                    onClick={handleShowForm}
+                    className="bg-green-600 hover:bg-green-700"
+                  >
+                    <Plus className="w-4 h-4 mr-2" />
+                    Gerar Novo Cardápio
+                  </Button>
+                </div>
               </div>
             )}
           </CardContent>
