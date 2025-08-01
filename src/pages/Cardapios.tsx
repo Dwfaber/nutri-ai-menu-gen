@@ -5,11 +5,11 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { useMenuAI } from '../hooks/useMenuAI';
 import { useShoppingList } from '../hooks/useShoppingList';
 import { useClientContracts, ContractFormData } from '../hooks/useClientContracts';
 import { useSelectedClient } from '@/contexts/SelectedClientContext';
-import { Client, Menu } from '../types/client';
+import { useIntegratedMenuGeneration, GeneratedMenu } from '../hooks/useIntegratedMenuGeneration';
+import { Client } from '../types/client';
 import SyncMonitor from '../components/SyncMonitor/SyncMonitor';
 import NLPInput from '../components/MenuGenerator/NLPInput';
 import PreviewTabs from '../components/MenuGenerator/PreviewTabs';
@@ -19,57 +19,29 @@ import IntegratedMenuGenerator from '../components/MenuGeneration/IntegratedMenu
 const Cardapios = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [showCreateForm, setShowCreateForm] = useState(false);
-  const [generatedMenu, setGeneratedMenu] = useState<Menu | null>(null);
-  const [menus, setMenus] = useState<Menu[]>([]);
   const [selectedMenuForShopping, setSelectedMenuForShopping] = useState<string | null>(null);
   
-  const { generateMenu, editMenuWithNLP, isGenerating, error } = useMenuAI();
+  const { 
+    isGenerating, 
+    generatedMenu, 
+    savedMenus,
+    generateMenu,
+    loadSavedMenus,
+    generateShoppingListFromMenu
+  } = useIntegratedMenuGeneration();
   const { createFromMenu, isLoading: isCreatingList } = useShoppingList();
   const { clients, generateAIContextSummary } = useClientContracts();
   const { selectedClient } = useSelectedClient();
 
-  const handleCreateMenu = async (formData: ContractFormData) => {
-    if (!formData.contractData) return;
-    
-    // Generate AI context summary for better menu generation
-    const aiContextSummary = generateAIContextSummary(formData);
-    
-    const menu = await generateMenu(
-      formData.clientId,
-      formData.budgetPerMeal,
-      formData.restrictions,
-      aiContextSummary
-    );
-    
-    if (menu) {
-      setGeneratedMenu(menu);
-      setMenus([...menus, menu]);
-      setShowCreateForm(false);
-    }
-  };
-
-  const handleNLPCommand = async (command: string) => {
-    if (generatedMenu) {
-      await editMenuWithNLP(generatedMenu.id, command);
-    }
-  };
-
-  const handleGenerateShoppingList = async (menu: Menu) => {
+  const handleGenerateShoppingList = async (menu: GeneratedMenu) => {
     setSelectedMenuForShopping(menu.id);
-    
-    const client = clients.find(c => c.id === menu.clientId);
-    if (!client) {
-      console.error('Client not found for menu');
-      return;
-    }
-
-    await createFromMenu(menu.id, client.nome_fantasia, menu.totalCost);
+    await generateShoppingListFromMenu(menu);
     setSelectedMenuForShopping(null);
   };
 
-  const getBudgetStatus = (menu: Menu) => {
+  const getBudgetStatus = (menu: GeneratedMenu) => {
     const client = clients.find(c => c.id === menu.clientId);
-    if (!client) return 'unknown';
+    if (!client || !menu.totalCost) return 'unknown';
     
     const budgetPercentage = (menu.totalCost / client.custo_medio_diario) * 100;
     
@@ -136,12 +108,17 @@ const Cardapios = () => {
           </div>
 
           {showCreateForm && selectedClient && (
-            <MenuCreationForm
-              onSubmit={handleCreateMenu}
-              onCancel={() => setShowCreateForm(false)}
-              isGenerating={isGenerating}
-              error={error}
-            />
+            <div className="p-4 border rounded-lg bg-gray-50">
+              <p className="text-sm text-gray-600 mb-2">
+                Use o "Gerador Inteligente" para criar novos cardápios
+              </p>
+              <Button 
+                variant="outline" 
+                onClick={() => setShowCreateForm(false)}
+              >
+                Fechar
+              </Button>
+            </div>
           )}
 
           {generatedMenu && (
@@ -149,18 +126,18 @@ const Cardapios = () => {
               <CardHeader>
                 <div className="flex justify-between items-start">
                   <div>
-                    <CardTitle>Cardápio Gerado - {generatedMenu.name}</CardTitle>
+                    <CardTitle>Cardápio Gerado - {generatedMenu.weekPeriod}</CardTitle>
                     <div className="flex items-center space-x-2 mt-2">
                       {getBudgetBadge(getBudgetStatus(generatedMenu))}
                       <Badge variant="outline" className="text-green-600">
                         <DollarSign className="w-3 h-3 mr-1" />
-                        R$ {generatedMenu.totalCost.toFixed(2)}
+                        R$ {generatedMenu.totalCost?.toFixed(2) || '0.00'}
                       </Badge>
                     </div>
                   </div>
                   <Button
                     onClick={() => handleGenerateShoppingList(generatedMenu)}
-                    disabled={isCreatingList || selectedMenuForShopping === generatedMenu.id}
+                    disabled={selectedMenuForShopping === generatedMenu.id}
                     className="bg-blue-600 hover:bg-blue-700"
                   >
                     <ShoppingCart className="w-4 h-4 mr-2" />
@@ -169,23 +146,32 @@ const Cardapios = () => {
                 </div>
               </CardHeader>
               <CardContent className="space-y-6">
-                <PreviewTabs menu={generatedMenu} />
-                
-                <div>
-                  <h4 className="text-sm font-medium text-gray-700 mb-3">
-                    Editar com Linguagem Natural
-                  </h4>
-                  <NLPInput 
-                    onCommand={handleNLPCommand}
-                    isProcessing={isGenerating}
-                    placeholder="Ex: Substituir frango por peixe, adicionar opção vegana..."
-                  />
+                <div className="space-y-4">
+                  <div className="text-sm text-gray-600">
+                    <p><strong>Receitas:</strong> {generatedMenu.recipes?.length || 0}</p>
+                    <p><strong>Custo por porção:</strong> R$ {generatedMenu.recipes?.length ? (generatedMenu.totalCost! / generatedMenu.recipes.length).toFixed(2) : '0.00'}</p>
+                    <p><strong>Status:</strong> {generatedMenu.status}</p>
+                  </div>
+                  {generatedMenu.recipes && generatedMenu.recipes.length > 0 && (
+                    <div className="space-y-2">
+                      <h4 className="text-sm font-medium text-gray-700">Receitas:</h4>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                        {generatedMenu.recipes.map((recipe, index) => (
+                          <div key={index} className="p-2 bg-gray-50 rounded text-sm">
+                            <p className="font-medium">{recipe.name}</p>
+                            <p className="text-gray-600">{recipe.category} - {recipe.day}</p>
+                            <p className="text-green-600">R$ {recipe.cost?.toFixed(2) || '0.00'}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </CardContent>
             </Card>
           )}
 
-          {menus.length === 0 && !generatedMenu && (
+          {savedMenus.length === 0 && !generatedMenu && (
             <Card>
               <CardContent className="p-8 text-center text-gray-500">
                 <Database className="w-12 h-12 mx-auto mb-4 text-gray-300" />
@@ -205,27 +191,30 @@ const Cardapios = () => {
             </Card>
           )}
 
-          {menus.length > 0 && (
+          {savedMenus.length > 0 && (
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {menus.map((menu) => {
+              {savedMenus.map((menu) => {
                 const budgetStatus = getBudgetStatus(menu);
                 return (
                   <Card key={menu.id} className="hover:shadow-md transition-shadow">
                     <CardHeader>
                       <div className="flex justify-between items-start">
                         <div className="flex-1">
-                          <CardTitle className="text-lg">{menu.name}</CardTitle>
+                          <CardTitle className="text-lg">{menu.weekPeriod}</CardTitle>
                           <p className="text-sm text-gray-600 mb-2">
-                            Semana de {new Date(menu.week).toLocaleDateString()}
+                            Criado em {new Date(menu.createdAt).toLocaleDateString()}
                           </p>
                           <div className="flex items-center space-x-2">
                             {getBudgetBadge(budgetStatus)}
+                            <Badge variant="secondary">
+                              {menu.status}
+                            </Badge>
                           </div>
                         </div>
                         <Button
                           size="sm"
                           onClick={() => handleGenerateShoppingList(menu)}
-                          disabled={isCreatingList || selectedMenuForShopping === menu.id}
+                          disabled={selectedMenuForShopping === menu.id}
                           className="bg-blue-600 hover:bg-blue-700"
                         >
                           <ShoppingCart className="w-3 h-3 mr-1" />
@@ -237,15 +226,15 @@ const Cardapios = () => {
                       <div className="space-y-3">
                         <div className="flex justify-between items-center">
                           <span className="text-sm text-gray-600">Custo Total</span>
-                          <span className="font-medium">R$ {menu.totalCost.toFixed(2)}</span>
+                          <span className="font-medium">R$ {menu.totalCost?.toFixed(2) || '0.00'}</span>
                         </div>
                         <div className="flex justify-between items-center">
-                          <span className="text-sm text-gray-600">Criado em</span>
-                          <span className="text-sm">{new Date(menu.createdAt).toLocaleDateString()}</span>
+                          <span className="text-sm text-gray-600">Receitas</span>
+                          <span className="text-sm">{menu.recipes?.length || 0}</span>
                         </div>
                         <div className="flex space-x-2 pt-2">
                           <Button variant="outline" size="sm">
-                            Editar
+                            Visualizar
                           </Button>
                           <Button variant="outline" size="sm">
                             Exportar
