@@ -26,11 +26,18 @@ interface MenuTableProps {
 
 const DAYS = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta'];
 const CATEGORIES = [
-  'SALADA 1',
-  'PP1',
-  'GUARNICAO 1',
-  'SOBREMESA 1'
+  'Salada',
+  'Prato Principal 1', 
+  'Guarnição',
+  'Sobremesa'
 ];
+
+const CATEGORY_DISPLAY_NAMES = {
+  'Salada': 'SALADA 1',
+  'Prato Principal 1': 'PP1',
+  'Guarnição': 'GUARNICAO 1', 
+  'Sobremesa': 'SOBREMESA 1'
+};
 
 const MenuTable: React.FC<MenuTableProps> = ({
   title,
@@ -101,7 +108,7 @@ const MenuTable: React.FC<MenuTableProps> = ({
               {CATEGORIES.map((category, categoryIndex) => (
                 <tr key={category} className={categoryIndex % 2 === 0 ? 'bg-white' : 'bg-gray-25'}>
                   <td className="border border-gray-300 p-3 font-medium bg-gray-50">
-                    {category}
+                    {CATEGORY_DISPLAY_NAMES[category] || category}
                   </td>
                   {DAYS.map(day => {
                     const recipe = getRecipeForDayAndCategory(day, category);
