@@ -76,6 +76,16 @@ serve(async (req) => {
     if (requestBody.viewName && VIEW_MAPPING[requestBody.viewName as keyof typeof VIEW_MAPPING]) {
       let dataToProcess = [];
       
+      // Extrair configurações de sincronização (opcionais)
+      const syncConfig = {
+        strategy: requestBody.syncStrategy || 'replace_all', // 'replace_all' ou 'merge'
+        cleanup: requestBody.enableCleanup !== false, // default true
+        batchSize: requestBody.batchSize || 100,
+        keepVersions: requestBody.keepVersions || 5
+      };
+      
+      console.log(`Configuração de sincronização:`, syncConfig);
+      
       // Converter dados do N8N para formato array
       if (requestBody.data) {
         if (Array.isArray(requestBody.data)) {
@@ -108,10 +118,10 @@ serve(async (req) => {
       
       if (validData.length > 0) {
         console.log(`Processando ${validData.length} registros válidos do n8n para ${requestBody.viewName}`);
-        return await syncViewWithData(supabaseClient, requestBody.viewName, validData);
+        return await syncViewWithData(supabaseClient, requestBody.viewName, validData, syncConfig);
       } else {
         console.log(`Nenhum registro válido encontrado para ${requestBody.viewName} - tratando como teste manual`);
-        return await syncViewWithData(supabaseClient, requestBody.viewName, []);
+        return await syncViewWithData(supabaseClient, requestBody.viewName, [], syncConfig);
       }
     }
 
@@ -172,7 +182,7 @@ async function checkViewsAvailability(supabaseClient: any) {
   );
 }
 
-async function syncViewWithData(supabaseClient: any, viewName: string, data: any[]) {
+async function syncViewWithData(supabaseClient: any, viewName: string, data: any[], syncConfig?: any) {
   console.log(`Syncing view: ${viewName} with ${data.length} records from n8n`);
   
   const startTime = Date.now();
@@ -236,7 +246,7 @@ async function syncViewWithData(supabaseClient: any, viewName: string, data: any
       console.log(`Exemplo de registro recebido:`, JSON.stringify(data[0], null, 2));
     }
     
-    const recordCount = await processViewData(supabaseClient, viewName, data);
+    const recordCount = await processViewData(supabaseClient, viewName, data, syncConfig);
     
     const executionTime = Date.now() - startTime;
 
@@ -295,7 +305,7 @@ async function syncViewWithData(supabaseClient: any, viewName: string, data: any
   }
 }
 
-async function processViewData(supabaseClient: any, viewName: string, data: any[]) {
+async function processViewData(supabaseClient: any, viewName: string, data: any[], syncConfig?: any) {
   const mapping = VIEW_MAPPING[viewName as keyof typeof VIEW_MAPPING];
   let processedCount = 0;
 
@@ -546,6 +556,23 @@ async function processViewData(supabaseClient: any, viewName: string, data: any[
         
         processedCount = insertedCount;
         console.log(`🎉 REPLACE ALL CONCLUÍDO: ${processedCount} produtos sincronizados. Versão: ${currentSolicitacaoId}`);
+        
+        // 3.4: Executar limpeza automática de versões antigas (se configurado)
+        if (syncConfig?.cleanup !== false) {
+          console.log(`🧹 Executando limpeza automática de versões antigas...`);
+          try {
+            const { error: cleanupError } = await supabaseClient.rpc('cleanup_old_product_versions');
+            
+            if (cleanupError) {
+              console.error('⚠️ Erro na limpeza automática:', cleanupError);
+              console.warn('⚠️ Sincronização concluída, mas limpeza automática falhou');
+            } else {
+              console.log('✅ Limpeza automática executada com sucesso');
+            }
+          } catch (error) {
+            console.error('⚠️ Erro inesperado na limpeza automática:', error);
+          }
+        }
         
       } else {
         console.log('⚠️ Nenhum produto válido encontrado para sincronização');
