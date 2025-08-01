@@ -62,18 +62,8 @@ export const ClientContractsProvider = ({ children }: { children: ReactNode }) =
         throw fetchError;
       }
 
-      // Agrupar por nome_fantasia para evitar duplicatas de clientes
-      const uniqueClients = new Map<string, any>();
-      
-      (data || []).forEach(item => {
-        const key = item.nome_fantasia || `Cliente_${item.id}`;
-        if (!uniqueClients.has(key)) {
-          uniqueClients.set(key, item);
-        }
-      });
-
-      // Transform data to match ContractClient interface usando apenas dados reais
-      const transformedData: ContractClient[] = Array.from(uniqueClients.values()).map(item => ({
+      // Transform data to match ContractClient interface - mostrando todas as filiais
+      const transformedData: ContractClient[] = (data || []).map(item => ({
         id: item.id,
         filial_id: item.filial_id,
         nome_fantasia: item.nome_fantasia || `Filial ${item.filial_id}`,
