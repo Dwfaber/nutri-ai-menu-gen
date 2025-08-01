@@ -428,7 +428,23 @@ export const useIntegratedMenuGeneration = () => {
 
       console.log('Generating menu using direct recipe selection for client:', clientToUse.nome_fantasia);
 
-      // Buscar receitas disponíveis por categoria
+      // Buscar receitas que têm ingredientes cadastrados
+      const { data: receitasComIngredientes, error: ingredientesError } = await supabase
+        .from('receita_ingredientes')
+        .select('receita_id_legado')
+        .not('receita_id_legado', 'is', null);
+
+      if (ingredientesError) {
+        throw new Error(`Erro ao buscar receitas com ingredientes: ${ingredientesError.message}`);
+      }
+
+      const receitasComIngredientesIds = new Set(
+        receitasComIngredientes?.map(r => r.receita_id_legado) || []
+      );
+
+      console.log(`Encontradas ${receitasComIngredientesIds.size} receitas com ingredientes`);
+
+      // Buscar receitas disponíveis por categoria que têm ingredientes
       const { data: receitasData, error: receitasError } = await supabase
         .from('receitas_legado')
         .select(`
@@ -446,10 +462,15 @@ export const useIntegratedMenuGeneration = () => {
           'Guarnição', 
           'Salada',
           'Sobremesa'
-        ]);
+        ])
+        .in('receita_id_legado', Array.from(receitasComIngredientesIds));
 
       if (receitasError) {
         throw new Error(`Erro ao buscar receitas: ${receitasError.message}`);
+      }
+
+      if (!receitasData || receitasData.length === 0) {
+        throw new Error('Nenhuma receita com ingredientes encontrada no banco de dados');
       }
 
       // Organizar receitas por categoria
