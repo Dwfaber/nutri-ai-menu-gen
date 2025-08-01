@@ -89,10 +89,22 @@ serve(async (req) => {
   }
 
   try {
+    console.log('Received request body:', JSON.stringify(await req.clone().json()))
+    
     const { menuId, clientName, budgetPredicted, menuItems, optimizationConfig } = await req.json()
 
+    console.log('Parsed parameters:', { 
+      menuId, 
+      clientName, 
+      budgetPredicted: typeof budgetPredicted, 
+      menuItemsLength: menuItems?.length,
+      optimizationConfig: !!optimizationConfig 
+    })
+
     if (!menuId || !clientName || budgetPredicted === undefined || budgetPredicted === null) {
-      throw new Error('menuId, clientName e budgetPredicted são obrigatórios')
+      const error = `Missing required parameters: menuId=${menuId}, clientName=${clientName}, budgetPredicted=${budgetPredicted}`
+      console.error(error)
+      throw new Error(error)
     }
 
     const supabaseClient = createClient(
@@ -348,10 +360,20 @@ serve(async (req) => {
 
   } catch (error) {
     console.error('Error generating shopping list:', error)
+    console.error('Error stack:', error.stack)
+    console.error('Error details:', {
+      name: error.name,
+      message: error.message,
+      cause: error.cause
+    })
     return new Response(
       JSON.stringify({
         success: false,
-        error: error.message
+        error: error.message,
+        errorDetails: {
+          name: error.name,
+          stack: error.stack?.split('\n').slice(0, 5) // Only first 5 lines of stack
+        }
       }),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
