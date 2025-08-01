@@ -387,13 +387,45 @@ async function processViewData(supabaseClient: any, viewName: string, data: any[
   if (viewName === 'vwCpReceitaProduto') {
     console.log(`Processamento de ingredientes de receitas - ${data.length} registros`);
     
+    // Buscar todas as receitas disponíveis para mapear nomes
+    console.log('Buscando receitas para mapear nomes...');
+    const { data: receitasData, error: receitasError } = await supabaseClient
+      .from('receitas_legado')
+      .select('receita_id_legado, nome_receita');
+    
+    if (receitasError) {
+      console.error('Erro ao buscar receitas:', receitasError);
+    }
+    
+    // Criar mapa receita_id -> nome_receita para performance
+    const receitaNomeMap = new Map();
+    if (receitasData) {
+      receitasData.forEach(receita => {
+        receitaNomeMap.set(receita.receita_id_legado, receita.nome_receita);
+      });
+      console.log(`Mapa de receitas criado: ${receitaNomeMap.size} receitas encontradas`);
+    }
+    
+    let receitasEncontradas = 0;
+    let receitasNaoEncontradas = 0;
+    
     for (const record of data) {
       try {
+        const receitaId = record.receita_id?.toString();
+        const nomeReceita = receitaNomeMap.get(receitaId);
+        
+        if (nomeReceita) {
+          receitasEncontradas++;
+        } else {
+          receitasNaoEncontradas++;
+          console.warn(`Receita não encontrada para ID: ${receitaId}`);
+        }
+        
         // CORREÇÃO: Usar upsert com onConflict para evitar erro de chave duplicada
         const { error } = await supabaseClient
           .from('receita_ingredientes')
           .upsert({
-            receita_id_legado: record.receita_id?.toString(),
+            receita_id_legado: receitaId,
             receita_produto_id: record.receita_produto_id,
             produto_base_id: record.produto_base_id,
             produto_id: record.produto_id,
@@ -404,6 +436,7 @@ async function processViewData(supabaseClient: any, viewName: string, data: any[
             receita_produto_classificacao_id: record.receita_produto_classificacao_id,
             user_name: record.user_name,
             user_date_time: record.user_date_time,
+            nome: nomeReceita || null, // Nova coluna com nome da receita
             sync_at: new Date().toISOString()
           }, { onConflict: 'receita_id_legado,receita_produto_id' });
 
@@ -418,6 +451,7 @@ async function processViewData(supabaseClient: any, viewName: string, data: any[
     }
     
     console.log(`Processamento de ingredientes concluído: ${processedCount} ingredientes inseridos/atualizados`);
+    console.log(`Receitas encontradas: ${receitasEncontradas}, não encontradas: ${receitasNaoEncontradas}`);
     return processedCount;
   }
 
