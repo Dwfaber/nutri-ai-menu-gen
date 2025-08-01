@@ -411,18 +411,31 @@ async function processViewData(supabaseClient: any, viewName: string, data: any[
     return processedCount;
   }
 
-  // Processamento padrão para outras views
-  for (const record of data) {
+  // TRATAMENTO ESPECIAL PARA co_solicitacao_produto_listagem: REPLACE ALL
+  if (mapping.targetTable === 'co_solicitacao_produto_listagem') {
+    console.log(`🔄 Iniciando sincronização REPLACE ALL para produtos - ${data.length} registros`);
+    
+    // Estratégia de sincronização completa com versionamento
+    const currentSolicitacaoId = Math.floor(Date.now() / 1000);
+    console.log(`📌 Novo ID de solicitação: ${currentSolicitacaoId}`);
+    
     try {
-      // Log progresso para lotes grandes
-      if (processedCount > 0 && processedCount % 500 === 0) {
-        console.log(`Processando registro ${processedCount}/${data.length} da view ${viewName}`);
+      // PASSO 1: Verificar produtos existentes
+      const { data: existingProducts, error: countError } = await supabaseClient
+        .from('co_solicitacao_produto_listagem')
+        .select('solicitacao_id', { count: 'exact' });
+      
+      if (countError) {
+        console.error('❌ Erro ao verificar produtos existentes:', countError);
+        throw countError;
       }
-
-      if (mapping.targetTable === 'co_solicitacao_produto_listagem') {
-        console.log(`Processando produto solicitação com ID: ${record.solicitacao_produto_listagem_id || record.id}`);
-        
-        // Mapeamento exato conforme dados do N8N
+      
+      const existingCount = existingProducts?.length || 0;
+      console.log(`📊 Produtos existentes na tabela: ${existingCount}`);
+      
+      // PASSO 2: Preparar novos dados com validação
+      const newProductsData = [];
+      for (const record of data) {
         const dataToInsert = {
           solicitacao_produto_listagem_id: record.solicitacao_produto_listagem_id ? parseInt(record.solicitacao_produto_listagem_id.toString()) : null,
           solicitacao_produto_categoria_id: record.solicitacao_produto_categoria_id ? parseInt(record.solicitacao_produto_categoria_id.toString()) : null,
@@ -439,33 +452,122 @@ async function processViewData(supabaseClient: any, viewName: string, data: any[
           preco_compra: record.preco_compra ? parseFloat(record.preco_compra.toString()) : null,
           produto_base_id: record.produto_base_id ? parseInt(record.produto_base_id.toString()) : null,
           produto_base_quantidade_embalagem: record.produto_base_quantidade_embalagem ? parseFloat(record.produto_base_quantidade_embalagem.toString()) : null,
+          quantidade_embalagem: record.quantidade_embalagem ? parseFloat(record.quantidade_embalagem.toString()) : null,
+          inteiro: record.inteiro === true || record.inteiro === 'true',
+          promocao: record.promocao === true || record.promocao === 'true',
           criado_em: new Date().toISOString(),
-          solicitacao_id: Math.floor(Date.now() / 1000) // Timestamp como ID da solicitação
+          solicitacao_id: currentSolicitacaoId // ID único desta sincronização
         };
         
-        console.log(`Dados mapeados para inserção:`, {
-          id: dataToInsert.solicitacao_produto_listagem_id,
-          categoria: dataToInsert.categoria_descricao,
-          produto: dataToInsert.descricao,
-          preco: dataToInsert.preco
-        });
-
-        // CORREÇÃO PRINCIPAL: Usar upsert com onConflict para resolver o erro de chave duplicada
-        const { error } = await supabaseClient
-          .from('co_solicitacao_produto_listagem')
-          .upsert(dataToInsert, { 
-            onConflict: 'solicitacao_produto_listagem_id',
-            ignoreDuplicates: false 
-          });
-
-        if (error) {
-          console.error(`Erro ao processar produto solicitação ID ${record.solicitacao_produto_listagem_id}:`, error);
-          console.error(`Dados problemáticos:`, dataToInsert);
+        // Validar dados essenciais antes de incluir
+        if (dataToInsert.produto_id && dataToInsert.descricao) {
+          newProductsData.push(dataToInsert);
         } else {
-          processedCount++;
-          console.log(`Produto solicitação ID ${record.solicitacao_produto_listagem_id} processado com sucesso`);
+          console.warn(`⚠️ Produto ignorado - dados insuficientes:`, {
+            produto_id: dataToInsert.produto_id,
+            descricao: dataToInsert.descricao,
+            id_original: record.solicitacao_produto_listagem_id
+          });
         }
-      } else if (mapping.targetTable === 'produtos_base') {
+      }
+      
+      console.log(`✅ Produtos válidos preparados: ${newProductsData.length}/${data.length}`);
+      
+      // PASSO 3: Executar Replace All Strategy
+      if (newProductsData.length > 0) {
+        
+        // 3.1: Marcar produtos antigos como obsoletos (soft delete)
+        if (existingCount > 0) {
+          console.log(`🗑️ Marcando ${existingCount} produtos antigos como obsoletos...`);
+          const { error: markError } = await supabaseClient
+            .from('co_solicitacao_produto_listagem')
+            .update({ 
+              solicitacao_id: -1, // Flag de obsoleto
+              criado_em: new Date().toISOString() 
+            })
+            .neq('solicitacao_id', currentSolicitacaoId);
+          
+          if (markError) {
+            console.error('❌ Erro ao marcar produtos antigos:', markError);
+            throw markError;
+          }
+          console.log('✅ Produtos antigos marcados como obsoletos');
+        }
+        
+        // 3.2: Inserir novos produtos em lotes otimizados
+        const batchSize = 100;
+        let insertedCount = 0;
+        
+        console.log(`📦 Iniciando inserção em lotes de ${batchSize} produtos...`);
+        for (let i = 0; i < newProductsData.length; i += batchSize) {
+          const batch = newProductsData.slice(i, i + batchSize);
+          const batchNum = Math.floor(i / batchSize) + 1;
+          const totalBatches = Math.ceil(newProductsData.length / batchSize);
+          
+          console.log(`📋 Processando lote ${batchNum}/${totalBatches} (${batch.length} produtos)`);
+          
+          const { error: insertError } = await supabaseClient
+            .from('co_solicitacao_produto_listagem')
+            .upsert(batch, { 
+              onConflict: 'solicitacao_produto_listagem_id',
+              ignoreDuplicates: false 
+            });
+          
+          if (insertError) {
+            console.error(`❌ Erro ao inserir lote ${batchNum}:`, insertError);
+            console.error('📄 Amostra dos dados problemáticos:', batch.slice(0, 2));
+            throw insertError;
+          }
+          
+          insertedCount += batch.length;
+          console.log(`✅ Lote ${batchNum} inserido. Progresso: ${insertedCount}/${newProductsData.length}`);
+          
+          // Pequena pausa entre lotes para evitar sobrecarga
+          if (batchNum < totalBatches) {
+            await new Promise(resolve => setTimeout(resolve, 100));
+          }
+        }
+        
+        // 3.3: Limpeza física dos produtos obsoletos
+        if (existingCount > 0) {
+          console.log(`🧹 Removendo ${existingCount} produtos obsoletos da tabela...`);
+          const { error: deleteError } = await supabaseClient
+            .from('co_solicitacao_produto_listagem')
+            .delete()
+            .eq('solicitacao_id', -1);
+          
+          if (deleteError) {
+            console.error('⚠️ Erro ao remover produtos obsoletos:', deleteError);
+            console.warn('⚠️ Continuando sincronização apesar do erro de limpeza');
+          } else {
+            console.log(`✅ ${existingCount} produtos obsoletos removidos com sucesso`);
+          }
+        }
+        
+        processedCount = insertedCount;
+        console.log(`🎉 REPLACE ALL CONCLUÍDO: ${processedCount} produtos sincronizados. Versão: ${currentSolicitacaoId}`);
+        
+      } else {
+        console.log('⚠️ Nenhum produto válido encontrado para sincronização');
+      }
+      
+      return processedCount;
+      
+    } catch (error) {
+      console.error('💥 Erro na sincronização REPLACE ALL:', error);
+      throw error;
+    }
+  }
+
+  // Processamento padrão para outras views
+  for (const record of data) {
+    try {
+      // Log progresso para lotes grandes
+      if (processedCount > 0 && processedCount % 500 === 0) {
+        console.log(`Processando registro ${processedCount}/${data.length} da view ${viewName}`);
+      }
+
+      if (mapping.targetTable === 'produtos_base') {
         console.log(`Processando produto base com ID: ${record.ProdutoBaseId || record.produto_base_id}`);
         
         // Mapeamento exato conforme dados do N8N para EstProdutoBase
