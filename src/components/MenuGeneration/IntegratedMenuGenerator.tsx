@@ -10,7 +10,7 @@ import { ChefHat, Calendar, CheckCircle, XCircle, ShoppingCart, DollarSign, User
 import { useIntegratedMenuGeneration } from '@/hooks/useIntegratedMenuGeneration';
 import { useSelectedClient } from '@/contexts/SelectedClientContext';
 import MenuTable from '@/components/MenuTable/MenuTable';
-import { MenuCreationForm } from '@/components/MenuGenerator/MenuCreationForm';
+import { SimpleMenuForm } from '@/components/MenuGeneration/SimpleMenuForm';
 import { ContractFormData } from '@/hooks/useClientContracts';
 
 const IntegratedMenuGenerator = () => {
@@ -76,7 +76,7 @@ const IntegratedMenuGenerator = () => {
   // Show menu creation form if form is requested and no menu is generated
   if (showForm && !generatedMenu) {
     return (
-      <MenuCreationForm
+      <SimpleMenuForm
         onSubmit={handleGenerateMenu}
         onCancel={handleCancelForm}
         isGenerating={isGenerating}
@@ -124,8 +124,8 @@ const IntegratedMenuGenerator = () => {
           </CardHeader>
           <CardContent className="space-y-4">
             <p className="text-gray-600 text-sm">
-              Use nosso formulário completo para gerar cardápios personalizados com informações detalhadas do cliente, 
-              restrições alimentares, orçamento e preferências especiais.
+              Sistema inteligente que seleciona receitas das categorias: Prato Principal, Guarnição, Salada e Sobremesa.
+              Garante variedade durante a semana e custos controlados baseados no orçamento do cliente.
             </p>
             <Button 
               onClick={handleShowForm}
@@ -134,7 +134,7 @@ const IntegratedMenuGenerator = () => {
               size="lg"
             >
               <Plus className="w-4 h-4 mr-2" />
-              Criar Cardápio Personalizado
+              Gerar Cardápio da Semana
             </Button>
           </CardContent>
         </Card>

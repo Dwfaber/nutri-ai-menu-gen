@@ -426,75 +426,101 @@ export const useIntegratedMenuGeneration = () => {
       setIsGenerating(true);
       setError(null);
 
-      // Fetch market products to use in generation
-      const { data: marketProducts, error: marketError } = await supabase
-        .from('co_solicitacao_produto_listagem')
-        .select('*')
-        .eq('em_promocao_sim_nao', false)
-        .limit(100);
+      console.log('Generating menu using direct recipe selection for client:', clientToUse.nome_fantasia);
 
-      if (marketError) {
-        throw new Error(`Erro ao buscar produtos do mercado: ${marketError.message}`);
+      // Buscar receitas disponíveis por categoria
+      const { data: receitasData, error: receitasError } = await supabase
+        .from('receitas_legado')
+        .select(`
+          receita_id_legado,
+          nome_receita,
+          categoria_descricao,
+          custo_total,
+          porcoes,
+          tempo_preparo,
+          inativa
+        `)
+        .eq('inativa', false)
+        .in('categoria_descricao', [
+          'Prato Principal 1',
+          'Guarnição', 
+          'Salada',
+          'Sobremesa'
+        ]);
+
+      if (receitasError) {
+        throw new Error(`Erro ao buscar receitas: ${receitasError.message}`);
       }
 
-      // Get client costs and cost details
-      const clientWithCosts = getClientWithCosts(clientToUse.id);
-      
-      let enhancedCostData = null;
-      if (clientWithCosts) {
-        enhancedCostData = {
-          daily_costs: clientWithCosts.dailyCosts,
-          validation_rules: clientWithCosts.validationRules,
-          cost_details: clientWithCosts.costDetails,
-          total_branches: clientWithCosts.totalBranches
-        };
-      }
+      // Organizar receitas por categoria
+      const receitasPorCategoria = {
+        'Prato Principal 1': receitasData?.filter(r => r.categoria_descricao === 'Prato Principal 1') || [],
+        'Guarnição': receitasData?.filter(r => r.categoria_descricao === 'Guarnição') || [],
+        'Salada': receitasData?.filter(r => r.categoria_descricao === 'Salada') || [],
+        'Sobremesa': receitasData?.filter(r => r.categoria_descricao === 'Sobremesa') || []
+      };
 
-      console.log('Generating menu with request for client:', clientToUse.nome_fantasia);
+      console.log('Receitas disponíveis por categoria:', Object.keys(receitasPorCategoria).map(cat => 
+        `${cat}: ${receitasPorCategoria[cat].length} receitas`
+      ));
 
-      // Call GPT Assistant for menu generation
-      const { data: gptResponse, error: gptError } = await supabase.functions.invoke('gpt-assistant', {
-        body: {
-          action: 'generate_menu',
-          client_data: {
-            id: clientToUse.id,
-            name: clientToUse.nome_fantasia,
-            max_cost_per_meal: clientToUse.custo_medio_diario || 7.30,
-            total_employees: 50,
-            meals_per_month: 100,
-            dietary_restrictions: [],
-            preferences: preferences || []
-          },
-          week_period: weekPeriod,
-          market_products: (marketProducts || []).slice(0, 50),
-          enhanced_cost_data: enhancedCostData
-        }
+      // Gerar cardápio da semana
+      const days = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta'];
+      const receitasCardapio: MenuRecipe[] = [];
+      const receitasUsadas = new Set<string>();
+
+      // Custo máximo por refeição do cliente
+      const custoMaximoPorRefeicao = clientToUse.custo_medio_diario || 7.30;
+
+      days.forEach((day, dayIndex) => {
+        // Selecionar uma receita de cada categoria para o dia
+        Object.entries(receitasPorCategoria).forEach(([categoria, receitas]) => {
+          if (receitas.length === 0) return;
+
+          // Filtrar receitas não usadas ou permitir repetição se necessário
+          const receitasDisponiveis = receitas.filter(r => 
+            !receitasUsadas.has(r.receita_id_legado) || receitasUsadas.size >= receitas.length
+          );
+
+          if (receitasDisponiveis.length === 0) return;
+
+          // Selecionar receita baseada no índice do dia para variedade
+          const receitaIndex = dayIndex % receitasDisponiveis.length;
+          const receitaSelecionada = receitasDisponiveis[receitaIndex];
+
+          // Calcular custo estimado (usar custo_total ou valor padrão)
+          let custoEstimado = receitaSelecionada.custo_total || 0;
+          if (custoEstimado === 0) {
+            // Estimar custo baseado na categoria
+            const custosDefault = {
+              'Prato Principal 1': custoMaximoPorRefeicao * 0.45,
+              'Guarnição': custoMaximoPorRefeicao * 0.25,
+              'Salada': custoMaximoPorRefeicao * 0.15,
+              'Sobremesa': custoMaximoPorRefeicao * 0.15
+            };
+            custoEstimado = custosDefault[categoria] || 2.0;
+          }
+
+          receitasCardapio.push({
+            id: receitaSelecionada.receita_id_legado,
+            name: receitaSelecionada.nome_receita,
+            category: categoria,
+            day: day,
+            cost: custoEstimado,
+            servings: receitaSelecionada.porcoes || 50,
+            ingredients: [],
+            nutritionalInfo: {}
+          });
+
+          // Marcar como usada
+          receitasUsadas.add(receitaSelecionada.receita_id_legado);
+        });
       });
 
-      if (gptError) {
-        throw new Error(`Erro na geração do cardápio: ${gptError.message}`);
-      }
+      console.log(`Cardápio gerado com ${receitasCardapio.length} receitas`);
 
-      console.log('GPT Response received:', gptResponse);
-
-      if (!gptResponse?.success) {
-        throw new Error(gptResponse?.error || 'Erro desconhecido na geração do cardápio');
-      }
-
-      // Processar resposta da API
-      let apiRecipes = gptResponse.menu?.recipes || [];
-      console.log(`GPT returned ${apiRecipes.length} recipes`);
-      
-      // Se GPT não retornou receitas suficientes, usar fallback
-      if (apiRecipes.length < 5) {
-        console.log('GPT returned insufficient recipes, using fallback');
-        apiRecipes = createFallbackMenu(marketProducts || [], clientToUse, weekPeriod);
-      }
-      
-      const processedRecipes = distributeRecipesByDay(apiRecipes);
-      
-      const totalCost = processedRecipes.reduce((sum, recipe) => sum + recipe.cost, 0);
-      const costPerMeal = processedRecipes.length > 0 ? totalCost / processedRecipes.length : 0;
+      const totalCost = receitasCardapio.reduce((sum, recipe) => sum + recipe.cost, 0);
+      const costPerMeal = receitasCardapio.length > 0 ? totalCost / days.length : 0; // Custo por dia
 
       const menu: GeneratedMenu = {
         id: `menu_${Date.now()}`,
@@ -504,8 +530,8 @@ export const useIntegratedMenuGeneration = () => {
         status: 'pending_approval',
         totalCost,
         costPerMeal,
-        totalRecipes: processedRecipes.length,
-        recipes: processedRecipes,
+        totalRecipes: receitasCardapio.length,
+        recipes: receitasCardapio,
         createdAt: new Date().toISOString()
       };
 
@@ -624,15 +650,58 @@ export const useIntegratedMenuGeneration = () => {
     try {
       setIsGenerating(true);
 
-      // Preparar receitas com ingredientes mapeados para produtos do mercado
-      const recipesWithMappedIngredients = await mapRecipesToMarketProducts(menu.recipes);
+      console.log('Buscando ingredientes das receitas do cardápio...');
+
+      // Buscar ingredientes das receitas selecionadas
+      const receitaIds = menu.recipes.map(r => r.id);
+      const { data: ingredientesData, error: ingredientesError } = await supabase
+        .from('receita_ingredientes')
+        .select(`
+          receita_id_legado,
+          nome,
+          quantidade,
+          unidade,
+          produto_base_id,
+          notas
+        `)
+        .in('receita_id_legado', receitaIds);
+
+      if (ingredientesError) {
+        throw new Error(`Erro ao buscar ingredientes: ${ingredientesError.message}`);
+      }
+
+      console.log(`Encontrados ${ingredientesData?.length || 0} ingredientes`);
+
+      // Processar ingredientes para criar itens do cardápio  
+      const menuItems = menu.recipes.map(recipe => {
+        const ingredientesReceita = ingredientesData?.filter(ing => 
+          ing.receita_id_legado === recipe.id
+        ) || [];
+
+        return {
+          receita_id: recipe.id,
+          name: recipe.name,
+          category: recipe.category,
+          cost: recipe.cost,
+          servings: recipe.servings,
+          ingredients: ingredientesReceita.map(ing => ({
+            name: ing.nome || 'Ingrediente sem nome',
+            quantity: ing.quantidade || 0,
+            unit: ing.unidade || 'un',
+            produto_base_id: ing.produto_base_id,
+            notes: ing.notas
+          }))
+        };
+      });
+
+      console.log('Chamando função de geração de lista de compras...');
 
       const { data: shoppingResponse, error: shoppingError } = await supabase.functions.invoke('generate-shopping-list', {
         body: {
           menuId: menu.id,
           clientName: selectedClient.nome_fantasia,
           budgetPredicted: menu.totalCost,
-          menuItems: recipesWithMappedIngredients,
+          menuItems: menuItems,
           optimizationConfig: {
             prioridade_promocao: 'alta',
             tolerancia_sobra_percentual: 10,
@@ -647,15 +716,18 @@ export const useIntegratedMenuGeneration = () => {
         throw new Error(`Erro ao gerar lista de compras: ${shoppingError.message}`);
       }
 
+      console.log('Lista de compras gerada com sucesso:', shoppingResponse);
+
       toast({
         title: "Lista de Compras Gerada",
-        description: "Lista de compras criada com base no cardápio aprovado usando produtos do mercado",
+        description: `Lista criada com ${shoppingResponse.shoppingList?.items?.length || 0} itens`,
         variant: "default"
       });
 
       return true;
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Erro ao gerar lista de compras';
+      console.error('Erro na geração de lista de compras:', err);
       toast({
         title: "Erro na Lista de Compras",
         description: errorMessage,

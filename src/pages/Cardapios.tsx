@@ -68,7 +68,7 @@ const Cardapios = () => {
       <div className="flex justify-between items-center">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Cardápios</h1>
-          <p className="text-gray-600">Gerencie cardápios corporativos com IA</p>
+          <p className="text-gray-600">Sistema inteligente de cardápios com receitas reais e lista de compras automática</p>
         </div>
         <Button 
           onClick={() => setShowCreateForm(true)}
