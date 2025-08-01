@@ -84,6 +84,75 @@ export const useShoppingList = () => {
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
 
+  // Load shopping lists from database on component mount
+  const loadShoppingLists = async (): Promise<void> => {
+    try {
+      setIsLoading(true);
+      
+      const { data: shoppingLists, error: listsError } = await supabase
+        .from('shopping_lists')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (listsError) throw listsError;
+
+      if (shoppingLists && shoppingLists.length > 0) {
+        const mappedLists: ShoppingList[] = [];
+        
+        for (const list of shoppingLists) {
+          const { data: items, error: itemsError } = await supabase
+            .from('shopping_list_items')
+            .select('*')
+            .eq('shopping_list_id', list.id);
+
+          if (itemsError) {
+            console.error('Error loading items for list:', list.id, itemsError);
+            continue;
+          }
+
+          const mappedItems: ShoppingItem[] = (items || []).map(item => ({
+            id: item.id,
+            produto_id: item.product_id_legado,
+            produto_nome: item.product_name,
+            categoria: item.category,
+            quantidade_necessaria: item.quantity,
+            unidade: item.unit,
+            preco_unitario: item.unit_price,
+            valor_total: item.total_price,
+            fornecedor: '',
+            observacoes: '',
+            receita_origem: []
+          }));
+
+          mappedLists.push({
+            id: list.id,
+            nome: `Lista de Compras - ${new Date(list.created_at).toLocaleDateString()}`,
+            cardapio_id: list.menu_id,
+            itens: mappedItems,
+            valor_total: list.cost_actual || 0,
+            data_criacao: list.created_at,
+            status: list.status === 'pending' ? 'draft' : list.status === 'budget_ok' ? 'approved' : 'draft',
+            client_name: list.client_name,
+            budget_predicted: list.budget_predicted,
+            cost_actual: list.cost_actual || 0,
+            created_at: list.created_at
+          });
+        }
+        
+        setLists(mappedLists);
+      }
+    } catch (error) {
+      console.error('Error loading shopping lists:', error);
+      toast({
+        title: "Erro ao Carregar",
+        description: "Não foi possível carregar as listas de compras",
+        variant: "destructive"
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const generateShoppingList = async (
     cardapioId: string,
     optimizationSettings: OptimizationSettings = {
@@ -127,12 +196,12 @@ export const useShoppingList = () => {
         created_at: new Date().toISOString()
       };
 
-      setCurrentList(newList);
-      setLists(prev => [newList, ...prev]);
+      // Reload lists from database to get the actual saved data
+      await loadShoppingLists();
 
       toast({
         title: "Lista de Compras Gerada!",
-        description: `${result.items?.length || 0} itens gerados com otimização automática`,
+        description: `Lista gerada com sucesso! Recarregando dados...`,
       });
 
       return newList;
@@ -288,6 +357,7 @@ export const useShoppingList = () => {
     getShoppingListItems,
     exportToCSV,
     updateItemQuantity,
-    createFromMenu
+    createFromMenu,
+    loadShoppingLists
   };
 };

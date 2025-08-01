@@ -140,17 +140,19 @@ serve(async (req) => {
           for (const ingredient of item.ingredients) {
             const baseId = ingredient.produto_base_id || ingredient.produto_id;
             const key = baseId;
+            const quantity = parseFloat(ingredient.quantity?.toString() || ingredient.quantidade?.toString() || '0') || 0;
+            
             if (ingredientMap.has(key)) {
               const existing = ingredientMap.get(key);
-              existing.quantity += ingredient.quantidade || 0;
+              existing.quantity += quantity;
             } else {
               const firstProduct = productsByBase.get(baseId)?.[0];
               if (firstProduct) {
                 ingredientMap.set(key, {
                   produto_base_id: baseId,
-                  name: ingredient.nome || firstProduct.descricao,
-                  quantity: ingredient.quantidade || 0,
-                  unit: ingredient.unidade || firstProduct.unidade,
+                  name: ingredient.name || ingredient.nome || firstProduct.descricao,
+                  quantity: quantity,
+                  unit: ingredient.unit || ingredient.unidade || firstProduct.unidade,
                   category: firstProduct.categoria_descricao || 'Outros',
                   opcoes_embalagem: productsByBase.get(baseId) || []
                 });
@@ -181,6 +183,9 @@ serve(async (req) => {
     }
 
     const aggregatedIngredients = Array.from(ingredientMap.values());
+    
+    console.log('Total ingredients processed:', aggregatedIngredients.length);
+    console.log('Sample processed ingredient:', aggregatedIngredients[0]);
 
     // Apply optimization if enabled
     let totalCost = 0;

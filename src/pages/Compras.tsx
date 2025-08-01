@@ -21,7 +21,6 @@ type ShoppingListStatus = 'pending' | 'budget_ok' | 'budget_exceeded' | 'finaliz
 
 const Compras = () => {
   const [searchTerm, setSearchTerm] = useState('');
-  const [shoppingLists, setShoppingLists] = useState<ShoppingList[]>([]);
   const [selectedList, setSelectedList] = useState<ShoppingList | null>(null);
   const [listItems, setListItems] = useState<ShoppingListItem[]>([]);
   const [isLoadingItems, setIsLoadingItems] = useState(false);
@@ -33,7 +32,8 @@ const Compras = () => {
     getShoppingLists, 
     getShoppingListItems, 
     exportToCSV, 
-    updateItemQuantity 
+    updateItemQuantity,
+    loadShoppingLists
   } = useShoppingList();
   
   const { config: optimizationConfig, lastResults: optimizationResults } = useOptimization();
@@ -44,12 +44,7 @@ const Compras = () => {
 
   useEffect(() => {
     loadShoppingLists();
-  }, []);
-
-  const loadShoppingLists = async () => {
-    const listsData = await getShoppingLists();
-    setShoppingLists(listsData);
-  };
+  }, [loadShoppingLists]);
 
   const handleSelectList = async (list: ShoppingList) => {
     setSelectedList(list);
@@ -134,8 +129,8 @@ const Compras = () => {
     return acc;
   }, {} as Record<string, ShoppingListItem[]>);
 
-  // Use lists from hook, fallback to local state
-  const displayLists = lists.length > 0 ? lists : shoppingLists;
+  // Use lists from hook
+  const displayLists = lists;
 
   // Helper function to check if status indicates success
   const isSuccessStatus = (status: ShoppingListStatus) => {
