@@ -192,8 +192,24 @@ export const useMenuBusinessRules = () => {
     return violations;
   };
 
-  // Main validation function
+  // Main validation function (pure function - no side effects)
   const validateMenu = (recipes: any[]): MenuBusinessRules => {
+    const allViolations: MenuViolation[] = [
+      ...validateProteinVariety(recipes),
+      ...validateMondayProcessing(recipes),
+      ...validateMenuStructure(recipes)
+    ];
+
+    return {
+      proteinVariety: !allViolations.some(v => v.type === 'protein_consecutive' || v.type === 'red_meat_limit'),
+      redMeatLimit: !allViolations.some(v => v.type === 'red_meat_limit'),
+      mondayProcessing: !allViolations.some(v => v.type === 'monday_processing'),
+      requiredStructure: !allViolations.some(v => v.type === 'structure_incomplete')
+    };
+  };
+
+  // Function to validate menu and update violations state
+  const validateMenuAndSetViolations = (recipes: any[]): MenuBusinessRules => {
     const allViolations: MenuViolation[] = [
       ...validateProteinVariety(recipes),
       ...validateMondayProcessing(recipes),
@@ -242,6 +258,7 @@ export const useMenuBusinessRules = () => {
   return {
     violations,
     validateMenu,
+    validateMenuAndSetViolations,
     filterRecipesForDay,
     classifyProtein,
     requiresAdvancePreparation,

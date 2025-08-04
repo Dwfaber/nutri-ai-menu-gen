@@ -56,7 +56,7 @@ export const useIntegratedMenuGeneration = () => {
   const { selectedClient } = useSelectedClient();
   const { getClientWithCosts } = useClientContractsContext();
   const { viableRecipes, marketIngredients, fetchMarketIngredients, checkRecipeViability, calculateRecipeRealCost } = useMarketAvailability();
-  const { validateMenu, filterRecipesForDay, violations } = useMenuBusinessRules();
+  const { validateMenu, validateMenuAndSetViolations, filterRecipesForDay, violations } = useMenuBusinessRules();
 
   // New menu structure mapping based on business requirements
   const mapCategoryToMenuStructure = (category: string): string => {
@@ -587,6 +587,7 @@ export const useIntegratedMenuGeneration = () => {
     viableRecipes,
     marketIngredients,
     violations,
-    validateMenu
+    validateMenu,
+    validateMenuAndSetViolations
   };
 };

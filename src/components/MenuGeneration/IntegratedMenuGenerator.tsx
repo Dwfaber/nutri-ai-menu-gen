@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -32,8 +32,24 @@ const IntegratedMenuGenerator = () => {
     viableRecipes,
     marketIngredients,
     violations,
-    validateMenu
+    validateMenu,
+    validateMenuAndSetViolations
   } = useIntegratedMenuGeneration();
+
+  // Memoize validation rules to prevent unnecessary re-calculations
+  const validationRules = useMemo(() => {
+    if (!generatedMenu?.recipes || generatedMenu.recipes.length === 0) {
+      return null;
+    }
+    return validateMenu(generatedMenu.recipes);
+  }, [generatedMenu?.recipes, validateMenu]);
+
+  // Update violations when menu changes
+  useEffect(() => {
+    if (generatedMenu?.recipes && generatedMenu.recipes.length > 0) {
+      validateMenuAndSetViolations(generatedMenu.recipes);
+    }
+  }, [generatedMenu?.recipes, validateMenuAndSetViolations]);
 
 
   const handleGenerateMenu = async (formData: ContractFormData) => {
@@ -191,9 +207,9 @@ const IntegratedMenuGenerator = () => {
             </div>
 
             {/* Business Rules Validation */}
-            {generatedMenu.recipes && generatedMenu.recipes.length > 0 && (
+            {validationRules && (
               <MenuValidationPanel
-                rules={validateMenu(generatedMenu.recipes)}
+                rules={validationRules}
                 violations={violations}
                 marketAvailability={{
                   totalIngredients: marketIngredients.length,
