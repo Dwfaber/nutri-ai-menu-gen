@@ -12,6 +12,7 @@ import { useSelectedClient } from '@/contexts/SelectedClientContext';
 import MenuTable from '@/components/MenuTable/MenuTable';
 import { SimpleMenuForm } from '@/components/MenuGeneration/SimpleMenuForm';
 import { ContractFormData } from '@/hooks/useClientContracts';
+import MenuValidationPanel from '@/components/MenuGeneration/MenuValidationPanel';
 
 const IntegratedMenuGenerator = () => {
   const [showForm, setShowForm] = useState(false);
@@ -27,7 +28,11 @@ const IntegratedMenuGenerator = () => {
     rejectMenu,
     generateShoppingListFromMenu,
     clearGeneratedMenu,
-    error
+    error,
+    viableRecipes,
+    marketIngredients,
+    violations,
+    validateMenu
   } = useIntegratedMenuGeneration();
 
 
@@ -124,8 +129,9 @@ const IntegratedMenuGenerator = () => {
           </CardHeader>
           <CardContent className="space-y-4">
             <p className="text-gray-600 text-sm">
-              Sistema inteligente que seleciona receitas das categorias: Prato Principal, Guarnição, Salada e Sobremesa.
-              Garante variedade durante a semana e custos controlados baseados no orçamento do cliente.
+              Sistema inteligente que verifica disponibilidade no mercado e aplica regras de negócio.
+              Estrutura: PP1, PP2, Arroz Branco, Feijão, Salada 1 (Verduras), Salada 2 (Legumes), Suco 1, Suco 2.
+              Garante variedade de proteínas, evita processos nas segundas e controla custos.
             </p>
             <Button 
               onClick={handleShowForm}
@@ -184,11 +190,22 @@ const IntegratedMenuGenerator = () => {
               </div>
             </div>
 
+            {/* Business Rules Validation */}
+            {generatedMenu.recipes && generatedMenu.recipes.length > 0 && (
+              <MenuValidationPanel
+                rules={validateMenu(generatedMenu.recipes)}
+                violations={violations}
+                marketAvailability={{
+                  totalIngredients: marketIngredients.length,
+                  availableIngredients: viableRecipes.length,
+                  missingIngredients: []
+                }}
+              />
+            )}
+
             {/* Menu Table */}
             {generatedMenu.recipes && generatedMenu.recipes.length > 0 ? (
               <>
-                {console.log('Generated Menu:', generatedMenu)}
-                {console.log('Recipes:', generatedMenu.recipes)}
                 <MenuTable
                   title="CARDÁPIO"
                   weekPeriod={generatedMenu.weekPeriod}
@@ -210,11 +227,6 @@ const IntegratedMenuGenerator = () => {
               <div className="p-8 text-center text-gray-500">
                 <ChefHat className="w-12 h-12 mx-auto mb-3 text-gray-300" />
                 <p>Nenhuma receita encontrada no cardápio</p>
-                {generatedMenu && (
-                  <pre className="mt-4 text-xs text-left bg-gray-100 p-4 rounded">
-                    {JSON.stringify(generatedMenu, null, 2)}
-                  </pre>
-                )}
               </div>
             )}
 

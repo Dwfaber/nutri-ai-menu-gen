@@ -4,6 +4,8 @@ import { useToast } from '@/hooks/use-toast';
 import { useSelectedClient } from '@/contexts/SelectedClientContext';
 import { useClientContractsContext } from '@/contexts/ClientContractsContext';
 import { MarketProduct } from './useMarketProducts';
+import { useMarketAvailability } from './useMarketAvailability';
+import { useMenuBusinessRules } from './useMenuBusinessRules';
 
 export interface MenuGenerationRequest {
   clientId: string;
@@ -52,251 +54,48 @@ export const useIntegratedMenuGeneration = () => {
   const { toast } = useToast();
   const { selectedClient } = useSelectedClient();
   const { getClientWithCosts } = useClientContractsContext();
+  const { viableRecipes, marketIngredients, fetchMarketIngredients, checkRecipeViability } = useMarketAvailability();
+  const { validateMenu, filterRecipesForDay, violations } = useMenuBusinessRules();
 
-  // Função para mapear categorias da API para tipos de refeição
-  const mapCategoryToMealType = (category: string): string => {
+  // New menu structure mapping based on business requirements
+  const mapCategoryToMenuStructure = (category: string): string => {
     const normalizedCategory = category.toLowerCase().trim();
     
-    // Proteínas (PP1)
-    if (normalizedCategory.includes('proteín') || 
-        normalizedCategory.includes('carne') || 
-        normalizedCategory.includes('frango') || 
-        normalizedCategory.includes('peixe') || 
-        normalizedCategory.includes('boi') || 
-        normalizedCategory.includes('porco') || 
-        normalizedCategory.includes('ave') ||
-        normalizedCategory.includes('protein') ||
-        normalizedCategory === 'pp1') {
+    if (normalizedCategory.includes('prato principal 1') || normalizedCategory === 'pp1') {
       return 'PP1';
     }
     
-    // Saladas
-    if (normalizedCategory.includes('salada') || 
-        normalizedCategory.includes('verdura') || 
-        normalizedCategory.includes('folha') || 
-        normalizedCategory.includes('vegetal') ||
-        normalizedCategory.includes('hortaliça') ||
-        normalizedCategory.includes('vegetable')) {
-      return 'SALADA 1';
+    if (normalizedCategory.includes('prato principal 2') || normalizedCategory === 'pp2') {
+      return 'PP2';
     }
     
-    // Sobremesas
-    if (normalizedCategory.includes('sobremesa') || 
-        normalizedCategory.includes('doce') || 
-        normalizedCategory.includes('fruta') ||
-        normalizedCategory.includes('dessert') ||
-        normalizedCategory.includes('fruit')) {
-      return 'SOBREMESA';
+    if (normalizedCategory.includes('arroz branco') || normalizedCategory === 'arroz') {
+      return 'Arroz Branco';
     }
     
-    // Acompanhamentos (default para carboidratos, cereais, etc.)
-    return 'ACOMPANHAMENTO';
-  };
-
-  // Fallback function to create a basic menu from available products
-  const createFallbackMenu = (
-    marketProducts: any[],
-    clientInfo: any,
-    weekPeriod: string
-  ): any[] => {
-    console.log('Creating fallback menu with', marketProducts.length, 'products');
-    
-    // Organize products by category
-    const carnes = marketProducts.filter(p => p.categoria_descricao === 'Carnes');
-    const hortifruti = marketProducts.filter(p => p.categoria_descricao === 'Hortifruti');
-    const generos = marketProducts.filter(p => p.categoria_descricao === 'Gêneros');
-    const frios = marketProducts.filter(p => p.categoria_descricao === 'Frios');
-    
-    const recipes: any[] = [];
-    const days = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta'];
-    const targetCostPerMeal = clientInfo?.custo_maximo_refeicao || 3.5;
-    
-    days.forEach((day, dayIndex) => {
-      // Create 4 recipes per day: PP1 (protein), SALADA 1 (vegetable), GUARNICAO 1 (carb), SOBREMESA 1 (fruit)
-      
-      // PP1 - Proteína Principal usando Carnes
-      if (carnes.length > 0) {
-        const protein = carnes[dayIndex % carnes.length];
-        recipes.push({
-          id: `fallback_pp1_${dayIndex}`,
-          name: `${protein.descricao} grelhada`,
-          category: 'PP1',
-          day: day,
-          servings: 1,
-          cost: Math.min(protein.preco || 1.5, targetCostPerMeal * 0.4),
-          ingredients: [
-            {
-              name: protein.descricao,
-              quantity: protein.per_capita || 150,
-              unit: protein.unidade || 'g',
-              cost: protein.preco || 1.5
-            }
-          ],
-          nutritional_info: {
-            calories: 200,
-            protein: 25,
-            carbs: 2,
-            fat: 8
-          }
-        });
-      }
-      
-      // SALADA 1 - Salada usando Hortifruti
-      if (hortifruti.length > 0) {
-        const vegetable = hortifruti[dayIndex % hortifruti.length];
-        recipes.push({
-          id: `fallback_salada_${dayIndex}`,
-          name: `Salada de ${vegetable.descricao}`,
-          category: 'SALADA 1',
-          day: day,
-          servings: 1,
-          cost: Math.min(vegetable.preco || 0.8, targetCostPerMeal * 0.2),
-          ingredients: [
-            {
-              name: vegetable.descricao,
-              quantity: vegetable.per_capita || 80,
-              unit: vegetable.unidade || 'g',
-              cost: vegetable.preco || 0.8
-            }
-          ],
-          nutritional_info: {
-            calories: 50,
-            protein: 2,
-            carbs: 10,
-            fat: 1
-          }
-        });
-      }
-      
-      // GUARNICAO 1 - Acompanhamento usando Gêneros
-      if (generos.length > 0) {
-        const carb = generos[dayIndex % generos.length];
-        recipes.push({
-          id: `fallback_guarnicao_${dayIndex}`,
-          name: `${carb.descricao} refogado`,
-          category: 'GUARNICAO 1',
-          day: day,
-          servings: 1,
-          cost: Math.min(carb.preco || 0.6, targetCostPerMeal * 0.25),
-          ingredients: [
-            {
-              name: carb.descricao,
-              quantity: carb.per_capita || 100,
-              unit: carb.unidade || 'g',
-              cost: carb.preco || 0.6
-            }
-          ],
-          nutritional_info: {
-            calories: 150,
-            protein: 4,
-            carbs: 30,
-            fat: 2
-          }
-        });
-      }
-      
-      // SOBREMESA 1 - Sobremesa usando Frios ou Hortifruti
-      const dessertProducts = frios.length > 0 ? frios : hortifruti;
-      if (dessertProducts.length > 0) {
-        const dessert = dessertProducts[dayIndex % dessertProducts.length];
-        recipes.push({
-          id: `fallback_sobremesa_${dayIndex}`,
-          name: `${dessert.descricao} natural`,
-          category: 'SOBREMESA 1',
-          day: day,
-          servings: 1,
-          cost: Math.min(dessert.preco || 0.5, targetCostPerMeal * 0.15),
-          ingredients: [
-            {
-              name: dessert.descricao,
-              quantity: dessert.per_capita || 60,
-              unit: dessert.unidade || 'g',
-              cost: dessert.preco || 0.5
-            }
-          ],
-          nutritional_info: {
-            calories: 80,
-            protein: 1,
-            carbs: 18,
-            fat: 1
-          }
-        });
-      }
-    });
-    
-    console.log(`Fallback menu created with ${recipes.length} recipes`);
-    return recipes;
-  };
-
-  // Função para distribuir receitas pelos dias da semana com balanceamento
-  const distributeRecipesByDay = (recipes: any[]): MenuRecipe[] => {
-    const days = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta'];
-    const requiredCategories = ['PP1', 'SALADA 1', 'ACOMPANHAMENTO', 'SOBREMESA'];
-    
-    // Primeiro, categorizar as receitas
-    const categorizedRecipes: { [key: string]: any[] } = {};
-    recipes.forEach(recipe => {
-      const category = mapCategoryToMealType(recipe.category || 'other');
-      if (!categorizedRecipes[category]) {
-        categorizedRecipes[category] = [];
-      }
-      categorizedRecipes[category].push(recipe);
-    });
-    
-    console.log('Receitas categorizadas:', categorizedRecipes);
-    
-    // Distribuir receitas garantindo diversidade por dia
-    const menuRecipes: MenuRecipe[] = [];
-    let recipeIndex = 0;
-    
-    // Para cada dia, tentar ter pelo menos uma de cada categoria
-    days.forEach((day, dayIndex) => {
-      requiredCategories.forEach(category => {
-        const categoryRecipes = categorizedRecipes[category] || [];
-        if (categoryRecipes.length > 0) {
-          const recipeForDay = categoryRecipes[dayIndex % categoryRecipes.length];
-          if (recipeForDay) {
-            const cost = typeof recipeForDay.costPerServing === 'number' 
-              ? recipeForDay.costPerServing 
-              : (typeof recipeForDay.cost === 'number' ? recipeForDay.cost : 5.0);
-            
-            menuRecipes.push({
-              id: recipeForDay.id || `recipe-${recipeIndex++}`,
-              name: recipeForDay.name || `Receita ${category}`,
-              category,
-              day,
-              cost: Math.max(cost, 1.0), // Mínimo de R$ 1,00 por receita
-              servings: recipeForDay.servings || 50,
-              ingredients: recipeForDay.ingredients || [],
-              nutritionalInfo: recipeForDay.nutritionalInfo || {}
-            });
-          }
-        }
-      });
-    });
-    
-    // Se não temos receitas suficientes, distribuir o que temos
-    if (menuRecipes.length === 0) {
-      return recipes.map((recipe: any, index: number) => {
-        const dayIndex = index % days.length;
-        const cost = typeof recipe.costPerServing === 'number' 
-          ? recipe.costPerServing 
-          : (typeof recipe.cost === 'number' ? recipe.cost : 5.0);
-        
-        return {
-          id: recipe.id || `recipe-${index}`,
-          name: recipe.name || 'Receita sem nome',
-          category: mapCategoryToMealType(recipe.category || 'other'),
-          day: days[dayIndex],
-          cost: Math.max(cost, 1.0),
-          servings: recipe.servings || 50,
-          ingredients: recipe.ingredients || [],
-          nutritionalInfo: recipe.nutritionalInfo || {}
-        };
-      });
+    if (normalizedCategory.includes('feijão') || normalizedCategory === 'feijao') {
+      return 'Feijão';
     }
     
-    return menuRecipes;
+    // Saladas by ingredient type
+    if (normalizedCategory.includes('salada')) {
+      // TODO: Categorize by ingredients (verduras/folhas vs legumes)
+      return 'Salada 1'; // Default, will be improved with ingredient analysis
+    }
+    
+    if (normalizedCategory.includes('suco') || normalizedCategory.includes('bebida')) {
+      return 'Suco 1'; // Default, will be improved to have Suco 1 and Suco 2
+    }
+    
+    if (normalizedCategory.includes('sobremesa') || normalizedCategory.includes('fruta')) {
+      return 'Sobremesa';
+    }
+    
+    if (normalizedCategory.includes('guarnição') || normalizedCategory.includes('acompanhamento')) {
+      return 'Guarnição';
+    }
+    
+    return 'Outros';
   };
 
   // Carregar cardápios salvos
@@ -426,127 +225,132 @@ export const useIntegratedMenuGeneration = () => {
       setIsGenerating(true);
       setError(null);
 
-      console.log('Generating menu using direct recipe selection for client:', clientToUse.nome_fantasia);
+      console.log('Generating menu with market availability and business rules for client:', clientToUse.nome_fantasia);
 
-      // Buscar receitas que têm ingredientes cadastrados
-      const { data: receitasComIngredientes, error: ingredientesError } = await supabase
-        .from('receita_ingredientes')
-        .select('receita_id_legado')
-        .not('receita_id_legado', 'is', null);
-
-      if (ingredientesError) {
-        throw new Error(`Erro ao buscar receitas com ingredientes: ${ingredientesError.message}`);
+      // Step 1: Check market availability
+      await fetchMarketIngredients();
+      const viable = await checkRecipeViability();
+      
+      if (viable.length === 0) {
+        throw new Error('Nenhuma receita viável encontrada com os ingredientes disponíveis no mercado');
       }
 
-      const receitasComIngredientesIds = new Set(
-        receitasComIngredientes?.map(r => r.receita_id_legado) || []
-      );
+      console.log(`Found ${viable.length} viable recipes based on market availability`);
 
-      console.log(`Encontradas ${receitasComIngredientesIds.size} receitas com ingredientes`);
-
-      // Buscar receitas disponíveis por categoria que têm ingredientes
-      const { data: receitasData, error: receitasError } = await supabase
-        .from('receitas_legado')
-        .select(`
-          receita_id_legado,
-          nome_receita,
-          categoria_descricao,
-          custo_total,
-          porcoes,
-          tempo_preparo,
-          inativa
-        `)
-        .eq('inativa', false)
-        .in('categoria_descricao', [
-          'Prato Principal 1',
-          'Guarnição', 
-          'Salada',
-          'Sobremesa'
-        ])
-        .in('receita_id_legado', Array.from(receitasComIngredientesIds));
-
-      if (receitasError) {
-        throw new Error(`Erro ao buscar receitas: ${receitasError.message}`);
-      }
-
-      if (!receitasData || receitasData.length === 0) {
-        throw new Error('Nenhuma receita com ingredientes encontrada no banco de dados');
-      }
-
-      // Organizar receitas por categoria
-      const receitasPorCategoria = {
-        'Prato Principal 1': receitasData?.filter(r => r.categoria_descricao === 'Prato Principal 1') || [],
-        'Guarnição': receitasData?.filter(r => r.categoria_descricao === 'Guarnição') || [],
-        'Salada': receitasData?.filter(r => r.categoria_descricao === 'Salada') || [],
-        'Sobremesa': receitasData?.filter(r => r.categoria_descricao === 'Sobremesa') || []
+      // Step 2: Organize viable recipes by new structure categories
+      const newMenuStructure = {
+        'PP1': viable.filter(r => r.categoria_descricao === 'Prato Principal 1') || [],
+        'PP2': [], // To be identified from other categories or created
+        'Arroz Branco': [], // Fixed items
+        'Feijão': [], // Fixed items  
+        'Salada 1': viable.filter(r => r.categoria_descricao === 'Salada') || [],
+        'Salada 2': [], // To be separated by ingredient type
+        'Suco 1': [], // To be identified from beverages
+        'Suco 2': [], // To be identified from beverages
+        'Guarnição': viable.filter(r => r.categoria_descricao === 'Guarnição') || [],
+        'Sobremesa': viable.filter(r => r.categoria_descricao === 'Sobremesa') || []
       };
 
-      console.log('Receitas disponíveis por categoria:', Object.keys(receitasPorCategoria).map(cat => 
-        `${cat}: ${receitasPorCategoria[cat].length} receitas`
-      ));
-
-      // Gerar cardápio da semana
+      // Step 3: Generate weekly menu with business rules
       const days = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta'];
       const receitasCardapio: MenuRecipe[] = [];
       const receitasUsadas = new Set<string>();
-
-      // Custo máximo por refeição do cliente
       const custoMaximoPorRefeicao = clientToUse.custo_medio_diario || 7.30;
 
-      days.forEach((day, dayIndex) => {
-        // Selecionar uma receita de cada categoria para o dia
-        Object.entries(receitasPorCategoria).forEach(([categoria, receitas]) => {
-          if (receitas.length === 0) return;
+      // Fixed items (always present)
+      days.forEach(day => {
+        // Add fixed Arroz Branco
+        receitasCardapio.push({
+          id: `arroz-${day}`,
+          name: 'Arroz Branco',
+          category: 'Arroz Branco',
+          day,
+          cost: 0.8,
+          servings: 50,
+          ingredients: [],
+          nutritionalInfo: {}
+        });
 
-          // Filtrar receitas não usadas ou permitir repetição se necessário
-          const receitasDisponiveis = receitas.filter(r => 
-            !receitasUsadas.has(r.receita_id_legado) || receitasUsadas.size >= receitas.length
-          );
-
-          if (receitasDisponiveis.length === 0) return;
-
-          // Selecionar receita baseada no índice do dia para variedade
-          const receitaIndex = dayIndex % receitasDisponiveis.length;
-          const receitaSelecionada = receitasDisponiveis[receitaIndex];
-
-          // Calcular custo estimado (usar custo_total ou valor padrão)
-          let custoEstimado = receitaSelecionada.custo_total || 0;
-          if (custoEstimado === 0) {
-            // Estimar custo baseado na categoria
-            const custosDefault = {
-              'Prato Principal 1': custoMaximoPorRefeicao * 0.45,
-              'Guarnição': custoMaximoPorRefeicao * 0.25,
-              'Salada': custoMaximoPorRefeicao * 0.15,
-              'Sobremesa': custoMaximoPorRefeicao * 0.15
-            };
-            custoEstimado = custosDefault[categoria] || 2.0;
-          }
-
-          receitasCardapio.push({
-            id: receitaSelecionada.receita_id_legado,
-            name: receitaSelecionada.nome_receita,
-            category: categoria,
-            day: day,
-            cost: custoEstimado,
-            servings: receitaSelecionada.porcoes || 50,
-            ingredients: [],
-            nutritionalInfo: {}
-          });
-
-          // Marcar como usada
-          receitasUsadas.add(receitaSelecionada.receita_id_legado);
+        // Add fixed Feijão
+        receitasCardapio.push({
+          id: `feijao-${day}`,
+          name: 'Feijão Carioca',
+          category: 'Feijão',
+          day,
+          cost: 1.2,
+          servings: 50,
+          ingredients: [],
+          nutritionalInfo: {}
         });
       });
 
-      console.log(`Cardápio gerado com ${receitasCardapio.length} receitas`);
+      // Step 4: Generate recipes for each day with business rules
+      days.forEach((day, dayIndex) => {
+        const previousDayRecipes = dayIndex > 0 
+          ? receitasCardapio.filter(r => r.day === days[dayIndex - 1])
+          : [];
 
+        // PP1 - Main protein following business rules
+        const pp1Recipes = filterRecipesForDay(newMenuStructure.PP1, day, dayIndex, previousDayRecipes);
+        if (pp1Recipes.length > 0) {
+          const selectedPP1 = pp1Recipes[dayIndex % pp1Recipes.length];
+          const cost = Math.min(selectedPP1.custo_total || 3.5, custoMaximoPorRefeicao * 0.4);
+          
+          receitasCardapio.push({
+            id: selectedPP1.receita_id_legado,
+            name: selectedPP1.nome_receita,
+            category: 'PP1',
+            day,
+            cost,
+            servings: selectedPP1.porcoes || 50,
+            ingredients: [],
+            nutritionalInfo: {}
+          });
+          
+          receitasUsadas.add(selectedPP1.receita_id_legado);
+        }
+
+        // Add other categories (Salada, Guarnição, Sobremesa)
+        ['Salada 1', 'Guarnição', 'Sobremesa'].forEach(categoria => {
+          const categoryRecipes = newMenuStructure[categoria] || [];
+          if (categoryRecipes.length > 0) {
+            const available = categoryRecipes.filter(r => !receitasUsadas.has(r.receita_id_legado));
+            if (available.length > 0) {
+              const selected = available[dayIndex % available.length];
+              const maxCost = categoria === 'Sobremesa' ? custoMaximoPorRefeicao * 0.15 : custoMaximoPorRefeicao * 0.25;
+              const cost = Math.min(selected.custo_total || 1.5, maxCost);
+              
+              receitasCardapio.push({
+                id: selected.receita_id_legado,
+                name: selected.nome_receita,
+                category: categoria,
+                day,
+                cost,
+                servings: selected.porcoes || 50,
+                ingredients: [],
+                nutritionalInfo: {}
+              });
+              
+              receitasUsadas.add(selected.receita_id_legado);
+            }
+          }
+        });
+      });
+
+      // Step 5: Validate business rules
+      const businessRules = validateMenu(receitasCardapio);
+      console.log('Business rules validation:', businessRules);
+      console.log('Violations found:', violations);
+
+      // Calculate totals
       const totalCost = receitasCardapio.reduce((sum, recipe) => sum + recipe.cost, 0);
-      const costPerMeal = receitasCardapio.length > 0 ? totalCost / days.length : 0; // Custo por dia
+      const costPerMeal = totalCost / days.length;
 
+      // Create generated menu
       const menu: GeneratedMenu = {
-        id: `menu_${Date.now()}`,
-        clientId: clientToUse.id,
-        clientName: clientToUse.nome_fantasia,
+        id: crypto.randomUUID(),
+        clientId: clientToUse.id || clientToUse.cliente_id_legado,
+        clientName: clientToUse.nome_fantasia || clientToUse.nome_empresa,
         weekPeriod,
         status: 'pending_approval',
         totalCost,
@@ -556,80 +360,86 @@ export const useIntegratedMenuGeneration = () => {
         createdAt: new Date().toISOString()
       };
 
-      console.log('Processed menu:', menu);
-
-      // Salvar no banco automaticamente
+      // Save to database
       const savedId = await saveMenuToDatabase(menu);
       if (savedId) {
         menu.id = savedId;
-        // Recarregar lista de cardápios salvos
+        setGeneratedMenu(menu);
         await loadSavedMenus();
+
+        toast({
+          title: "Cardápio gerado com sucesso!",
+          description: `Criado cardápio para ${weekPeriod} com ${receitasCardapio.length} receitas`,
+          variant: "default"
+        });
+
+        return menu;
+      } else {
+        throw new Error('Erro ao salvar cardápio no banco de dados');
       }
 
-      setGeneratedMenu(menu);
-
-      toast({
-        title: "Cardápio Gerado e Salvo",
-        description: `Cardápio para ${selectedClient.nome_fantasia} criado com sucesso`,
-        variant: "default"
-      });
-
-      return menu;
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Erro ao gerar cardápio';
+    } catch (error) {
+      console.error('Error generating menu:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido ao gerar cardápio';
       setError(errorMessage);
+      
       toast({
-        title: "Erro na Geração do Cardápio",
+        title: "Erro ao gerar cardápio",
         description: errorMessage,
         variant: "destructive"
       });
+      
       return null;
     } finally {
       setIsGenerating(false);
     }
   };
 
-  const approveMenu = async (menuId: string, approvedBy: string): Promise<boolean> => {
+  const approveMenu = async (menuId: string, approverName: string): Promise<boolean> => {
     try {
-      // Atualizar no banco
       const { error } = await supabase
         .from('generated_menus')
         .update({
           status: 'approved',
-          approved_by: approvedBy
+          approved_by: approverName
         })
         .eq('id', menuId);
 
       if (error) throw error;
 
-      // Atualizar estado local
+      // Update local state
       if (generatedMenu && generatedMenu.id === menuId) {
         setGeneratedMenu({
           ...generatedMenu,
           status: 'approved',
-          approvedBy
+          approvedBy: approverName,
+          approvedAt: new Date().toISOString()
         });
       }
 
-      // Recarregar lista
+      // Reload saved menus
       await loadSavedMenus();
 
       toast({
-        title: "Cardápio Aprovado",
-        description: "O cardápio foi aprovado e pode ser usado para gerar lista de compras",
+        title: "Cardápio aprovado!",
+        description: `Cardápio aprovado por ${approverName}`,
         variant: "default"
       });
 
       return true;
-    } catch (err) {
-      console.error('Erro ao aprovar cardápio:', err);
+    } catch (error) {
+      console.error('Error approving menu:', error);
+      toast({
+        title: "Erro ao aprovar cardápio",
+        description: error instanceof Error ? error.message : 'Erro desconhecido',
+        variant: "destructive"
+      });
       return false;
     }
   };
 
   const rejectMenu = async (menuId: string, reason: string): Promise<boolean> => {
     try {
-      // Atualizar no banco
       const { error } = await supabase
         .from('generated_menus')
         .update({
@@ -640,7 +450,7 @@ export const useIntegratedMenuGeneration = () => {
 
       if (error) throw error;
 
-      // Atualizar estado local
+      // Update local state
       if (generatedMenu && generatedMenu.id === menuId) {
         setGeneratedMenu({
           ...generatedMenu,
@@ -649,232 +459,109 @@ export const useIntegratedMenuGeneration = () => {
         });
       }
 
-      // Recarregar lista
+      // Reload saved menus
       await loadSavedMenus();
 
       toast({
-        title: "Cardápio Rejeitado",
-        description: "O cardápio foi rejeitado. Você pode gerar um novo.",
-        variant: "default"
+        title: "Cardápio rejeitado",
+        description: `Motivo: ${reason}`,
+        variant: "destructive"
       });
 
       return true;
-    } catch (err) {
-      console.error('Erro ao rejeitar cardápio:', err);
+    } catch (error) {
+      console.error('Error rejecting menu:', error);
+      toast({
+        title: "Erro ao rejeitar cardápio",
+        description: error instanceof Error ? error.message : 'Erro desconhecido',
+        variant: "destructive"
+      });
       return false;
     }
   };
 
-  const generateShoppingListFromMenu = async (menu: GeneratedMenu): Promise<boolean> => {
-    if (!selectedClient) return false;
-
+  const generateShoppingListFromMenu = async (menu: GeneratedMenu) => {
     try {
       setIsGenerating(true);
 
-      console.log('Buscando ingredientes das receitas do cardápio...');
-
-      // Buscar ingredientes das receitas selecionadas
-      const receitaIds = menu.recipes.map(r => r.id);
-      const { data: ingredientesData, error: ingredientesError } = await supabase
-        .from('receita_ingredientes')
-        .select(`
-          receita_id_legado,
-          nome,
-          quantidade,
-          unidade,
-          produto_base_id,
-          notas
-        `)
-        .in('receita_id_legado', receitaIds);
-
-      if (ingredientesError) {
-        throw new Error(`Erro ao buscar ingredientes: ${ingredientesError.message}`);
-      }
-
-      console.log(`Encontrados ${ingredientesData?.length || 0} ingredientes`);
-
-      // Processar ingredientes para criar itens do cardápio  
-      const menuItems = menu.recipes.map(recipe => {
-        const ingredientesReceita = ingredientesData?.filter(ing => 
-          ing.receita_id_legado === recipe.id
-        ) || [];
-
-        return {
-          receita_id: recipe.id,
-          name: recipe.name,
-          category: recipe.category,
-          cost: recipe.cost,
-          servings: recipe.servings,
-          ingredients: ingredientesReceita.map(ing => ({
-            name: ing.nome || 'Ingrediente sem nome',
-            quantity: ing.quantidade || 0,
-            unit: ing.unidade || 'un',
-            produto_base_id: ing.produto_base_id,
-            notes: ing.notas
-          }))
-        };
-      });
-
-      console.log('Chamando função de geração de lista de compras...');
-
-      const { data: shoppingResponse, error: shoppingError } = await supabase.functions.invoke('generate-shopping-list', {
+      const { data, error } = await supabase.functions.invoke('generate-shopping-list', {
         body: {
           menuId: menu.id,
-          clientName: selectedClient.nome_fantasia,
+          clientName: menu.clientName,
           budgetPredicted: menu.totalCost,
-          menuItems: menuItems,
+          menuItems: menu.recipes.map(recipe => ({
+            receita_id: recipe.id,
+            name: recipe.name,
+            category: recipe.category,
+            cost: recipe.cost,
+            servings: recipe.servings,
+            ingredients: recipe.ingredients || []
+          })),
           optimizationConfig: {
-            prioridade_promocao: 'alta',
+            prioridade_promocao: 'media',
             tolerancia_sobra_percentual: 10,
-            preferir_produtos_integrais: false,
+            preferir_produtos_integrais: true,
             maximo_tipos_embalagem_por_produto: 3,
             considerar_custo_compra: false
           }
         }
       });
 
-      if (shoppingError) {
-        throw new Error(`Erro ao gerar lista de compras: ${shoppingError.message}`);
-      }
-
-      console.log('Lista de compras gerada com sucesso:', shoppingResponse);
+      if (error) throw error;
 
       toast({
-        title: "Lista de Compras Gerada",
-        description: `Lista criada com ${shoppingResponse.shoppingList?.items?.length || 0} itens`,
+        title: "Lista de compras gerada!",
+        description: "A lista de compras foi criada com base no cardápio aprovado",
         variant: "default"
       });
 
-      return true;
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Erro ao gerar lista de compras';
-      console.error('Erro na geração de lista de compras:', err);
+    } catch (error) {
+      console.error('Error generating shopping list:', error);
       toast({
-        title: "Erro na Lista de Compras",
-        description: errorMessage,
+        title: "Erro ao gerar lista de compras",
+        description: error instanceof Error ? error.message : 'Erro desconhecido',
         variant: "destructive"
       });
-      return false;
     } finally {
       setIsGenerating(false);
-    }
-  };
-
-  // Função para mapear receitas para produtos do mercado
-  const mapRecipesToMarketProducts = async (recipes: MenuRecipe[]) => {
-    try {
-      // Buscar produtos do mercado
-      const { data: marketProducts, error } = await supabase
-        .from('co_solicitacao_produto_listagem')
-        .select('*')
-        .eq('em_promocao_sim_nao', false);
-
-      if (error) throw error;
-
-      // Criar mapeamento de produtos por descrição/categoria
-      const productMap = new Map();
-      marketProducts?.forEach(product => {
-        const key = product.descricao?.toLowerCase().trim();
-        if (key && !productMap.has(key)) {
-          productMap.set(key, product);
-        }
-      });
-
-      // Mapear receitas com ingredientes do mercado
-      return recipes.map(recipe => {
-        const mappedIngredients = [];
-        
-        // Criar ingredientes baseados na categoria da receita
-        if (recipe.category === 'PP1') {
-          // Proteínas
-          const proteinProducts = marketProducts?.filter(p => 
-            p.categoria_descricao?.toLowerCase().includes('proteín') ||
-            p.categoria_descricao?.toLowerCase().includes('carne') ||
-            p.descricao?.toLowerCase().includes('frango') ||
-            p.descricao?.toLowerCase().includes('boi')
-          ).slice(0, 3) || [];
-
-          proteinProducts.forEach(product => {
-            mappedIngredients.push({
-              produto_id: product.produto_id || product.solicitacao_produto_listagem_id,
-              produto_base_id: product.produto_base_id,
-              nome: product.descricao,
-              quantidade: product.per_capita * 50 || 2.5, // Para 50 porções
-              unidade: product.unidade || 'kg'
-            });
-          });
-        } else if (recipe.category === 'SALADA 1') {
-          // Vegetais e verduras
-          const vegetableProducts = marketProducts?.filter(p => 
-            p.categoria_descricao?.toLowerCase().includes('vegetal') ||
-            p.categoria_descricao?.toLowerCase().includes('verdura') ||
-            p.categoria_descricao?.toLowerCase().includes('hortaliça') ||
-            p.descricao?.toLowerCase().includes('alface') ||
-            p.descricao?.toLowerCase().includes('tomate')
-          ).slice(0, 4) || [];
-
-          vegetableProducts.forEach(product => {
-            mappedIngredients.push({
-              produto_id: product.produto_id || product.solicitacao_produto_listagem_id,
-              produto_base_id: product.produto_base_id,
-              nome: product.descricao,
-              quantidade: product.per_capita * 50 || 1.5,
-              unidade: product.unidade || 'kg'
-            });
-          });
-        } else if (recipe.category === 'ACOMPANHAMENTO') {
-          // Carboidratos e cereais
-          const carbProducts = marketProducts?.filter(p => 
-            p.descricao?.toLowerCase().includes('arroz') ||
-            p.descricao?.toLowerCase().includes('feijão') ||
-            p.descricao?.toLowerCase().includes('macarrão') ||
-            p.descricao?.toLowerCase().includes('batata')
-          ).slice(0, 3) || [];
-
-          carbProducts.forEach(product => {
-            mappedIngredients.push({
-              produto_id: product.produto_id || product.solicitacao_produto_listagem_id,
-              produto_base_id: product.produto_base_id,
-              nome: product.descricao,
-              quantidade: product.per_capita * 50 || 3.0,
-              unidade: product.unidade || 'kg'
-            });
-          });
-        } else if (recipe.category === 'SOBREMESA') {
-          // Frutas e doces
-          const dessertProducts = marketProducts?.filter(p => 
-            p.categoria_descricao?.toLowerCase().includes('fruta') ||
-            p.descricao?.toLowerCase().includes('banana') ||
-            p.descricao?.toLowerCase().includes('maçã') ||
-            p.descricao?.toLowerCase().includes('açúcar')
-          ).slice(0, 2) || [];
-
-          dessertProducts.forEach(product => {
-            mappedIngredients.push({
-              produto_id: product.produto_id || product.solicitacao_produto_listagem_id,
-              produto_base_id: product.produto_base_id,
-              nome: product.descricao,
-              quantidade: product.per_capita * 50 || 1.0,
-              unidade: product.unidade || 'kg'
-            });
-          });
-        }
-
-        return {
-          ...recipe,
-          ingredients: mappedIngredients
-        };
-      });
-
-    } catch (error) {
-      console.error('Erro ao mapear receitas para produtos do mercado:', error);
-      return recipes; // Retorna receitas originais se houver erro
     }
   };
 
   const clearGeneratedMenu = () => {
     setGeneratedMenu(null);
     setError(null);
+  };
+
+  const mapRecipesToMarketProducts = async (recipes: MenuRecipe[]): Promise<any[]> => {
+    try {
+      const marketProducts: any[] = [];
+      
+      for (const recipe of recipes) {
+        if (recipe.ingredients && recipe.ingredients.length > 0) {
+          for (const ingredient of recipe.ingredients) {
+            if (ingredient.produto_base_id) {
+              const marketProduct = marketIngredients.find(
+                mp => mp.produto_base_id === ingredient.produto_base_id
+              );
+              
+              if (marketProduct) {
+                marketProducts.push({
+                  ...marketProduct,
+                  quantity_needed: ingredient.quantity,
+                  recipe_name: recipe.name,
+                  recipe_id: recipe.id
+                });
+              }
+            }
+          }
+        }
+      }
+      
+      return marketProducts;
+    } catch (error) {
+      console.error('Error mapping recipes to market products:', error);
+      return [];
+    }
   };
 
   return {
@@ -889,6 +576,11 @@ export const useIntegratedMenuGeneration = () => {
     generateShoppingListFromMenu,
     clearGeneratedMenu,
     loadSavedMenus,
-    selectedClient
+    mapRecipesToMarketProducts,
+    // New exports for business rules and market availability
+    viableRecipes,
+    marketIngredients,
+    violations,
+    validateMenu
   };
 };

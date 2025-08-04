@@ -25,18 +25,31 @@ interface MenuTableProps {
 }
 
 const DAYS = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta'];
-const CATEGORIES = [
-  'Salada',
-  'Prato Principal 1', 
-  'Guarnição',
-  'Sobremesa'
+const NEW_MENU_CATEGORIES = [
+  'PP1',
+  'PP2', 
+  'Arroz Branco',
+  'Feijão',
+  'Salada 1',
+  'Salada 2',
+  'Suco 1',
+  'Suco 2'
 ];
 
 const CATEGORY_DISPLAY_NAMES = {
+  'PP1': 'PRATO PRINCIPAL 1',
+  'PP2': 'PRATO PRINCIPAL 2',
+  'Arroz Branco': 'ARROZ BRANCO',
+  'Feijão': 'FEIJÃO',
+  'Salada 1': 'SALADA 1 (VERDURAS)',
+  'Salada 2': 'SALADA 2 (LEGUMES)',
+  'Suco 1': 'SUCO 1',
+  'Suco 2': 'SUCO 2',
+  // Legacy support
   'Salada': 'SALADA 1',
   'Prato Principal 1': 'PP1',
-  'Guarnição': 'GUARNICAO 1', 
-  'Sobremesa': 'SOBREMESA 1'
+  'Guarnição': 'GUARNIÇÃO', 
+  'Sobremesa': 'SOBREMESA'
 };
 
 const MenuTable: React.FC<MenuTableProps> = ({
@@ -105,7 +118,7 @@ const MenuTable: React.FC<MenuTableProps> = ({
               </tr>
             </thead>
             <tbody>
-              {CATEGORIES.map((category, categoryIndex) => (
+              {NEW_MENU_CATEGORIES.map((category, categoryIndex) => (
                 <tr key={category} className={categoryIndex % 2 === 0 ? 'bg-white' : 'bg-gray-25'}>
                   <td className="border border-gray-300 p-3 font-medium bg-gray-50">
                     {CATEGORY_DISPLAY_NAMES[category] || category}
