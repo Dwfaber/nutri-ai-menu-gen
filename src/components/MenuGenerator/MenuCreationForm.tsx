@@ -36,6 +36,7 @@ export const MenuCreationForm = ({ onSubmit, onCancel, isGenerating, error }: Me
       end: ''
     },
     estimatedMeals: 0,
+    mealsPerDay: 0,
     budgetPerMeal: 0,
     totalBudget: 0,
     restrictions: [],
@@ -229,7 +230,7 @@ export const MenuCreationForm = ({ onSubmit, onCancel, isGenerating, error }: Me
             </div>
 
             {/* Budget Configuration */}
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-3 gap-4">
               <div>
                 <label className="block text-sm font-medium mb-2">Orçamento por Refeição</label>
                 <Input
@@ -243,7 +244,19 @@ export const MenuCreationForm = ({ onSubmit, onCancel, isGenerating, error }: Me
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium mb-2">Refeições Estimadas</label>
+                <label className="block text-sm font-medium mb-2">Refeições por Dia</label>
+                <Input
+                  type="number"
+                  value={formData.mealsPerDay || 0}
+                  onChange={(e) => setFormData(prev => ({
+                    ...prev,
+                    mealsPerDay: parseInt(e.target.value) || 0
+                  }))}
+                  placeholder="Ex: 50"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-2">Refeições Estimadas (Total)</label>
                 <Input
                   type="number"
                   value={formData.estimatedMeals}

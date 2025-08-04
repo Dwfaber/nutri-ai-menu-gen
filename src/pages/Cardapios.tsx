@@ -48,7 +48,12 @@ const Cardapios = () => {
     const client = clients.find(c => c.id === menu.clientId);
     if (!client || !menu.totalCost) return 'unknown';
     
-    const budgetPercentage = (menu.totalCost / client.custo_medio_diario) * 100;
+    // Calculate total daily cost: cost per meal * meals per day
+    const defaultMealsPerDay = 50; // Default assumption
+    const totalDailyCost = menu.costPerMeal * defaultMealsPerDay;
+    const clientDailyBudget = client.custo_medio_diario * defaultMealsPerDay;
+    
+    const budgetPercentage = (totalDailyCost / clientDailyBudget) * 100;
     
     if (budgetPercentage <= 90) return 'good';
     if (budgetPercentage <= 100) return 'warning';

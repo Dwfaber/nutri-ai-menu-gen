@@ -9,6 +9,7 @@ export interface ContractFormData {
     end: string;
   };
   estimatedMeals: number;
+  mealsPerDay: number;
   budgetPerMeal: number;
   totalBudget: number;
   restrictions: string[];

@@ -14,6 +14,7 @@ export interface MenuGenerationRequest {
   maxCostPerMeal: number;
   totalEmployees: number;
   mealsPerMonth: number;
+  mealsPerDay: number;
   dietaryRestrictions: string[];
   preferences?: string[];
   marketProducts: MarketProduct[];
@@ -54,7 +55,7 @@ export const useIntegratedMenuGeneration = () => {
   const { toast } = useToast();
   const { selectedClient } = useSelectedClient();
   const { getClientWithCosts } = useClientContractsContext();
-  const { viableRecipes, marketIngredients, fetchMarketIngredients, checkRecipeViability } = useMarketAvailability();
+  const { viableRecipes, marketIngredients, fetchMarketIngredients, checkRecipeViability, calculateRecipeRealCost } = useMarketAvailability();
   const { validateMenu, filterRecipesForDay, violations } = useMenuBusinessRules();
 
   // New menu structure mapping based on business requirements
@@ -285,7 +286,8 @@ export const useIntegratedMenuGeneration = () => {
       });
 
       // Step 4: Generate recipes for each day with business rules
-      days.forEach((day, dayIndex) => {
+      for (let dayIndex = 0; dayIndex < days.length; dayIndex++) {
+        const day = days[dayIndex];
         const previousDayRecipes = dayIndex > 0 
           ? receitasCardapio.filter(r => r.day === days[dayIndex - 1])
           : [];
@@ -294,7 +296,9 @@ export const useIntegratedMenuGeneration = () => {
         const pp1Recipes = filterRecipesForDay(newMenuStructure.PP1, day, dayIndex, previousDayRecipes);
         if (pp1Recipes.length > 0) {
           const selectedPP1 = pp1Recipes[dayIndex % pp1Recipes.length];
-          const cost = Math.min(selectedPP1.custo_total || 3.5, custoMaximoPorRefeicao * 0.4);
+          // Calculate real cost based on market prices
+          const realCost = await calculateRecipeRealCost(selectedPP1.receita_id_legado);
+          const cost = realCost > 0 ? realCost : (selectedPP1.custo_total || 3.5);
           
           receitasCardapio.push({
             id: selectedPP1.receita_id_legado,
@@ -311,14 +315,16 @@ export const useIntegratedMenuGeneration = () => {
         }
 
         // Add other categories (Salada, Guarnição, Sobremesa)
-        ['Salada 1', 'Guarnição', 'Sobremesa'].forEach(categoria => {
+        for (const categoria of ['Salada 1', 'Guarnição', 'Sobremesa']) {
           const categoryRecipes = newMenuStructure[categoria] || [];
           if (categoryRecipes.length > 0) {
             const available = categoryRecipes.filter(r => !receitasUsadas.has(r.receita_id_legado));
             if (available.length > 0) {
               const selected = available[dayIndex % available.length];
+              // Calculate real cost based on market prices
+              const realCost = await calculateRecipeRealCost(selected.receita_id_legado);
               const maxCost = categoria === 'Sobremesa' ? custoMaximoPorRefeicao * 0.15 : custoMaximoPorRefeicao * 0.25;
-              const cost = Math.min(selected.custo_total || 1.5, maxCost);
+              const cost = realCost > 0 ? realCost : Math.min(selected.custo_total || 1.5, maxCost);
               
               receitasCardapio.push({
                 id: selected.receita_id_legado,
@@ -334,8 +340,8 @@ export const useIntegratedMenuGeneration = () => {
               receitasUsadas.add(selected.receita_id_legado);
             }
           }
-        });
-      });
+        }
+      }
 
       // Step 5: Validate business rules
       const businessRules = validateMenu(receitasCardapio);

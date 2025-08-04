@@ -162,6 +162,49 @@ export const useMarketAvailability = () => {
     return marketIngredients.some(ing => ing.produto_base_id === produtoBaseId);
   };
 
+  // Calculate real cost of a recipe based on market prices
+  const calculateRecipeRealCost = async (receitaId: string): Promise<number> => {
+    try {
+      // Get recipe ingredients with quantities
+      const { data: ingredientsData, error } = await supabase
+        .from('receita_ingredientes')
+        .select('produto_base_id, quantidade, unidade')
+        .eq('receita_id_legado', receitaId)
+        .not('produto_base_id', 'is', null);
+
+      if (error) throw error;
+
+      let totalCost = 0;
+
+      // Calculate cost for each ingredient
+      for (const ingredient of ingredientsData || []) {
+        const marketIngredient = marketIngredients.find(
+          mi => mi.produto_base_id === ingredient.produto_base_id
+        );
+
+        if (marketIngredient) {
+          // Use promotion price if available
+          const unitPrice = marketIngredient.em_promocao_sim_nao ? 
+            marketIngredient.preco * 0.85 : // 15% discount on promotion
+            marketIngredient.preco;
+          
+          totalCost += ingredient.quantidade * unitPrice;
+        }
+      }
+
+      return totalCost;
+    } catch (error) {
+      console.error('Error calculating recipe real cost:', error);
+      return 0;
+    }
+  };
+
+  // Calculate cost per serving for a recipe
+  const calculateCostPerServing = async (receitaId: string, servings: number): Promise<number> => {
+    const totalCost = await calculateRecipeRealCost(receitaId);
+    return servings > 0 ? totalCost / servings : 0;
+  };
+
   // Initialize data on mount
   useEffect(() => {
     const initializeData = async () => {
@@ -183,6 +226,8 @@ export const useMarketAvailability = () => {
     checkRecipeViability,
     getViableRecipesByCategory,
     getMarketIngredientsByCategory,
-    isIngredientAvailable
+    isIngredientAvailable,
+    calculateRecipeRealCost,
+    calculateCostPerServing
   };
 };
