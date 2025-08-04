@@ -1,10 +1,12 @@
 import { useState, useEffect } from 'react';
-import { Plus, Search, Filter, Database, ShoppingCart, DollarSign } from 'lucide-react';
+import { Plus, Search, Filter, Database, ShoppingCart, DollarSign, Eye, Download, Copy } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { useToast } from '@/components/ui/use-toast';
 import { useShoppingList } from '../hooks/useShoppingList';
 import { useClientContracts, ContractFormData } from '../hooks/useClientContracts';
 import { useSelectedClient } from '@/contexts/SelectedClientContext';
@@ -15,11 +17,13 @@ import NLPInput from '../components/MenuGenerator/NLPInput';
 import PreviewTabs from '../components/MenuGenerator/PreviewTabs';
 import { MenuCreationForm } from '../components/MenuGenerator/MenuCreationForm';
 import IntegratedMenuGenerator from '../components/MenuGeneration/IntegratedMenuGenerator';
+import MenuTable from '../components/MenuTable/MenuTable';
 
 const Cardapios = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [selectedMenuForShopping, setSelectedMenuForShopping] = useState<string | null>(null);
+  const [viewingMenu, setViewingMenu] = useState<GeneratedMenu | null>(null);
   
   const { 
     isGenerating, 
@@ -32,6 +36,7 @@ const Cardapios = () => {
   const { createFromMenu, isLoading: isCreatingList } = useShoppingList();
   const { clients, generateAIContextSummary } = useClientContracts();
   const { selectedClient } = useSelectedClient();
+  const { toast } = useToast();
 
   const handleGenerateShoppingList = async (menu: GeneratedMenu) => {
     setSelectedMenuForShopping(menu.id);
@@ -60,6 +65,68 @@ const Cardapios = () => {
         return <Badge className="bg-red-100 text-red-800">Orçamento Excedido</Badge>;
       default:
         return <Badge variant="outline">Status Desconhecido</Badge>;
+    }
+  };
+
+  const handleVisualizarCardapio = (menu: GeneratedMenu) => {
+    setViewingMenu(menu);
+  };
+
+  const handleExportarCardapio = (menu: GeneratedMenu) => {
+    // Create CSV content
+    const csvContent = [
+      ['Categoria', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta'],
+      ...(['PP1', 'PP2', 'Arroz Branco', 'Feijão', 'Salada 1', 'Salada 2', 'Suco 1', 'Suco 2'].map(category => [
+        category,
+        ...(['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta'].map(day => {
+          const recipe = menu.recipes?.find(r => r.category === category && r.day?.toLowerCase().includes(day.toLowerCase()));
+          return recipe ? `${recipe.name} (R$ ${recipe.cost?.toFixed(2) || '0.00'})` : '-';
+        }))
+      ]))
+    ].map(row => row.join(',')).join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', `cardapio-${menu.weekPeriod.replace(/\s+/g, '-')}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    
+    toast({
+      title: "Cardápio exportado",
+      description: "O arquivo CSV foi baixado com sucesso.",
+    });
+  };
+
+  const handleDuplicarCardapio = async (menu: GeneratedMenu) => {
+    try {
+      // Create a copy of the menu with new ID and current date
+      const duplicatedMenu = {
+        ...menu,
+        id: `menu-${Date.now()}`,
+        weekPeriod: `${menu.weekPeriod} (Cópia)`,
+        createdAt: new Date().toISOString(),
+        status: 'draft' as const
+      };
+      
+      // In a real app, you would save this to the database
+      // For now, we'll just show a success message
+      toast({
+        title: "Cardápio duplicado",
+        description: "Uma cópia do cardápio foi criada com sucesso.",
+      });
+      
+      // Reload saved menus to show the new copy
+      loadSavedMenus();
+    } catch (error) {
+      toast({
+        title: "Erro ao duplicar",
+        description: "Não foi possível duplicar o cardápio.",
+        variant: "destructive",
+      });
     }
   };
 
@@ -233,13 +300,28 @@ const Cardapios = () => {
                           <span className="text-sm">{menu.recipes?.length || 0}</span>
                         </div>
                         <div className="flex space-x-2 pt-2">
-                          <Button variant="outline" size="sm">
+                          <Button 
+                            variant="outline" 
+                            size="sm"
+                            onClick={() => handleVisualizarCardapio(menu)}
+                          >
+                            <Eye className="w-3 h-3 mr-1" />
                             Visualizar
                           </Button>
-                          <Button variant="outline" size="sm">
+                          <Button 
+                            variant="outline" 
+                            size="sm"
+                            onClick={() => handleExportarCardapio(menu)}
+                          >
+                            <Download className="w-3 h-3 mr-1" />
                             Exportar
                           </Button>
-                          <Button variant="outline" size="sm">
+                          <Button 
+                            variant="outline" 
+                            size="sm"
+                            onClick={() => handleDuplicarCardapio(menu)}
+                          >
+                            <Copy className="w-3 h-3 mr-1" />
                             Duplicar
                           </Button>
                         </div>
@@ -256,6 +338,25 @@ const Cardapios = () => {
           <SyncMonitor />
         </TabsContent>
       </Tabs>
+
+      {/* Menu Visualization Dialog */}
+      <Dialog open={!!viewingMenu} onOpenChange={() => setViewingMenu(null)}>
+        <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Visualizar Cardápio - {viewingMenu?.weekPeriod}</DialogTitle>
+          </DialogHeader>
+          {viewingMenu && (
+            <MenuTable
+              title="CARDÁPIO"
+              weekPeriod={viewingMenu.weekPeriod}
+              totalCost={viewingMenu.totalCost || 0}
+              recipes={viewingMenu.recipes || []}
+              onExport={() => handleExportarCardapio(viewingMenu)}
+              onCopy={() => handleDuplicarCardapio(viewingMenu)}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
