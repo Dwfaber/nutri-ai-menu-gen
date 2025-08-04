@@ -134,41 +134,100 @@ serve(async (req) => {
     // Process menu items to extract ingredients
     const ingredientMap = new Map();
     
+    console.log('Processing menu items:', JSON.stringify(menuItems?.slice(0, 2), null, 2));
+    
     if (menuItems && menuItems.length > 0) {
       for (const item of menuItems) {
+        console.log(`Processing menu item: ${item.name || item.nome || 'Unknown'}`);
+        
         if (item.ingredients) {
+          console.log(`Found ${item.ingredients.length} ingredients in this item`);
+          
           for (const ingredient of item.ingredients) {
             const baseId = ingredient.produto_base_id || ingredient.produto_id;
             const key = baseId;
-            const quantity = parseFloat(ingredient.quantity?.toString() || ingredient.quantidade?.toString() || '0') || 0;
             
-            if (ingredientMap.has(key)) {
-              const existing = ingredientMap.get(key);
-              existing.quantity += quantity;
-            } else {
-              const firstProduct = productsByBase.get(baseId)?.[0];
-              if (firstProduct) {
-                ingredientMap.set(key, {
-                  produto_base_id: baseId,
-                  name: ingredient.name || ingredient.nome || firstProduct.descricao,
-                  quantity: quantity,
-                  unit: ingredient.unit || ingredient.unidade || firstProduct.unidade,
-                  category: firstProduct.categoria_descricao || 'Outros',
-                  opcoes_embalagem: productsByBase.get(baseId) || []
-                });
+            // Try multiple possible quantity field names
+            let quantity = 0;
+            const quantityFields = ['quantity', 'quantidade', 'qtd', 'peso', 'volume'];
+            
+            for (const field of quantityFields) {
+              if (ingredient[field] !== undefined && ingredient[field] !== null) {
+                quantity = parseFloat(ingredient[field].toString()) || 0;
+                if (quantity > 0) break;
               }
             }
+            
+            console.log(`Ingredient: ${ingredient.name || ingredient.nome} - Quantity: ${quantity} - Base ID: ${baseId}`);
+            
+            if (quantity > 0 && baseId) {
+              if (ingredientMap.has(key)) {
+                const existing = ingredientMap.get(key);
+                existing.quantity += quantity;
+                console.log(`Updated existing ingredient: ${existing.name} - New total: ${existing.quantity}`);
+              } else {
+                const firstProduct = productsByBase.get(baseId)?.[0];
+                if (firstProduct) {
+                  const newIngredient = {
+                    produto_base_id: baseId,
+                    name: ingredient.name || ingredient.nome || firstProduct.descricao,
+                    quantity: quantity,
+                    unit: ingredient.unit || ingredient.unidade || firstProduct.unidade,
+                    category: firstProduct.categoria_descricao || 'Outros',
+                    opcoes_embalagem: productsByBase.get(baseId) || []
+                  };
+                  ingredientMap.set(key, newIngredient);
+                  console.log(`Added new ingredient: ${newIngredient.name} - Quantity: ${newIngredient.quantity}`);
+                } else {
+                  console.log(`No product found for base ID: ${baseId}`);
+                }
+              }
+            } else {
+              console.log(`Skipping ingredient with zero quantity or missing base ID: ${ingredient.name || ingredient.nome}`);
+            }
           }
+        } else {
+          console.log('No ingredients found in this menu item');
         }
       }
     } else {
-      // Fallback: create sample shopping list
+      console.log('No menu items provided, creating sample shopping list');
+      
+      // Fallback: create sample shopping list with meaningful quantities
       const sampleProducts = marketProducts?.slice(0, 15) || [];
       
       for (const product of sampleProducts) {
-        if (product.preco > 0 && product.per_capita > 0) {
-          const baseQuantity = product.per_capita * 100;
+        if (product.preco > 0) {
+          // Calculate base quantity using per capita data or reasonable defaults
+          let baseQuantity = 0;
+          
+          if (product.per_capita > 0) {
+            baseQuantity = product.per_capita * 100; // Scale for 100 people
+          } else {
+            // Set reasonable default quantities based on category
+            const categoryDefaults = {
+              'CARNES': 5.0,
+              'ARROZ': 3.0,
+              'FEIJAO': 2.0,
+              'VERDURAS': 2.0,
+              'TEMPEROS': 0.5,
+              'OLEOS': 1.0
+            };
+            
+            const category = product.categoria_descricao?.toUpperCase() || '';
+            for (const [cat, qty] of Object.entries(categoryDefaults)) {
+              if (category.includes(cat)) {
+                baseQuantity = qty;
+                break;
+              }
+            }
+            
+            if (baseQuantity === 0) baseQuantity = 1.0; // Default fallback
+          }
+          
           const baseId = product.produto_base_id || product.produto_id;
+          
+          console.log(`Sample product: ${product.descricao} - Quantity: ${baseQuantity} - Category: ${product.categoria_descricao}`);
           
           ingredientMap.set(baseId, {
             produto_base_id: baseId,
