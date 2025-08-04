@@ -131,63 +131,75 @@ serve(async (req) => {
       productsByBase.get(baseId).push(product);
     });
 
-    // Process menu items to extract ingredients
+    // Process menu items to extract ingredients from database
     const ingredientMap = new Map();
     
     console.log('Processing menu items:', JSON.stringify(menuItems?.slice(0, 2), null, 2));
     
     if (menuItems && menuItems.length > 0) {
       for (const item of menuItems) {
-        console.log(`Processing menu item: ${item.name || item.nome || 'Unknown'}`);
+        console.log(`Processing menu item: ${item.name || item.nome || item.receita_id_legado || 'Unknown'}`);
         
-        if (item.ingredients) {
-          console.log(`Found ${item.ingredients.length} ingredients in this item`);
+        // Get the receita_id_legado from the menu item
+        const receitaIdLegado = item.receita_id_legado || item.id;
+        
+        if (receitaIdLegado) {
+          console.log(`Fetching ingredients for recipe: ${receitaIdLegado}`);
           
-          for (const ingredient of item.ingredients) {
-            const baseId = ingredient.produto_base_id || ingredient.produto_id;
-            const key = baseId;
-            
-            // Try multiple possible quantity field names
-            let quantity = 0;
-            const quantityFields = ['quantity', 'quantidade', 'qtd', 'peso', 'volume'];
-            
-            for (const field of quantityFields) {
-              if (ingredient[field] !== undefined && ingredient[field] !== null) {
-                quantity = parseFloat(ingredient[field].toString()) || 0;
-                if (quantity > 0) break;
-              }
-            }
-            
-            console.log(`Ingredient: ${ingredient.name || ingredient.nome} - Quantity: ${quantity} - Base ID: ${baseId}`);
-            
-            if (quantity > 0 && baseId) {
-              if (ingredientMap.has(key)) {
-                const existing = ingredientMap.get(key);
-                existing.quantity += quantity;
-                console.log(`Updated existing ingredient: ${existing.name} - New total: ${existing.quantity}`);
-              } else {
-                const firstProduct = productsByBase.get(baseId)?.[0];
-                if (firstProduct) {
-                  const newIngredient = {
-                    produto_base_id: baseId,
-                    name: ingredient.name || ingredient.nome || firstProduct.descricao,
-                    quantity: quantity,
-                    unit: ingredient.unit || ingredient.unidade || firstProduct.unidade,
-                    category: firstProduct.categoria_descricao || 'Outros',
-                    opcoes_embalagem: productsByBase.get(baseId) || []
-                  };
-                  ingredientMap.set(key, newIngredient);
-                  console.log(`Added new ingredient: ${newIngredient.name} - Quantity: ${newIngredient.quantity}`);
+          // Fetch ingredients from database using receita_id_legado
+          const { data: ingredients, error: ingredientsError } = await supabaseClient
+            .from('receita_ingredientes')
+            .select('*')
+            .eq('receita_id_legado', receitaIdLegado);
+          
+          if (ingredientsError) {
+            console.error(`Error fetching ingredients for recipe ${receitaIdLegado}:`, ingredientsError);
+            continue;
+          }
+          
+          console.log(`Found ${ingredients?.length || 0} ingredients for recipe ${receitaIdLegado}`);
+          
+          if (ingredients && ingredients.length > 0) {
+            for (const ingredient of ingredients) {
+              const baseId = ingredient.produto_base_id;
+              const key = baseId;
+              
+              // Get quantity from database
+              let quantity = parseFloat(ingredient.quantidade?.toString()) || 0;
+              
+              console.log(`Ingredient: ${ingredient.nome} - Quantity: ${quantity} - Base ID: ${baseId}`);
+              
+              if (quantity > 0 && baseId) {
+                if (ingredientMap.has(key)) {
+                  const existing = ingredientMap.get(key);
+                  existing.quantity += quantity;
+                  console.log(`Updated existing ingredient: ${existing.name} - New total: ${existing.quantity}`);
                 } else {
-                  console.log(`No product found for base ID: ${baseId}`);
+                  const firstProduct = productsByBase.get(baseId)?.[0];
+                  if (firstProduct) {
+                    const newIngredient = {
+                      produto_base_id: baseId,
+                      name: ingredient.nome || firstProduct.descricao,
+                      quantity: quantity,
+                      unit: ingredient.unidade || firstProduct.unidade || 'kg',
+                      category: firstProduct.categoria_descricao || 'Outros',
+                      opcoes_embalagem: productsByBase.get(baseId) || []
+                    };
+                    ingredientMap.set(key, newIngredient);
+                    console.log(`Added new ingredient: ${newIngredient.name} - Quantity: ${newIngredient.quantity}`);
+                  } else {
+                    console.log(`No product found for base ID: ${baseId}`);
+                  }
                 }
+              } else {
+                console.log(`Skipping ingredient with zero quantity or missing base ID: ${ingredient.nome}`);
               }
-            } else {
-              console.log(`Skipping ingredient with zero quantity or missing base ID: ${ingredient.name || ingredient.nome}`);
             }
+          } else {
+            console.log(`No ingredients found for recipe ${receitaIdLegado}`);
           }
         } else {
-          console.log('No ingredients found in this menu item');
+          console.log('No receita_id_legado found in menu item');
         }
       }
     } else {
