@@ -58,6 +58,34 @@ export const useIntegratedMenuGeneration = () => {
   const { viableRecipes, marketIngredients, fetchMarketIngredients, checkRecipeViability, calculateRecipeRealCost } = useMarketAvailability();
   const { validateMenu, validateMenuAndSetViolations, filterRecipesForDay, violations } = useMenuBusinessRules();
 
+  // Helper function to categorize salads by ingredient type
+  const categorizeSalad = (recipeName: string, index: number): string => {
+    const name = recipeName.toLowerCase();
+    
+    // Saladas com folhas verdes (Salada 1)
+    if (name.includes('alface') || name.includes('rúcula') || name.includes('agrião') || 
+        name.includes('espinafre') || name.includes('folhas') || index % 2 === 0) {
+      return 'Salada 1';
+    }
+    
+    // Saladas com legumes (Salada 2)
+    return 'Salada 2';
+  };
+
+  // Helper function to categorize drinks
+  const categorizeJuice = (recipeName: string, index: number): string => {
+    const name = recipeName.toLowerCase();
+    
+    // Sucos cítricos (Suco 1)
+    if (name.includes('laranja') || name.includes('limão') || name.includes('maracujá') || 
+        name.includes('abacaxi') || index % 2 === 0) {
+      return 'Suco 1';
+    }
+    
+    // Sucos não-cítricos (Suco 2)
+    return 'Suco 2';
+  };
+
   // New menu structure mapping based on business requirements
   const mapCategoryToMenuStructure = (category: string): string => {
     const normalizedCategory = category.toLowerCase().trim();
@@ -78,14 +106,12 @@ export const useIntegratedMenuGeneration = () => {
       return 'Feijão';
     }
     
-    // Saladas by ingredient type
     if (normalizedCategory.includes('salada')) {
-      // TODO: Categorize by ingredients (verduras/folhas vs legumes)
-      return 'Salada 1'; // Default, will be improved with ingredient analysis
+      return 'Salada'; // Will be categorized later
     }
     
     if (normalizedCategory.includes('suco') || normalizedCategory.includes('bebida')) {
-      return 'Suco 1'; // Default, will be improved to have Suco 1 and Suco 2
+      return 'Suco'; // Will be categorized later
     }
     
     if (normalizedCategory.includes('sobremesa') || normalizedCategory.includes('fruta')) {
@@ -239,15 +265,67 @@ export const useIntegratedMenuGeneration = () => {
       console.log(`Found ${viable.length} viable recipes based on market availability`);
 
       // Step 2: Organize viable recipes by new structure categories
+      const saladas = viable.filter(r => r.categoria_descricao?.toLowerCase().includes('salada')) || [];
+      const sucos = viable.filter(r => 
+        r.categoria_descricao?.toLowerCase().includes('suco') || 
+        r.categoria_descricao?.toLowerCase().includes('bebida') ||
+        r.nome_receita?.toLowerCase().includes('suco')
+      ) || [];
+      
+      // Create PP2 from available proteins or garnições
+      const pp2Candidates = viable.filter(r => 
+        r.categoria_descricao === 'Prato Principal 2' ||
+        r.categoria_descricao === 'Guarnição' ||
+        (r.categoria_descricao?.includes('Proteína') && r.categoria_descricao !== 'Prato Principal 1')
+      ) || [];
+
+      // Distribute salads between Salada 1 and Salada 2
+      const salada1 = [];
+      const salada2 = [];
+      saladas.forEach((salada, index) => {
+        const category = categorizeSalad(salada.nome_receita, index);
+        if (category === 'Salada 1') {
+          salada1.push(salada);
+        } else {
+          salada2.push(salada);
+        }
+      });
+
+      // Distribute juices between Suco 1 and Suco 2
+      const suco1 = [];
+      const suco2 = [];
+      sucos.forEach((suco, index) => {
+        const category = categorizeJuice(suco.nome_receita, index);
+        if (category === 'Suco 1') {
+          suco1.push(suco);
+        } else {
+          suco2.push(suco);
+        }
+      });
+
+      // Add fallback juices if none found
+      if (suco1.length === 0 && suco2.length === 0) {
+        // Create default juice options
+        const defaultJuices = [
+          { receita_id_legado: 'suco-laranja-default', nome_receita: 'Suco de Laranja', categoria_descricao: 'Suco', custo_total: 1.0, porcoes: 50 },
+          { receita_id_legado: 'suco-limao-default', nome_receita: 'Suco de Limão', categoria_descricao: 'Suco', custo_total: 0.8, porcoes: 50 },
+          { receita_id_legado: 'suco-uva-default', nome_receita: 'Suco de Uva', categoria_descricao: 'Suco', custo_total: 1.2, porcoes: 50 },
+          { receita_id_legado: 'suco-maracuja-default', nome_receita: 'Suco de Maracujá', categoria_descricao: 'Suco', custo_total: 1.1, porcoes: 50 }
+        ];
+        
+        suco1.push(defaultJuices[0], defaultJuices[1]);
+        suco2.push(defaultJuices[2], defaultJuices[3]);
+      }
+
       const newMenuStructure = {
         'PP1': viable.filter(r => r.categoria_descricao === 'Prato Principal 1') || [],
-        'PP2': [], // To be identified from other categories or created
+        'PP2': pp2Candidates,
         'Arroz Branco': [], // Fixed items
         'Feijão': [], // Fixed items  
-        'Salada 1': viable.filter(r => r.categoria_descricao === 'Salada') || [],
-        'Salada 2': [], // To be separated by ingredient type
-        'Suco 1': [], // To be identified from beverages
-        'Suco 2': [], // To be identified from beverages
+        'Salada 1': salada1,
+        'Salada 2': salada2,
+        'Suco 1': suco1,
+        'Suco 2': suco2,
         'Guarnição': viable.filter(r => r.categoria_descricao === 'Guarnição') || [],
         'Sobremesa': viable.filter(r => r.categoria_descricao === 'Sobremesa') || []
       };
@@ -314,16 +392,21 @@ export const useIntegratedMenuGeneration = () => {
           receitasUsadas.add(selectedPP1.receita_id_legado);
         }
 
-        // Add other categories (Salada, Guarnição, Sobremesa)
-        for (const categoria of ['Salada 1', 'Guarnição', 'Sobremesa']) {
+        // Generate all required categories for complete structure
+        const requiredCategories = ['PP2', 'Salada 1', 'Salada 2', 'Suco 1', 'Suco 2', 'Guarnição', 'Sobremesa'];
+        
+        for (const categoria of requiredCategories) {
           const categoryRecipes = newMenuStructure[categoria] || [];
+          
           if (categoryRecipes.length > 0) {
             const available = categoryRecipes.filter(r => !receitasUsadas.has(r.receita_id_legado));
             if (available.length > 0) {
               const selected = available[dayIndex % available.length];
               // Calculate real cost based on market prices
               const realCost = await calculateRecipeRealCost(selected.receita_id_legado);
-              const maxCost = categoria === 'Sobremesa' ? custoMaximoPorRefeicao * 0.15 : custoMaximoPorRefeicao * 0.25;
+              const maxCost = categoria === 'Sobremesa' ? custoMaximoPorRefeicao * 0.15 : 
+                            categoria.includes('Suco') ? custoMaximoPorRefeicao * 0.20 :
+                            custoMaximoPorRefeicao * 0.25;
               const cost = realCost > 0 ? realCost : Math.min(selected.custo_total || 1.5, maxCost);
               
               receitasCardapio.push({
@@ -338,6 +421,44 @@ export const useIntegratedMenuGeneration = () => {
               });
               
               receitasUsadas.add(selected.receita_id_legado);
+            }
+          } else if (categoria.includes('Suco')) {
+            // Add fallback default juices if no recipes found
+            const juiceNames = categoria === 'Suco 1' ? 
+              ['Suco de Laranja', 'Suco de Limão'] : 
+              ['Suco de Uva', 'Suco de Maracujá'];
+            
+            const selectedJuice = juiceNames[dayIndex % juiceNames.length];
+            const juiceId = `${selectedJuice.toLowerCase().replace(/\s+/g, '-')}-${day}`;
+            
+            receitasCardapio.push({
+              id: juiceId,
+              name: selectedJuice,
+              category: categoria,
+              day,
+              cost: 1.0,
+              servings: 50,
+              ingredients: [],
+              nutritionalInfo: {}
+            });
+          } else if (categoria === 'PP2' && newMenuStructure.PP1.length > 0) {
+            // Fallback: use a different PP1 recipe as PP2 if available
+            const pp1Available = newMenuStructure.PP1.filter(r => !receitasUsadas.has(r.receita_id_legado));
+            if (pp1Available.length > 0) {
+              const selectedPP2 = pp1Available[(dayIndex + 1) % pp1Available.length];
+              const realCost = await calculateRecipeRealCost(selectedPP2.receita_id_legado);
+              const cost = realCost > 0 ? realCost : (selectedPP2.custo_total || 3.5);
+              
+              receitasCardapio.push({
+                id: `${selectedPP2.receita_id_legado}-pp2`,
+                name: `${selectedPP2.nome_receita} (Variação)`,
+                category: 'PP2',
+                day,
+                cost,
+                servings: selectedPP2.porcoes || 50,
+                ingredients: [],
+                nutritionalInfo: {}
+              });
             }
           }
         }
