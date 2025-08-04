@@ -216,6 +216,13 @@ const IntegratedMenuGenerator = () => {
                   availableIngredients: viableRecipes.length,
                   missingIngredients: []
                 }}
+                menuId={generatedMenu.id}
+                onViolationsChanged={() => {
+                  // Re-validate menu when violations are approved/suggestions are made
+                  if (generatedMenu?.recipes && generatedMenu.recipes.length > 0) {
+                    validateMenuAndSetViolations(generatedMenu.recipes);
+                  }
+                }}
               />
             )}
 
