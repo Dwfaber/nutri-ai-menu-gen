@@ -24,6 +24,8 @@ export const SimpleMenuForm: React.FC<SimpleMenuFormProps> = ({
   const [weekStart, setWeekStart] = useState('');
   const [weekEnd, setWeekEnd] = useState('');
   const [preferences, setPreferences] = useState('');
+  const [mealsPerDay, setMealsPerDay] = useState(50);
+  const [totalMeals, setTotalMeals] = useState(250); // 50 refeições x 5 dias
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -39,6 +41,11 @@ export const SimpleMenuForm: React.FC<SimpleMenuFormProps> = ({
         start: weekStart,
         end: weekEnd
       },
+      mealsPerDay,
+      totalMeals,
+      estimatedMeals: totalMeals,
+      budgetPerMeal: selectedClient?.custo_medio_diario || 0,
+      totalBudget: (selectedClient?.custo_medio_diario || 0) * totalMeals,
       preferences: preferences.trim() || undefined
     };
 
@@ -55,7 +62,15 @@ export const SimpleMenuForm: React.FC<SimpleMenuFormProps> = ({
       endDate.setDate(startDate.getDate() + 4); // Adicionar 4 dias para ter 5 dias úteis
       
       setWeekEnd(endDate.toISOString().split('T')[0]);
+      // Recalcular total de refeições quando a data muda
+      updateTotalMeals(mealsPerDay);
     }
+  };
+
+  // Função para atualizar total de refeições
+  const updateTotalMeals = (mealsPerDayValue: number) => {
+    const totalDays = 5; // 5 dias úteis
+    setTotalMeals(mealsPerDayValue * totalDays);
   };
 
   return (
@@ -111,6 +126,39 @@ export const SimpleMenuForm: React.FC<SimpleMenuFormProps> = ({
             </p>
           </div>
 
+          {/* Número de Refeições */}
+          <div className="space-y-4">
+            <Label className="text-base font-medium">Número de Refeições</Label>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="mealsPerDay">Refeições por Dia *</Label>
+                <Input
+                  id="mealsPerDay"
+                  type="number"
+                  min="1"
+                  value={mealsPerDay}
+                  onChange={(e) => {
+                    const value = parseInt(e.target.value) || 0;
+                    setMealsPerDay(value);
+                    updateTotalMeals(value);
+                  }}
+                  required
+                />
+              </div>
+              <div>
+                <Label htmlFor="totalMeals">Total de Refeições (5 dias)</Label>
+                <Input
+                  id="totalMeals"
+                  type="number"
+                  value={totalMeals}
+                  readOnly
+                  className="bg-gray-50"
+                />
+              </div>
+            </div>
+          </div>
+
           {/* Preferências */}
           <div className="space-y-2">
             <Label htmlFor="preferences">Preferências Especiais (Opcional)</Label>
@@ -126,7 +174,7 @@ export const SimpleMenuForm: React.FC<SimpleMenuFormProps> = ({
           {/* Informações do Cliente */}
           <div className="p-4 bg-gray-50 rounded-lg">
             <h4 className="font-medium text-gray-900 mb-3">Resumo do Cliente</h4>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
               <div>
                 <p className="text-gray-600">Custo Médio Diário</p>
                 <p className="font-medium text-green-600">
@@ -136,6 +184,12 @@ export const SimpleMenuForm: React.FC<SimpleMenuFormProps> = ({
               <div>
                 <p className="text-gray-600">Filial</p>
                 <p className="font-medium">{selectedClient?.nome_filial || 'Principal'}</p>
+              </div>
+              <div>
+                <p className="text-gray-600">Orçamento Total</p>
+                <p className="font-medium text-blue-600">
+                  R$ {((selectedClient?.custo_medio_diario || 0) * totalMeals).toFixed(2)}
+                </p>
               </div>
             </div>
           </div>
@@ -154,7 +208,7 @@ export const SimpleMenuForm: React.FC<SimpleMenuFormProps> = ({
             </Button>
             <Button
               type="submit"
-              disabled={isGenerating || !weekStart || !weekEnd}
+              disabled={isGenerating || !weekStart || !weekEnd || mealsPerDay <= 0}
               className="flex-1"
             >
               {isGenerating ? (
