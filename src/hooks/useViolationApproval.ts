@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { MenuViolation } from '@/hooks/useMenuBusinessRules';
 import { useMenuAI } from '@/hooks/useMenuAI';
 import { useToast } from '@/hooks/use-toast';
+import { supabase } from '@/integrations/supabase/client';
 
 export interface ApprovedViolation {
   violationIndex: number;
@@ -27,10 +28,11 @@ export const useViolationApproval = () => {
   const { editMenuWithNLP } = useMenuAI();
   const { toast } = useToast();
 
-  const approveViolation = (
+  const approveViolation = async (
     violationIndex: number, 
     approvedBy: string, 
-    justification?: string
+    justification?: string,
+    menuId?: string
   ) => {
     const newApproval: ApprovedViolation = {
       violationIndex,
@@ -43,6 +45,21 @@ export const useViolationApproval = () => {
       ...prev,
       approvedViolations: [...prev.approvedViolations, newApproval]
     }));
+
+    // Persist to database if menuId is provided
+    if (menuId) {
+      try {
+        const updatedApprovals = [...approvalState.approvedViolations, newApproval];
+        await supabase
+          .from('generated_menus')
+          .update({ 
+            approved_violations: updatedApprovals as any
+          })
+          .eq('id', menuId);
+      } catch (error) {
+        console.error('Error saving violation approval:', error);
+      }
+    }
 
     toast({
       title: "Violação Aprovada",
@@ -75,6 +92,24 @@ export const useViolationApproval = () => {
         },
         processingNLP: { ...prev.processingNLP, [violationIndex]: false }
       }));
+
+      // Persist suggestions to database if menuId is provided
+      if (menuId) {
+        try {
+          const updatedSuggestions = {
+            ...approvalState.nutritionistSuggestions,
+            [violationIndex]: suggestion
+          };
+          await supabase
+            .from('generated_menus')
+            .update({ 
+              nutritionist_suggestions: updatedSuggestions as any
+            })
+            .eq('id', menuId);
+        } catch (error) {
+          console.error('Error saving nutritionist suggestion:', error);
+        }
+      }
 
       toast({
         title: "Sugestão Processada",

@@ -60,7 +60,7 @@ const MenuValidationPanel: React.FC<MenuValidationPanelProps> = ({
 
   const handleApproveViolation = (violationIndex: number) => {
     if (approverName.trim()) {
-      approveViolation(violationIndex, approverName.trim());
+      approveViolation(violationIndex, approverName.trim(), undefined, menuId);
       onViolationsChanged?.();
     }
   };

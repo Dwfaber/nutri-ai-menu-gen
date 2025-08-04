@@ -404,11 +404,13 @@ export type Database = {
       generated_menus: {
         Row: {
           approved_by: string | null
+          approved_violations: Json | null
           client_id: string
           client_name: string
           cost_per_meal: number
           created_at: string
           id: string
+          nutritionist_suggestions: Json | null
           receitas_adaptadas: Json | null
           receitas_ids: string[] | null
           rejected_reason: string | null
@@ -416,15 +418,18 @@ export type Database = {
           total_cost: number
           total_recipes: number
           updated_at: string
+          violation_notes: string | null
           week_period: string
         }
         Insert: {
           approved_by?: string | null
+          approved_violations?: Json | null
           client_id: string
           client_name: string
           cost_per_meal?: number
           created_at?: string
           id?: string
+          nutritionist_suggestions?: Json | null
           receitas_adaptadas?: Json | null
           receitas_ids?: string[] | null
           rejected_reason?: string | null
@@ -432,15 +437,18 @@ export type Database = {
           total_cost?: number
           total_recipes?: number
           updated_at?: string
+          violation_notes?: string | null
           week_period: string
         }
         Update: {
           approved_by?: string | null
+          approved_violations?: Json | null
           client_id?: string
           client_name?: string
           cost_per_meal?: number
           created_at?: string
           id?: string
+          nutritionist_suggestions?: Json | null
           receitas_adaptadas?: Json | null
           receitas_ids?: string[] | null
           rejected_reason?: string | null
@@ -448,6 +456,7 @@ export type Database = {
           total_cost?: number
           total_recipes?: number
           updated_at?: string
+          violation_notes?: string | null
           week_period?: string
         }
         Relationships: []
