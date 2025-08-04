@@ -72,18 +72,30 @@ export const useIntegratedMenuGeneration = () => {
     return 'Salada 2';
   };
 
-  // Helper function to categorize drinks
+  // Helper function to categorize juices by flavor profile
   const categorizeJuice = (recipeName: string, index: number): string => {
     const name = recipeName.toLowerCase();
     
-    // Sucos cítricos (Suco 1)
+    // Sucos cítricos/ácidos (Suco 1)
     if (name.includes('laranja') || name.includes('limão') || name.includes('maracujá') || 
-        name.includes('abacaxi') || index % 2 === 0) {
+        name.includes('caju') || name.includes('acerola') || name.includes('abacaxi')) {
       return 'Suco 1';
     }
     
-    // Sucos não-cítricos (Suco 2)
-    return 'Suco 2';
+    // Sucos doces (Suco 2)  
+    if (name.includes('manga') || name.includes('morango') || name.includes('pêssego') || 
+        name.includes('uva') || name.includes('goiaba') || name.includes('coco') ||
+        name.includes('banana') || name.includes('maçã')) {
+      return 'Suco 2';
+    }
+    
+    // Frutas vermelhas como coringa - alternar
+    if (name.includes('frutas vermelhas') || name.includes('tropical')) {
+      return index % 2 === 0 ? 'Suco 1' : 'Suco 2';
+    }
+    
+    // Fallback: alternar entre categorias
+    return index % 2 === 0 ? 'Suco 1' : 'Suco 2';
   };
 
   // New menu structure mapping based on business requirements
@@ -264,13 +276,33 @@ export const useIntegratedMenuGeneration = () => {
 
       console.log(`Found ${viable.length} viable recipes based on market availability`);
 
-      // Step 2: Organize viable recipes by new structure categories
+      // Step 2: Fetch juice varieties from database and organize viable recipes
+      const { data: juiceRecipes, error: juiceError } = await supabase
+        .from('receitas_legado')
+        .select('*')
+        .ilike('nome_receita', '%SUCO EM PÓ%')
+        .eq('inativa', false);
+
+      if (juiceError) {
+        console.warn('Error fetching juice recipes:', juiceError);
+      }
+
+      // Combine database juices with viable recipes
+      const allJuices = [
+        ...(juiceRecipes || []),
+        ...viable.filter(r => 
+          r.categoria_descricao?.toLowerCase().includes('suco') || 
+          r.categoria_descricao?.toLowerCase().includes('bebida') ||
+          r.nome_receita?.toLowerCase().includes('suco')
+        )
+      ];
+
+      // Remove duplicates by receita_id_legado
+      const uniqueJuices = allJuices.filter((juice, index, self) => 
+        index === self.findIndex(j => j.receita_id_legado === juice.receita_id_legado)
+      );
+
       const saladas = viable.filter(r => r.categoria_descricao?.toLowerCase().includes('salada')) || [];
-      const sucos = viable.filter(r => 
-        r.categoria_descricao?.toLowerCase().includes('suco') || 
-        r.categoria_descricao?.toLowerCase().includes('bebida') ||
-        r.nome_receita?.toLowerCase().includes('suco')
-      ) || [];
       
       // Create PP2 from available proteins or garnições
       const pp2Candidates = viable.filter(r => 
@@ -291,10 +323,12 @@ export const useIntegratedMenuGeneration = () => {
         }
       });
 
-      // Distribute juices between Suco 1 and Suco 2
+      // Distribute juices between Suco 1 and Suco 2 with intelligent selection
       const suco1 = [];
       const suco2 = [];
-      sucos.forEach((suco, index) => {
+      const usedJuiceFlavors = new Set<string>(); // Track used flavors to avoid repetition
+      
+      uniqueJuices.forEach((suco, index) => {
         const category = categorizeJuice(suco.nome_receita, index);
         if (category === 'Suco 1') {
           suco1.push(suco);
@@ -303,19 +337,7 @@ export const useIntegratedMenuGeneration = () => {
         }
       });
 
-      // Add fallback juices if none found
-      if (suco1.length === 0 && suco2.length === 0) {
-        // Create default juice options
-        const defaultJuices = [
-          { receita_id_legado: 'suco-laranja-default', nome_receita: 'Suco de Laranja', categoria_descricao: 'Suco', custo_total: 1.0, porcoes: 50 },
-          { receita_id_legado: 'suco-limao-default', nome_receita: 'Suco de Limão', categoria_descricao: 'Suco', custo_total: 0.8, porcoes: 50 },
-          { receita_id_legado: 'suco-uva-default', nome_receita: 'Suco de Uva', categoria_descricao: 'Suco', custo_total: 1.2, porcoes: 50 },
-          { receita_id_legado: 'suco-maracuja-default', nome_receita: 'Suco de Maracujá', categoria_descricao: 'Suco', custo_total: 1.1, porcoes: 50 }
-        ];
-        
-        suco1.push(defaultJuices[0], defaultJuices[1]);
-        suco2.push(defaultJuices[2], defaultJuices[3]);
-      }
+      console.log(`Found ${suco1.length} Suco 1 varieties and ${suco2.length} Suco 2 varieties from database`);
 
       const newMenuStructure = {
         'PP1': viable.filter(r => r.categoria_descricao === 'Prato Principal 1') || [],
@@ -363,7 +385,9 @@ export const useIntegratedMenuGeneration = () => {
         });
       });
 
-      // Step 4: Generate recipes for each day with business rules
+      // Step 4: Generate recipes for each day with intelligent juice selection
+      const weeklyJuiceTracker = { 'Suco 1': new Set(), 'Suco 2': new Set() };
+      
       for (let dayIndex = 0; dayIndex < days.length; dayIndex++) {
         const day = days[dayIndex];
         const previousDayRecipes = dayIndex > 0 
@@ -392,16 +416,44 @@ export const useIntegratedMenuGeneration = () => {
           receitasUsadas.add(selectedPP1.receita_id_legado);
         }
 
-        // Generate all required categories for complete structure
+        // Generate all required categories with intelligent juice selection
         const requiredCategories = ['PP2', 'Salada 1', 'Salada 2', 'Suco 1', 'Suco 2', 'Guarnição', 'Sobremesa'];
         
         for (const categoria of requiredCategories) {
           const categoryRecipes = newMenuStructure[categoria] || [];
           
           if (categoryRecipes.length > 0) {
-            const available = categoryRecipes.filter(r => !receitasUsadas.has(r.receita_id_legado));
-            if (available.length > 0) {
-              const selected = available[dayIndex % available.length];
+            let selected;
+            
+            // Special logic for juices to avoid repetition
+            if (categoria.includes('Suco')) {
+              const availableJuices = categoryRecipes.filter(r => 
+                !receitasUsadas.has(r.receita_id_legado) && 
+                !weeklyJuiceTracker[categoria].has(r.receita_id_legado)
+              );
+              
+              if (availableJuices.length > 0) {
+                // Select unique juice for this day and category
+                selected = availableJuices[dayIndex % availableJuices.length];
+                weeklyJuiceTracker[categoria].add(selected.receita_id_legado);
+              } else {
+                // If all juices used, reset and pick from available
+                const resetAvailable = categoryRecipes.filter(r => !receitasUsadas.has(r.receita_id_legado));
+                if (resetAvailable.length > 0) {
+                  selected = resetAvailable[dayIndex % resetAvailable.length];
+                  weeklyJuiceTracker[categoria].clear();
+                  weeklyJuiceTracker[categoria].add(selected.receita_id_legado);
+                }
+              }
+            } else {
+              // Normal logic for other categories
+              const available = categoryRecipes.filter(r => !receitasUsadas.has(r.receita_id_legado));
+              if (available.length > 0) {
+                selected = available[dayIndex % available.length];
+              }
+            }
+            
+            if (selected) {
               // Calculate real cost based on market prices
               const realCost = await calculateRecipeRealCost(selected.receita_id_legado);
               const maxCost = categoria === 'Sobremesa' ? custoMaximoPorRefeicao * 0.15 : 
@@ -422,25 +474,6 @@ export const useIntegratedMenuGeneration = () => {
               
               receitasUsadas.add(selected.receita_id_legado);
             }
-          } else if (categoria.includes('Suco')) {
-            // Add fallback default juices if no recipes found
-            const juiceNames = categoria === 'Suco 1' ? 
-              ['Suco de Laranja', 'Suco de Limão'] : 
-              ['Suco de Uva', 'Suco de Maracujá'];
-            
-            const selectedJuice = juiceNames[dayIndex % juiceNames.length];
-            const juiceId = `${selectedJuice.toLowerCase().replace(/\s+/g, '-')}-${day}`;
-            
-            receitasCardapio.push({
-              id: juiceId,
-              name: selectedJuice,
-              category: categoria,
-              day,
-              cost: 1.0,
-              servings: 50,
-              ingredients: [],
-              nutritionalInfo: {}
-            });
           } else if (categoria === 'PP2' && newMenuStructure.PP1.length > 0) {
             // Fallback: use a different PP1 recipe as PP2 if available
             const pp1Available = newMenuStructure.PP1.filter(r => !receitasUsadas.has(r.receita_id_legado));
