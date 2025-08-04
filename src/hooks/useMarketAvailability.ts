@@ -172,7 +172,7 @@ export const useMarketAvailability = () => {
     };
 
     initializeData();
-  }, []);
+  }, []); // Empty dependency array - run only on mount
 
   return {
     marketIngredients,
