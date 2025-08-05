@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react';
-import { Plus, Search, Filter, Database, ShoppingCart, DollarSign, Eye, Download, Copy } from 'lucide-react';
+import { Plus, Search, Filter, Database, ShoppingCart, DollarSign, Eye, Download, Copy, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { useToast } from '@/components/ui/use-toast';
 import { useShoppingList } from '../hooks/useShoppingList';
 import { useClientContracts, ContractFormData } from '../hooks/useClientContracts';
@@ -31,7 +32,8 @@ const Cardapios = () => {
     savedMenus,
     generateMenu,
     loadSavedMenus,
-    generateShoppingListFromMenu
+    generateShoppingListFromMenu,
+    deleteGeneratedMenu
   } = useIntegratedMenuGeneration();
   const { createFromMenu, isLoading: isCreatingList } = useShoppingList();
   const { clients, generateAIContextSummary } = useClientContracts();
@@ -132,6 +134,13 @@ const Cardapios = () => {
         description: "Não foi possível duplicar o cardápio.",
         variant: "destructive",
       });
+    }
+  };
+
+  const handleExcluirCardapio = async (menu: GeneratedMenu) => {
+    const success = await deleteGeneratedMenu(menu.id);
+    if (success) {
+      // Menu was deleted successfully, state is already updated in the hook
     }
   };
 
@@ -329,6 +338,36 @@ const Cardapios = () => {
                             <Copy className="w-3 h-3 mr-1" />
                             Duplicar
                           </Button>
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button 
+                                variant="outline" 
+                                size="sm"
+                                className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                              >
+                                <Trash2 className="w-3 h-3 mr-1" />
+                                Excluir
+                              </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>Confirmar Exclusão</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  Tem certeza que deseja excluir o cardápio "{menu.weekPeriod}"? 
+                                  Esta ação não pode ser desfeita.
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                <AlertDialogAction 
+                                  onClick={() => handleExcluirCardapio(menu)}
+                                  className="bg-red-600 hover:bg-red-700"
+                                >
+                                  Excluir
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
                         </div>
                       </div>
                     </CardContent>

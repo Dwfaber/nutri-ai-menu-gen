@@ -218,6 +218,41 @@ export const useIntegratedMenuGeneration = () => {
     }
   };
 
+  // Excluir cardápio do banco
+  const deleteGeneratedMenu = async (menuId: string): Promise<boolean> => {
+    try {
+      const { error } = await supabase
+        .from('generated_menus')
+        .delete()
+        .eq('id', menuId);
+
+      if (error) throw error;
+
+      // Remove from local state
+      setSavedMenus(prev => prev.filter(menu => menu.id !== menuId));
+      
+      // Clear generated menu if it's the one being deleted
+      if (generatedMenu?.id === menuId) {
+        setGeneratedMenu(null);
+      }
+
+      toast({
+        title: "Cardápio excluído",
+        description: "Cardápio removido com sucesso",
+      });
+
+      return true;
+    } catch (error) {
+      console.error('Erro ao excluir cardápio:', error);
+      toast({
+        title: "Erro ao excluir",
+        description: "Não foi possível excluir o cardápio",
+        variant: "destructive"
+      });
+      return false;
+    }
+  };
+
   // Carregar cardápios ao montar o componente
   useEffect(() => {
     loadSavedMenus();
@@ -729,19 +764,21 @@ export const useIntegratedMenuGeneration = () => {
     generatedMenu,
     savedMenus,
     error,
-    generateMenu,
     generateMenuWithFormData,
+    generateMenu,
     approveMenu,
     rejectMenu,
     generateShoppingListFromMenu,
     clearGeneratedMenu,
     loadSavedMenus,
+    deleteGeneratedMenu,
     mapRecipesToMarketProducts,
-    // New exports for business rules and market availability
-    viableRecipes,
-    marketIngredients,
+    // Export related hooks for business rules
     violations,
     validateMenu,
-    validateMenuAndSetViolations
+    validateMenuAndSetViolations,
+    // Export market availability hooks
+    viableRecipes,
+    marketIngredients
   };
 };

@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
-import { Plus, Search, Filter, ShoppingCart, Download, AlertCircle, CheckCircle, Package, Settings } from 'lucide-react';
+import { Plus, Search, Filter, ShoppingCart, Download, AlertCircle, CheckCircle, Package, Settings, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { useShoppingList, ShoppingList, ShoppingListItem } from '../hooks/useShoppingList';
 import ShoppingListCard from '../components/ShoppingList/ShoppingListCard';
 import AdaptationPanel from '../components/LegacyAdaptation/AdaptationPanel';
@@ -33,7 +34,8 @@ const Compras = () => {
     getShoppingListItems, 
     exportToCSV, 
     updateItemQuantity,
-    loadShoppingLists
+    loadShoppingLists,
+    deleteShoppingList
   } = useShoppingList();
   
   const { config: optimizationConfig, lastResults: optimizationResults } = useOptimization();
@@ -93,6 +95,17 @@ const Compras = () => {
     if (selectedList) {
       const updatedItems = await getShoppingListItems(selectedList.id);
       setListItems(updatedItems);
+    }
+  };
+
+  const handleDeleteList = async (list: ShoppingList) => {
+    const success = await deleteShoppingList(list.id);
+    if (success) {
+      // Reset selected list if it was the one deleted
+      if (selectedList?.id === list.id) {
+        setSelectedList(null);
+        setListItems([]);
+      }
     }
   };
 
@@ -253,28 +266,61 @@ const Compras = () => {
                 displayLists.map((list) => (
                   <Card 
                     key={list.id} 
-                    className={`cursor-pointer transition-all hover:shadow-md ${
+                    className={`transition-all hover:shadow-md ${
                       selectedList?.id === list.id ? 'ring-2 ring-green-500 bg-green-50' : ''
                     }`}
-                    onClick={() => handleSelectList(list)}
                   >
                     <CardContent className="p-4">
-                      <div className="flex justify-between items-start mb-2">
-                        <h4 className="font-medium text-gray-900">{list.client_name}</h4>
-                        {getStatusBadge(list.status as ShoppingListStatus)}
+                      <div className="cursor-pointer" onClick={() => handleSelectList(list)}>
+                        <div className="flex justify-between items-start mb-2">
+                          <h4 className="font-medium text-gray-900">{list.client_name}</h4>
+                          {getStatusBadge(list.status as ShoppingListStatus)}
+                        </div>
+                        <p className="text-sm text-gray-600 mb-2">
+                          Criada em: {new Date(list.created_at).toLocaleDateString()}
+                        </p>
+                        <div className="flex justify-between items-center text-sm">
+                          <span className="text-gray-600">
+                            Orçamento: R$ {list.budget_predicted.toFixed(2)}
+                          </span>
+                          <span className={`font-medium ${
+                            (list.cost_actual || 0) <= list.budget_predicted ? 'text-green-600' : 'text-red-600'
+                          }`}>
+                            Custo: R$ {list.cost_actual?.toFixed(2) || '0.00'}
+                          </span>
+                        </div>
                       </div>
-                      <p className="text-sm text-gray-600 mb-2">
-                        Criada em: {new Date(list.created_at).toLocaleDateString()}
-                      </p>
-                      <div className="flex justify-between items-center text-sm">
-                        <span className="text-gray-600">
-                          Orçamento: R$ {list.budget_predicted.toFixed(2)}
-                        </span>
-                        <span className={`font-medium ${
-                          (list.cost_actual || 0) <= list.budget_predicted ? 'text-green-600' : 'text-red-600'
-                        }`}>
-                          Custo: R$ {list.cost_actual?.toFixed(2) || '0.00'}
-                        </span>
+                      <div className="flex justify-end mt-3 pt-3 border-t">
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button 
+                              variant="outline" 
+                              size="sm"
+                              className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                            >
+                              <Trash2 className="w-3 h-3 mr-1" />
+                              Excluir
+                            </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>Confirmar Exclusão</AlertDialogTitle>
+                              <AlertDialogDescription>
+                                Tem certeza que deseja excluir a lista de compras de "{list.client_name}"? 
+                                Esta ação não pode ser desfeita.
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                              <AlertDialogAction 
+                                onClick={() => handleDeleteList(list)}
+                                className="bg-red-600 hover:bg-red-700"
+                              >
+                                Excluir
+                              </AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
                       </div>
                     </CardContent>
                   </Card>

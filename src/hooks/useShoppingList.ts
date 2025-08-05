@@ -251,6 +251,22 @@ export const useShoppingList = () => {
 
   const deleteShoppingList = async (listId: string): Promise<boolean> => {
     try {
+      // Delete from database - first delete items, then the list
+      const { error: itemsError } = await supabase
+        .from('shopping_list_items')
+        .delete()
+        .eq('shopping_list_id', listId);
+
+      if (itemsError) throw itemsError;
+
+      const { error: listError } = await supabase
+        .from('shopping_lists')
+        .delete()
+        .eq('id', listId);
+
+      if (listError) throw listError;
+
+      // Remove from local state
       setLists(prev => prev.filter(l => l.id !== listId));
       
       if (currentList?.id === listId) {
