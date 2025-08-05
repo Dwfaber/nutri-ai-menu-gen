@@ -10,6 +10,7 @@ export interface MarketIngredient {
   promocao: boolean;
   em_promocao_sim_nao: boolean;
   disponivel: boolean;
+  quantidade_embalagem?: number;
 }
 
 export interface ViableRecipe {
@@ -44,7 +45,8 @@ export const useMarketAvailability = () => {
           unidade,
           preco,
           promocao,
-          em_promocao_sim_nao
+          em_promocao_sim_nao,
+          quantidade_embalagem
         `)
         .not('produto_base_id', 'is', null)
         .order('categoria_descricao');
@@ -162,40 +164,93 @@ export const useMarketAvailability = () => {
     return marketIngredients.some(ing => ing.produto_base_id === produtoBaseId);
   };
 
-  // Calculate real cost of a recipe based on market prices
+  // Calculate real cost of a recipe using GPT Assistant for intelligent cost calculation
   const calculateRecipeRealCost = async (receitaId: string): Promise<number> => {
+    try {
+      console.log(`Calculando custo real da receita ${receitaId} com IA...`);
+      
+      // Use GPT Assistant para calcular custo real com análise inteligente
+      const { data, error: functionError } = await supabase.functions.invoke('gpt-assistant', {
+        body: {
+          action: 'calculateRecipeCost',
+          recipeId: receitaId,
+          marketProducts: marketIngredients,
+          includeOptimizations: true
+        }
+      });
+
+      if (functionError) {
+        console.error('Erro na função GPT para cálculo de custo:', functionError);
+        // Fallback to basic calculation
+        return await calculateBasicRecipeCost(receitaId);
+      }
+
+      if (data.success && data.cost > 0) {
+        console.log(`Custo calculado pela IA: R$ ${data.cost.toFixed(2)}`);
+        return data.cost;
+      }
+
+      // Fallback to basic calculation
+      return await calculateBasicRecipeCost(receitaId);
+    } catch (error) {
+      console.error('Error calculating recipe real cost with AI:', error);
+      return await calculateBasicRecipeCost(receitaId);
+    }
+  };
+
+  // Fallback basic cost calculation
+  const calculateBasicRecipeCost = async (receitaId: string): Promise<number> => {
     try {
       // Get recipe ingredients with quantities
       const { data: ingredientsData, error } = await supabase
         .from('receita_ingredientes')
-        .select('produto_base_id, quantidade, unidade')
+        .select('produto_base_id, quantidade, unidade, nome')
         .eq('receita_id_legado', receitaId)
         .not('produto_base_id', 'is', null);
 
       if (error) throw error;
 
       let totalCost = 0;
+      let foundIngredients = 0;
 
-      // Calculate cost for each ingredient
+      // Calculate cost for each ingredient with improved matching
       for (const ingredient of ingredientsData || []) {
         const marketIngredient = marketIngredients.find(
           mi => mi.produto_base_id === ingredient.produto_base_id
         );
 
-        if (marketIngredient) {
+        if (marketIngredient && marketIngredient.preco > 0) {
+          // Convert units and calculate proportional cost
+          const quantity = parseFloat(ingredient.quantidade?.toString()) || 0;
+          const packageQuantity = parseFloat(marketIngredient.quantidade_embalagem?.toString()) || 1;
+          
           // Use promotion price if available
           const unitPrice = marketIngredient.em_promocao_sim_nao ? 
             marketIngredient.preco * 0.85 : // 15% discount on promotion
             marketIngredient.preco;
           
-          totalCost += ingredient.quantidade * unitPrice;
+          // Calculate proportional cost based on packaging
+          const proportionalCost = (quantity / packageQuantity) * unitPrice;
+          totalCost += proportionalCost;
+          foundIngredients++;
+          
+          console.log(`Ingrediente: ${ingredient.nome} - Qtd: ${quantity} - Preço unit: R$ ${unitPrice.toFixed(2)} - Custo: R$ ${proportionalCost.toFixed(2)}`);
+        } else {
+          console.log(`Ingrediente não encontrado no mercado: ${ingredient.nome} (base_id: ${ingredient.produto_base_id})`);
         }
       }
 
+      // If no ingredients found in market, return estimated cost
+      if (foundIngredients === 0) {
+        console.log(`Nenhum ingrediente encontrado no mercado para receita ${receitaId}, usando custo estimado`);
+        return 5.0; // Default estimated cost
+      }
+
+      console.log(`Custo básico calculado: R$ ${totalCost.toFixed(2)} (${foundIngredients} ingredientes)`);
       return totalCost;
     } catch (error) {
-      console.error('Error calculating recipe real cost:', error);
-      return 0;
+      console.error('Error in basic recipe cost calculation:', error);
+      return 5.0; // Default fallback cost
     }
   };
 

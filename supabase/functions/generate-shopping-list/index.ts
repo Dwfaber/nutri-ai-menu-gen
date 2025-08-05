@@ -115,6 +115,12 @@ serve(async (req) => {
     console.log(`Generating shopping list for menu: ${menuId}`)
     console.log(`Optimization enabled: ${!!optimizationConfig}`)
 
+    // Get OpenAI API Key
+    const openAIApiKey = Deno.env.get('OPENAI_API_KEY');
+    if (!openAIApiKey && optimizationConfig) {
+      console.warn('OpenAI API key not found, falling back to basic optimization');
+    }
+
     // Get products from digital market
     const { data: marketProducts } = await supabaseClient
       .from('co_solicitacao_produto_listagem')
@@ -356,12 +362,105 @@ serve(async (req) => {
 
     for (const ingredient of aggregatedIngredients) {
       if (optimizationConfig && ingredient.opcoes_embalagem.length > 1) {
-        // Apply optimization algorithm
-        const selections = calculateOptimalPackaging(
-          ingredient.quantity,
-          ingredient.opcoes_embalagem,
-          config
-        );
+        let selections = [];
+        
+        // Try AI-powered optimization if available
+        if (openAIApiKey) {
+          try {
+            console.log(`Using AI optimization for ingredient: ${ingredient.name}`);
+            
+            const aiResponse = await fetch('https://api.openai.com/v1/chat/completions', {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${openAIApiKey}`,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                model: 'gpt-4.1-2025-04-14',
+                messages: [
+                  {
+                    role: 'system',
+                    content: `Você é um especialista em otimização de compras que analisa embalagens e preços para encontrar a melhor combinação custo-benefício. 
+                    
+                    Considere:
+                    - Produtos em promoção têm prioridade
+                    - Minimize sobras excessivas
+                    - Prefira menos tipos de embalagem quando possível
+                    - Calcule o custo real por unidade
+                    
+                    Retorne a resposta em JSON com este formato:
+                    {
+                      "selections": [
+                        {
+                          "produto_id": number,
+                          "quantidade_pacotes": number,
+                          "motivo": "string explicando a escolha"
+                        }
+                      ],
+                      "total_cost": number,
+                      "waste_percentage": number
+                    }`
+                  },
+                  {
+                    role: 'user',
+                    content: `Otimize a compra para:
+                    Produto: ${ingredient.name}
+                    Quantidade necessária: ${ingredient.quantity} ${ingredient.unit}
+                    
+                    Opções disponíveis:
+                    ${ingredient.opcoes_embalagem.map(op => 
+                      `- ID: ${op.produto_id}, Embalagem: ${op.quantidade_embalagem} ${op.unidade}, Preço: R$ ${op.preco.toFixed(2)}${op.promocao || op.em_promocao ? ' (PROMOÇÃO)' : ''}, Desc: ${op.descricao}`
+                    ).join('\n')}
+                    
+                    Configuração:
+                    - Prioridade promoção: ${config.prioridade_promocao}
+                    - Tolerância sobra: ${config.tolerancia_sobra_percentual}%
+                    - Máximo tipos embalagem: ${config.maximo_tipos_embalagem_por_produto}`
+                  }
+                ]
+              }),
+            });
+
+            if (aiResponse.ok) {
+              const aiData = await aiResponse.json();
+              const aiOptimization = JSON.parse(aiData.choices[0].message.content);
+              
+              // Convert AI response to internal format
+              selections = aiOptimization.selections.map((sel: any) => {
+                const option = ingredient.opcoes_embalagem.find(op => op.produto_id === sel.produto_id);
+                if (option) {
+                  return {
+                    produto_id: option.produto_id,
+                    descricao: option.descricao,
+                    quantidade_pacotes: sel.quantidade_pacotes,
+                    quantidade_unitaria: option.quantidade_embalagem,
+                    preco_unitario: option.preco,
+                    custo_total: sel.quantidade_pacotes * option.preco,
+                    em_promocao: option.promocao || option.em_promocao,
+                    motivo_selecao: sel.motivo
+                  };
+                }
+                return null;
+              }).filter(Boolean);
+              
+              console.log(`AI optimization successful for ${ingredient.name}: ${selections.length} selections`);
+            } else {
+              throw new Error('AI API call failed');
+            }
+          } catch (aiError) {
+            console.error('AI optimization failed, falling back to algorithm:', aiError);
+            selections = [];
+          }
+        }
+        
+        // Fallback to algorithm optimization if AI failed or unavailable
+        if (selections.length === 0) {
+          selections = calculateOptimalPackaging(
+            ingredient.quantity,
+            ingredient.opcoes_embalagem,
+            config
+          );
+        }
 
         if (selections.length > 0) {
           const optimizedCost = selections.reduce((sum, sel) => sum + sel.custo_total, 0);

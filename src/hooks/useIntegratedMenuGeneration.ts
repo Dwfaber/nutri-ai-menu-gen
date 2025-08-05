@@ -298,248 +298,75 @@ export const useIntegratedMenuGeneration = () => {
     try {
       setIsGenerating(true);
       setError(null);
-
-      console.log('Generating menu with market availability and business rules for client:', clientToUse.nome_fantasia);
-
-      // Step 1: Check market availability
-      await fetchMarketIngredients();
-      const viable = await checkRecipeViability();
       
-      if (viable.length === 0) {
-        throw new Error('Nenhuma receita viável encontrada com os ingredientes disponíveis no mercado');
-      }
-
-      console.log(`Found ${viable.length} viable recipes based on market availability`);
-
-      // Step 2: Fetch juice varieties from database and organize viable recipes
-      const { data: juiceRecipes, error: juiceError } = await supabase
-        .from('receitas_legado')
-        .select('*')
-        .ilike('nome_receita', '%SUCO EM PÓ%')
-        .eq('inativa', false);
-
-      if (juiceError) {
-        console.warn('Error fetching juice recipes:', juiceError);
-      }
-
-      // Combine database juices with viable recipes
-      const allJuices = [
-        ...(juiceRecipes || []),
-        ...viable.filter(r => 
-          r.categoria_descricao?.toLowerCase().includes('suco') || 
-          r.categoria_descricao?.toLowerCase().includes('bebida') ||
-          r.nome_receita?.toLowerCase().includes('suco')
-        )
-      ];
-
-      // Remove duplicates by receita_id_legado
-      const uniqueJuices = allJuices.filter((juice, index, self) => 
-        index === self.findIndex(j => j.receita_id_legado === juice.receita_id_legado)
-      );
-
-      const saladas = viable.filter(r => r.categoria_descricao?.toLowerCase().includes('salada')) || [];
+      console.log('Gerando cardápio com IA integrada...');
       
-      // Create PP2 from available proteins or garnições
-      const pp2Candidates = viable.filter(r => 
-        r.categoria_descricao === 'Prato Principal 2' ||
-        r.categoria_descricao === 'Guarnição' ||
-        (r.categoria_descricao?.includes('Proteína') && r.categoria_descricao !== 'Prato Principal 1')
-      ) || [];
-
-      // Distribute salads between Salada 1 and Salada 2
-      const salada1 = [];
-      const salada2 = [];
-      saladas.forEach((salada, index) => {
-        const category = categorizeSalad(salada.nome_receita, index);
-        if (category === 'Salada 1') {
-          salada1.push(salada);
-        } else {
-          salada2.push(salada);
+      // Use GPT Assistant para gerar cardápio com custos reais
+      const { data, error: functionError } = await supabase.functions.invoke('gpt-assistant', {
+        body: {
+          action: 'generateMenu',
+          clientId: clientToUse.cliente_id_legado || clientToUse.id,
+          budget: clientToUse.custo_maximo_refeicao || 15,
+          restrictions: clientToUse.restricoes_alimentares || [],
+          preferences: preferences?.join(', ') || '',
+          weekPeriod,
+          totalEmployees: clientToUse.total_funcionarios || 100,
+          totalMealsPerMonth: clientToUse.total_refeicoes_mes || 2000
         }
       });
 
-      // Distribute juices between Suco 1 and Suco 2 with intelligent selection
-      const suco1 = [];
-      const suco2 = [];
-      const usedJuiceFlavors = new Set<string>(); // Track used flavors to avoid repetition
-      
-      uniqueJuices.forEach((suco, index) => {
-        const category = categorizeJuice(suco.nome_receita, index);
-        if (category === 'Suco 1') {
-          suco1.push(suco);
-        } else {
-          suco2.push(suco);
-        }
-      });
-
-      console.log(`Found ${suco1.length} Suco 1 varieties and ${suco2.length} Suco 2 varieties from database`);
-
-      const newMenuStructure = {
-        'PP1': viable.filter(r => r.categoria_descricao === 'Prato Principal 1') || [],
-        'PP2': pp2Candidates,
-        'Arroz Branco': [], // Fixed items
-        'Feijão': [], // Fixed items  
-        'Salada 1': salada1,
-        'Salada 2': salada2,
-        'Suco 1': suco1,
-        'Suco 2': suco2,
-        'Guarnição': viable.filter(r => r.categoria_descricao === 'Guarnição') || [],
-        'Sobremesa': viable.filter(r => r.categoria_descricao === 'Sobremesa') || []
-      };
-
-      // Step 3: Generate weekly menu with business rules
-      const days = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta'];
-      const receitasCardapio: MenuRecipe[] = [];
-      const receitasUsadas = new Set<string>();
-      const custoMaximoPorRefeicao = clientToUse.custo_medio_diario || 7.30;
-
-      // Fixed items (always present)
-      days.forEach(day => {
-        // Add fixed Arroz Branco
-        receitasCardapio.push({
-          id: `arroz-${day}`,
-          name: 'Arroz Branco',
-          category: 'Arroz Branco',
-          day,
-          cost: 0.8,
-          servings: 50,
-          ingredients: [],
-          nutritionalInfo: {}
-        });
-
-        // Add fixed Feijão
-        receitasCardapio.push({
-          id: `feijao-${day}`,
-          name: 'Feijão Carioca',
-          category: 'Feijão',
-          day,
-          cost: 1.2,
-          servings: 50,
-          ingredients: [],
-          nutritionalInfo: {}
-        });
-      });
-
-      // Step 4: Generate recipes for each day with intelligent juice selection
-      const weeklyJuiceTracker = { 'Suco 1': new Set(), 'Suco 2': new Set() };
-      
-      for (let dayIndex = 0; dayIndex < days.length; dayIndex++) {
-        const day = days[dayIndex];
-        const previousDayRecipes = dayIndex > 0 
-          ? receitasCardapio.filter(r => r.day === days[dayIndex - 1])
-          : [];
-
-        // PP1 - Main protein following business rules
-        const pp1Recipes = filterRecipesForDay(newMenuStructure.PP1, day, dayIndex, previousDayRecipes);
-        if (pp1Recipes.length > 0) {
-          const selectedPP1 = pp1Recipes[dayIndex % pp1Recipes.length];
-          // Calculate real cost based on market prices
-          const realCost = await calculateRecipeRealCost(selectedPP1.receita_id_legado);
-          const cost = realCost > 0 ? realCost : (selectedPP1.custo_total || 3.5);
-          
-          receitasCardapio.push({
-            id: selectedPP1.receita_id_legado,
-            name: selectedPP1.nome_receita,
-            category: 'PP1',
-            day,
-            cost,
-            servings: selectedPP1.porcoes || 50,
-            ingredients: [],
-            nutritionalInfo: {}
-          });
-          
-          receitasUsadas.add(selectedPP1.receita_id_legado);
-        }
-
-        // Generate all required categories with intelligent juice selection
-        const requiredCategories = ['PP2', 'Salada 1', 'Salada 2', 'Suco 1', 'Suco 2', 'Guarnição', 'Sobremesa'];
-        
-        for (const categoria of requiredCategories) {
-          const categoryRecipes = newMenuStructure[categoria] || [];
-          
-          if (categoryRecipes.length > 0) {
-            let selected;
-            
-            // Special logic for juices to avoid repetition
-            if (categoria.includes('Suco')) {
-              const availableJuices = categoryRecipes.filter(r => 
-                !receitasUsadas.has(r.receita_id_legado) && 
-                !weeklyJuiceTracker[categoria].has(r.receita_id_legado)
-              );
-              
-              if (availableJuices.length > 0) {
-                // Select unique juice for this day and category
-                selected = availableJuices[dayIndex % availableJuices.length];
-                weeklyJuiceTracker[categoria].add(selected.receita_id_legado);
-              } else {
-                // If all juices used, reset and pick from available
-                const resetAvailable = categoryRecipes.filter(r => !receitasUsadas.has(r.receita_id_legado));
-                if (resetAvailable.length > 0) {
-                  selected = resetAvailable[dayIndex % resetAvailable.length];
-                  weeklyJuiceTracker[categoria].clear();
-                  weeklyJuiceTracker[categoria].add(selected.receita_id_legado);
-                }
-              }
-            } else {
-              // Normal logic for other categories
-              const available = categoryRecipes.filter(r => !receitasUsadas.has(r.receita_id_legado));
-              if (available.length > 0) {
-                selected = available[dayIndex % available.length];
-              }
-            }
-            
-            if (selected) {
-              // Calculate real cost based on market prices
-              const realCost = await calculateRecipeRealCost(selected.receita_id_legado);
-              const maxCost = categoria === 'Sobremesa' ? custoMaximoPorRefeicao * 0.15 : 
-                            categoria.includes('Suco') ? custoMaximoPorRefeicao * 0.20 :
-                            custoMaximoPorRefeicao * 0.25;
-              const cost = realCost > 0 ? realCost : Math.min(selected.custo_total || 1.5, maxCost);
-              
-              receitasCardapio.push({
-                id: selected.receita_id_legado,
-                name: selected.nome_receita,
-                category: categoria,
-                day,
-                cost,
-                servings: selected.porcoes || 50,
-                ingredients: [],
-                nutritionalInfo: {}
-              });
-              
-              receitasUsadas.add(selected.receita_id_legado);
-            }
-          } else if (categoria === 'PP2' && newMenuStructure.PP1.length > 0) {
-            // Fallback: use a different PP1 recipe as PP2 if available
-            const pp1Available = newMenuStructure.PP1.filter(r => !receitasUsadas.has(r.receita_id_legado));
-            if (pp1Available.length > 0) {
-              const selectedPP2 = pp1Available[(dayIndex + 1) % pp1Available.length];
-              const realCost = await calculateRecipeRealCost(selectedPP2.receita_id_legado);
-              const cost = realCost > 0 ? realCost : (selectedPP2.custo_total || 3.5);
-              
-              receitasCardapio.push({
-                id: `${selectedPP2.receita_id_legado}-pp2`,
-                name: `${selectedPP2.nome_receita} (Variação)`,
-                category: 'PP2',
-                day,
-                cost,
-                servings: selectedPP2.porcoes || 50,
-                ingredients: [],
-                nutritionalInfo: {}
-              });
-            }
-          }
-        }
+      if (functionError) {
+        console.error('Erro na função GPT:', functionError);
+        throw new Error(functionError.message || 'Erro ao gerar cardápio com IA');
       }
 
-      // Step 5: Validate business rules
+      if (!data.success) {
+        throw new Error(data.error || 'Erro na geração do cardápio');
+      }
+
+      const aiGeneratedMenu = data.menu;
+      console.log('Cardápio gerado pela IA:', aiGeneratedMenu);
+
+      // Processar o cardápio retornado pela IA
+      if (!aiGeneratedMenu || !aiGeneratedMenu.recipes) {
+        throw new Error('IA não retornou um cardápio válido');
+      }
+
+      // Converter receitas da IA para formato interno
+      const receitasCardapio: MenuRecipe[] = aiGeneratedMenu.recipes.map((recipe: any) => ({
+        id: recipe.id || recipe.receita_id_legado,
+        name: recipe.name || recipe.nome_receita,
+        category: recipe.category || recipe.categoria,
+        day: recipe.day || recipe.dia,
+        cost: recipe.cost || recipe.custo_real || 0,
+        servings: recipe.servings || recipe.porcoes || 50,
+        ingredients: recipe.ingredients || [],
+        nutritionalInfo: recipe.nutritionalInfo || {}
+      }));
+
+      console.log(`IA gerou ${receitasCardapio.length} receitas com custos calculados`);
+
+      // Validar regras de negócio no cardápio da IA
       const businessRules = validateMenu(receitasCardapio);
-      console.log('Business rules validation:', businessRules);
-      console.log('Violations found:', violations);
-
-      // Calculate totals
+      console.log('Validação de regras:', businessRules);
+      console.log('Violações encontradas:', violations);
+      
+      // Verificar se os custos estão dentro do orçamento
       const totalCost = receitasCardapio.reduce((sum, recipe) => sum + recipe.cost, 0);
-      const costPerMeal = totalCost / days.length;
+      const costPerMeal = totalCost / 5; // 5 dias da semana
+      const budgetLimit = clientToUse.custo_maximo_refeicao || 15;
+      
+      if (costPerMeal > budgetLimit) {
+        console.warn(`Custo por refeição (R$ ${costPerMeal.toFixed(2)}) excede o orçamento (R$ ${budgetLimit.toFixed(2)})`);
+        
+        toast({
+          title: "Atenção: Orçamento Excedido",
+          description: `Custo estimado: R$ ${costPerMeal.toFixed(2)} | Limite: R$ ${budgetLimit.toFixed(2)}`,
+          variant: "destructive"
+        });
+      }
+
+      // Usar os custos e informações calculados pela IA
 
       // Create generated menu
       const menu: GeneratedMenu = {
@@ -563,10 +390,13 @@ export const useIntegratedMenuGeneration = () => {
         await loadSavedMenus();
 
         toast({
-          title: "Cardápio gerado com sucesso!",
-          description: `Criado cardápio para ${weekPeriod} com ${receitasCardapio.length} receitas`,
-          variant: "default"
+          title: "Cardápio Gerado com IA!",
+          description: `${receitasCardapio.length} receitas otimizadas. Custo: R$ ${costPerMeal.toFixed(2)}/refeição`,
         });
+        
+        console.log('Menu generation with AI completed successfully');
+        console.log('Final cost per meal:', costPerMeal);
+        console.log('Budget compliance:', costPerMeal <= budgetLimit ? 'OK' : 'EXCEEDED');
 
         return menu;
       } else {
