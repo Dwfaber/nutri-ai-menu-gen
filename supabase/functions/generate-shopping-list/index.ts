@@ -142,7 +142,30 @@ serve(async (req) => {
       'feijao-Terça': '581',
       'feijao-Quarta': '581', 
       'feijao-Quinta': '581',
-      'feijao-Sexta': '581'
+      'feijao-Sexta': '581',
+      'suco-laranja-default': '1121',
+      'suco-uva-default': '1124',
+      'suco-limao-default': '1122', 
+      'suco-maracuja-default': '1123'
+    };
+
+    // Function to normalize recipe ID - if it's already a number/valid ID, use it directly
+    const normalizeRecipeId = (recipeId: string): string => {
+      // Check if it's in our mapping first
+      if (RECIPE_MAPPING[recipeId]) {
+        console.log(`Mapped ${recipeId} to ${RECIPE_MAPPING[recipeId]}`);
+        return RECIPE_MAPPING[recipeId];
+      }
+      
+      // If it's already a numeric ID, use it as-is
+      if (/^\d+$/.test(recipeId)) {
+        console.log(`Using numeric recipe ID as-is: ${recipeId}`);
+        return recipeId;
+      }
+      
+      // If it's not in mapping and not numeric, log and skip
+      console.log(`Warning: Recipe ID '${recipeId}' not found in mapping and not numeric`);
+      return recipeId; // Return as-is, let the query handle it
     };
 
     // Process recipes from the menu to extract ingredients from database
@@ -167,9 +190,8 @@ serve(async (req) => {
       for (const recipeId of receitasIds) {
         console.log(`Processing recipe ID: ${recipeId}`);
         
-        // Map dynamic IDs to real recipe IDs
-        const realRecipeId = RECIPE_MAPPING[recipeId] || recipeId;
-        console.log(`Mapped ${recipeId} to ${realRecipeId}`);
+        // Map dynamic IDs to real recipe IDs using the normalize function
+        const realRecipeId = normalizeRecipeId(recipeId);
 
         try {
           // First, verify the recipe exists and get its data
