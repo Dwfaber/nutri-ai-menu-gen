@@ -131,75 +131,133 @@ serve(async (req) => {
       productsByBase.get(baseId).push(product);
     });
 
-    // Process menu items to extract ingredients from database
+    // Recipe mapping for dynamic IDs to real recipe IDs
+    const RECIPE_MAPPING: { [key: string]: string } = {
+      'arroz-Segunda': '580',
+      'arroz-Terça': '580', 
+      'arroz-Quarta': '580',
+      'arroz-Quinta': '580',
+      'arroz-Sexta': '580',
+      'feijao-Segunda': '581',
+      'feijao-Terça': '581',
+      'feijao-Quarta': '581', 
+      'feijao-Quinta': '581',
+      'feijao-Sexta': '581'
+    };
+
+    // Process recipes from the menu to extract ingredients from database
     const ingredientMap = new Map();
     
-    console.log('Processing menu items:', JSON.stringify(menuItems?.slice(0, 2), null, 2));
-    
-    if (menuItems && menuItems.length > 0) {
-      for (const item of menuItems) {
-        console.log(`Processing menu item: ${item.name || item.nome || item.receita_id_legado || 'Unknown'}`);
+    // First, get the actual menu with recipe IDs
+    const { data: menuData, error: menuError } = await supabaseClient
+      .from('generated_menus')
+      .select('receitas_ids')
+      .eq('id', menuId)
+      .single();
+
+    if (menuError || !menuData) {
+      console.error('Error fetching menu data:', menuError);
+      throw new Error('Menu not found');
+    }
+
+    const receitasIds = menuData.receitas_ids || [];
+    console.log('Processing recipe IDs from menu:', receitasIds);
+
+    if (receitasIds && receitasIds.length > 0) {
+      for (const recipeId of receitasIds) {
+        console.log(`Processing recipe ID: ${recipeId}`);
         
-        // Get the receita_id_legado from the menu item
-        const receitaIdLegado = item.receita_id_legado || item.id;
-        
-        if (receitaIdLegado) {
-          console.log(`Fetching ingredients for recipe: ${receitaIdLegado}`);
-          
-          // Fetch ingredients from database using receita_id_legado
+        // Map dynamic IDs to real recipe IDs
+        const realRecipeId = RECIPE_MAPPING[recipeId] || recipeId;
+        console.log(`Mapped ${recipeId} to ${realRecipeId}`);
+
+        try {
+          // First, verify the recipe exists and get its data
+          const { data: recipe, error: recipeError } = await supabaseClient
+            .from('receitas_legado')
+            .select('receita_id_legado, nome_receita, quantidade_refeicoes')
+            .eq('receita_id_legado', realRecipeId)
+            .single();
+
+          if (recipeError || !recipe) {
+            console.log(`Recipe ${realRecipeId} not found in receitas_legado`);
+            continue;
+          }
+
+          console.log(`Found recipe: ${recipe.nome_receita} (serves ${recipe.quantidade_refeicoes})`);
+
+          // Fetch ingredients for this recipe
           const { data: ingredients, error: ingredientsError } = await supabaseClient
             .from('receita_ingredientes')
             .select('*')
-            .eq('receita_id_legado', receitaIdLegado);
-          
+            .eq('receita_id_legado', realRecipeId);
+
           if (ingredientsError) {
-            console.error(`Error fetching ingredients for recipe ${receitaIdLegado}:`, ingredientsError);
+            console.error(`Error fetching ingredients for recipe ${realRecipeId}:`, ingredientsError);
             continue;
           }
+
+          if (!ingredients || ingredients.length === 0) {
+            console.log(`No ingredients found for recipe ${realRecipeId}`);
+            continue;
+          }
+
+          console.log(`Found ${ingredients.length} ingredients for recipe ${realRecipeId}`);
           
-          console.log(`Found ${ingredients?.length || 0} ingredients for recipe ${receitaIdLegado}`);
+          // Calculate quantity multiplier based on servings needed vs recipe base
+          const recipeBaseServings = recipe.quantidade_refeicoes || 100;
+          const neededServings = 100; // Default servings needed
+          const multiplier = neededServings / recipeBaseServings;
           
-          if (ingredients && ingredients.length > 0) {
-            for (const ingredient of ingredients) {
-              const baseId = ingredient.produto_base_id;
+          console.log(`Recipe serves ${recipeBaseServings}, need ${neededServings}, multiplier: ${multiplier}`);
+          
+          // Process each ingredient
+          for (const ingredient of ingredients) {
+            const baseId = ingredient.produto_base_id;
+            if (!baseId) {
+              console.log(`Skipping ingredient without produto_base_id: ${ingredient.nome}`);
+              continue;
+            }
+            
+            // Calculate adjusted quantity
+            const baseQuantity = parseFloat(ingredient.quantidade?.toString()) || 0;
+            const adjustedQuantity = baseQuantity * multiplier;
+            
+            console.log(`Ingredient: ${ingredient.nome} - Base: ${baseQuantity} - Adjusted: ${adjustedQuantity} - Unit: ${ingredient.unidade}`);
+            
+            if (adjustedQuantity > 0) {
               const key = baseId;
               
-              // Get quantity from database
-              let quantity = parseFloat(ingredient.quantidade?.toString()) || 0;
-              
-              console.log(`Ingredient: ${ingredient.nome} - Quantity: ${quantity} - Base ID: ${baseId}`);
-              
-              if (quantity > 0 && baseId) {
-                if (ingredientMap.has(key)) {
-                  const existing = ingredientMap.get(key);
-                  existing.quantity += quantity;
-                  console.log(`Updated existing ingredient: ${existing.name} - New total: ${existing.quantity}`);
-                } else {
-                  const firstProduct = productsByBase.get(baseId)?.[0];
-                  if (firstProduct) {
-                    const newIngredient = {
-                      produto_base_id: baseId,
-                      name: ingredient.nome || firstProduct.descricao,
-                      quantity: quantity,
-                      unit: ingredient.unidade || firstProduct.unidade || 'kg',
-                      category: firstProduct.categoria_descricao || 'Outros',
-                      opcoes_embalagem: productsByBase.get(baseId) || []
-                    };
-                    ingredientMap.set(key, newIngredient);
-                    console.log(`Added new ingredient: ${newIngredient.name} - Quantity: ${newIngredient.quantity}`);
-                  } else {
-                    console.log(`No product found for base ID: ${baseId}`);
-                  }
-                }
+              if (ingredientMap.has(key)) {
+                const existing = ingredientMap.get(key);
+                existing.quantity += adjustedQuantity;
+                existing.recipes.push(recipe.nome_receita);
+                console.log(`Updated existing ingredient: ${existing.name} - New total: ${existing.quantity}`);
               } else {
-                console.log(`Skipping ingredient with zero quantity or missing base ID: ${ingredient.nome}`);
+                const firstProduct = productsByBase.get(baseId)?.[0];
+                if (firstProduct) {
+                  const newIngredient = {
+                    produto_base_id: baseId,
+                    name: ingredient.nome || firstProduct.descricao,
+                    quantity: adjustedQuantity,
+                    unit: ingredient.unidade || firstProduct.unidade || 'kg',
+                    category: firstProduct.categoria_descricao || 'Outros',
+                    opcoes_embalagem: productsByBase.get(baseId) || [],
+                    recipes: [recipe.nome_receita]
+                  };
+                  ingredientMap.set(key, newIngredient);
+                  console.log(`Added new ingredient: ${newIngredient.name} - Quantity: ${newIngredient.quantity}`);
+                } else {
+                  console.log(`No product found for base ID: ${baseId}`);
+                }
               }
+            } else {
+              console.log(`Skipping ingredient with zero quantity: ${ingredient.nome}`);
             }
-          } else {
-            console.log(`No ingredients found for recipe ${receitaIdLegado}`);
           }
-        } else {
-          console.log('No receita_id_legado found in menu item');
+          
+        } catch (error) {
+          console.error(`Error processing recipe ${recipeId}:`, error);
         }
       }
     } else {
