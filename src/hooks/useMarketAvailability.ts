@@ -189,7 +189,7 @@ export const useMarketAvailability = () => {
       // Get recipe ingredients with new produto_base_descricao column
       const { data: ingredients, error: ingredientsError } = await supabase
         .from('receita_ingredientes')
-        .select('produto_base_id, quantidade, unidade, nome, produto_base_descricao')
+        .select('produto_base_id, quantidade, unidade, nome, produto_base_descricao, quantidade_refeicoes, categoria_descricao')
         .eq('receita_id_legado', receitaId);
         
       if (ingredientsError || !ingredients?.length) {
@@ -231,10 +231,10 @@ export const useMarketAvailability = () => {
   // Fallback basic cost calculation with scaling support
   const calculateBasicRecipeCost = async (receitaId: string, scalingFactor: number = 1): Promise<number> => {
     try {
-      // Get recipe ingredients with quantities
+      // Get recipe ingredients with quantities and new columns
       const { data: ingredientsData, error } = await supabase
         .from('receita_ingredientes')
-        .select('produto_base_id, quantidade, unidade, nome')
+        .select('produto_base_id, quantidade, unidade, nome, quantidade_refeicoes, categoria_descricao')
         .eq('receita_id_legado', receitaId)
         .not('produto_base_id', 'is', null);
 
@@ -252,7 +252,9 @@ export const useMarketAvailability = () => {
         if (marketIngredient && marketIngredient.preco > 0) {
           // Convert units and calculate proportional cost with scaling
           const baseQuantity = parseFloat(ingredient.quantidade?.toString()) || 0;
-          const scaledQuantity = baseQuantity * scalingFactor; // Apply scaling factor
+          const baseServings = ingredient.quantidade_refeicoes || 1;
+          // Calculate proportional quantity based on original servings, then apply scaling factor
+          const proportionalQuantity = (baseQuantity / baseServings) * scalingFactor;
           const packageQuantity = parseFloat(marketIngredient.quantidade_embalagem?.toString()) || 1;
           
           // Use promotion price if available
@@ -261,11 +263,11 @@ export const useMarketAvailability = () => {
             marketIngredient.preco;
           
           // Calculate proportional cost based on packaging and scaling
-          const proportionalCost = (scaledQuantity / packageQuantity) * unitPrice;
+          const proportionalCost = (proportionalQuantity / packageQuantity) * unitPrice;
           totalCost += proportionalCost;
           foundIngredients++;
           
-          console.log(`Ingrediente: ${ingredient.nome} - Qtd original: ${baseQuantity} - Qtd escalonada: ${scaledQuantity} - Preço unit: R$ ${unitPrice.toFixed(2)} - Custo: R$ ${proportionalCost.toFixed(2)}`);
+          console.log(`Ingrediente: ${ingredient.nome} - Qtd original: ${baseQuantity} - Qtd proporcional: ${proportionalQuantity} - Preço unit: R$ ${unitPrice.toFixed(2)} - Custo: R$ ${proportionalCost.toFixed(2)}`);
         } else {
           console.log(`Ingrediente não encontrado no mercado: ${ingredient.nome} (base_id: ${ingredient.produto_base_id})`);
         }

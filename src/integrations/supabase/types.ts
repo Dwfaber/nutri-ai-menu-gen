@@ -571,6 +571,7 @@ export type Database = {
       }
       receita_ingredientes: {
         Row: {
+          categoria_descricao: string | null
           created_at: string
           id: string
           nome: string | null
@@ -579,6 +580,7 @@ export type Database = {
           produto_base_id: number | null
           produto_id: number | null
           quantidade: number
+          quantidade_refeicoes: number | null
           receita_id_legado: string
           receita_produto_classificacao_id: number | null
           receita_produto_id: number | null
@@ -589,6 +591,7 @@ export type Database = {
           user_name: string | null
         }
         Insert: {
+          categoria_descricao?: string | null
           created_at?: string
           id?: string
           nome?: string | null
@@ -597,6 +600,7 @@ export type Database = {
           produto_base_id?: number | null
           produto_id?: number | null
           quantidade?: number
+          quantidade_refeicoes?: number | null
           receita_id_legado: string
           receita_produto_classificacao_id?: number | null
           receita_produto_id?: number | null
@@ -607,6 +611,7 @@ export type Database = {
           user_name?: string | null
         }
         Update: {
+          categoria_descricao?: string | null
           created_at?: string
           id?: string
           nome?: string | null
@@ -615,6 +620,7 @@ export type Database = {
           produto_base_id?: number | null
           produto_id?: number | null
           quantidade?: number
+          quantidade_refeicoes?: number | null
           receita_id_legado?: string
           receita_produto_classificacao_id?: number | null
           receita_produto_id?: number | null
