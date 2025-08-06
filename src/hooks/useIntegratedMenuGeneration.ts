@@ -301,7 +301,7 @@ export const useIntegratedMenuGeneration = () => {
       
       console.log('Gerando cardápio com IA integrada...');
       
-      // Use GPT Assistant para gerar cardápio com custos reais
+      // Use GPT Assistant para gerar cardápio com custos reais e proporções corretas
       const { data, error: functionError } = await supabase.functions.invoke('gpt-assistant', {
         body: {
           action: 'generateMenu',
@@ -311,7 +311,10 @@ export const useIntegratedMenuGeneration = () => {
           preferences: preferences?.join(', ') || '',
           weekPeriod,
           totalEmployees: clientToUse.total_funcionarios || 100,
-          totalMealsPerMonth: clientToUse.total_refeicoes_mes || 2000
+          totalMealsPerMonth: clientToUse.total_refeicoes_mes || 2000,
+          // Instruir IA a usar quantidade_refeicoes para cálculos proporcionais
+          useProportionalCalculation: true,
+          targetServings: clientToUse.total_funcionarios || 100
         }
       });
 

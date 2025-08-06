@@ -164,42 +164,72 @@ export const useMarketAvailability = () => {
     return marketIngredients.some(ing => ing.produto_base_id === produtoBaseId);
   };
 
-  // Calculate real cost of a recipe using GPT Assistant for intelligent cost calculation
-  const calculateRecipeRealCost = async (receitaId: string): Promise<number> => {
+  // Calculate real cost of a recipe using proportional scaling and AI analysis
+  const calculateRecipeRealCost = async (receitaId: string, targetServings?: number): Promise<number> => {
     try {
-      console.log(`Calculando custo real da receita ${receitaId} com IA...`);
+      console.log(`Calculando custo real da receita ${receitaId} para ${targetServings || 'servings originais'}...`);
       
-      // Use GPT Assistant para calcular custo real com análise inteligente
-      const { data, error: functionError } = await supabase.functions.invoke('gpt-assistant', {
-        body: {
-          action: 'calculateRecipeCost',
-          recipeId: receitaId,
-          marketProducts: marketIngredients,
-          includeOptimizations: true
-        }
-      });
-
-      if (functionError) {
-        console.error('Erro na função GPT para cálculo de custo:', functionError);
-        // Fallback to basic calculation
+      // Get recipe info including quantidade_refeicoes for proper scaling
+      const { data: recipeData, error: recipeError } = await supabase
+        .from('receitas_legado')
+        .select('quantidade_refeicoes, porcoes')
+        .eq('receita_id_legado', receitaId)
+        .single();
+        
+      if (recipeError || !recipeData) {
+        console.error('Recipe not found:', recipeError);
         return await calculateBasicRecipeCost(receitaId);
       }
+      
+      const originalServings = recipeData.quantidade_refeicoes || recipeData.porcoes || 1;
+      const scalingFactor = targetServings ? (targetServings / originalServings) : 1;
+      
+      console.log(`Recipe serves ${originalServings}, scaling factor: ${scalingFactor}`);
+      
+      // Get recipe ingredients with new produto_base_descricao column
+      const { data: ingredients, error: ingredientsError } = await supabase
+        .from('receita_ingredientes')
+        .select('produto_base_id, quantidade, unidade, nome, produto_base_descricao')
+        .eq('receita_id_legado', receitaId);
+        
+      if (ingredientsError || !ingredients?.length) {
+        console.error('Ingredients not found:', ingredientsError);
+        return 0;
+      }
+      
+      // Try AI-powered calculation with proportional scaling
+      try {
+        const { data, error: functionError } = await supabase.functions.invoke('gpt-assistant', {
+          body: {
+            action: 'calculateRecipeCost',
+            recipeId: receitaId,
+            ingredients: ingredients,
+            scalingFactor: scalingFactor,
+            originalServings: originalServings,
+            targetServings: targetServings,
+            marketProducts: marketIngredients,
+            includeOptimizations: true
+          }
+        });
 
-      if (data.success && data.cost > 0) {
-        console.log(`Custo calculado pela IA: R$ ${data.cost.toFixed(2)}`);
-        return data.cost;
+        if (!functionError && data.success && data.cost > 0) {
+          console.log(`Custo calculado pela IA com proporção: R$ ${data.cost.toFixed(2)}`);
+          return data.cost;
+        }
+      } catch (aiError) {
+        console.warn('AI calculation failed, using fallback:', aiError);
       }
 
-      // Fallback to basic calculation
-      return await calculateBasicRecipeCost(receitaId);
+      // Fallback to basic calculation with scaling
+      return await calculateBasicRecipeCost(receitaId, scalingFactor);
     } catch (error) {
-      console.error('Error calculating recipe real cost with AI:', error);
+      console.error('Error calculating recipe real cost:', error);
       return await calculateBasicRecipeCost(receitaId);
     }
   };
 
-  // Fallback basic cost calculation
-  const calculateBasicRecipeCost = async (receitaId: string): Promise<number> => {
+  // Fallback basic cost calculation with scaling support
+  const calculateBasicRecipeCost = async (receitaId: string, scalingFactor: number = 1): Promise<number> => {
     try {
       // Get recipe ingredients with quantities
       const { data: ingredientsData, error } = await supabase
@@ -220,8 +250,9 @@ export const useMarketAvailability = () => {
         );
 
         if (marketIngredient && marketIngredient.preco > 0) {
-          // Convert units and calculate proportional cost
-          const quantity = parseFloat(ingredient.quantidade?.toString()) || 0;
+          // Convert units and calculate proportional cost with scaling
+          const baseQuantity = parseFloat(ingredient.quantidade?.toString()) || 0;
+          const scaledQuantity = baseQuantity * scalingFactor; // Apply scaling factor
           const packageQuantity = parseFloat(marketIngredient.quantidade_embalagem?.toString()) || 1;
           
           // Use promotion price if available
@@ -229,12 +260,12 @@ export const useMarketAvailability = () => {
             marketIngredient.preco * 0.85 : // 15% discount on promotion
             marketIngredient.preco;
           
-          // Calculate proportional cost based on packaging
-          const proportionalCost = (quantity / packageQuantity) * unitPrice;
+          // Calculate proportional cost based on packaging and scaling
+          const proportionalCost = (scaledQuantity / packageQuantity) * unitPrice;
           totalCost += proportionalCost;
           foundIngredients++;
           
-          console.log(`Ingrediente: ${ingredient.nome} - Qtd: ${quantity} - Preço unit: R$ ${unitPrice.toFixed(2)} - Custo: R$ ${proportionalCost.toFixed(2)}`);
+          console.log(`Ingrediente: ${ingredient.nome} - Qtd original: ${baseQuantity} - Qtd escalonada: ${scaledQuantity} - Preço unit: R$ ${unitPrice.toFixed(2)} - Custo: R$ ${proportionalCost.toFixed(2)}`);
         } else {
           console.log(`Ingrediente não encontrado no mercado: ${ingredient.nome} (base_id: ${ingredient.produto_base_id})`);
         }
@@ -256,7 +287,7 @@ export const useMarketAvailability = () => {
 
   // Calculate cost per serving for a recipe
   const calculateCostPerServing = async (receitaId: string, servings: number): Promise<number> => {
-    const totalCost = await calculateRecipeRealCost(receitaId);
+    const totalCost = await calculateRecipeRealCost(receitaId, servings);
     return servings > 0 ? totalCost / servings : 0;
   };
 
