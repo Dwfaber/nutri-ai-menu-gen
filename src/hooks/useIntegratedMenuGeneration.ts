@@ -300,6 +300,13 @@ export const useIntegratedMenuGeneration = () => {
       setError(null);
       
       console.log('Gerando cardápio com IA integrada...');
+      console.log('Cliente selecionado:', {
+        id: clientToUse.cliente_id_legado || clientToUse.id,
+        nome: clientToUse.nome_empresa,
+        funcionarios: clientToUse.total_funcionarios,
+        custo_maximo: clientToUse.custo_maximo_refeicao,
+        restricoes: clientToUse.restricoes_alimentares
+      });
       
       // Use GPT Assistant para gerar cardápio com custos reais e proporções corretas
       const { data, error: functionError } = await supabase.functions.invoke('gpt-assistant', {
@@ -318,17 +325,28 @@ export const useIntegratedMenuGeneration = () => {
         }
       });
 
+      console.log('Resposta da função GPT Assistant:', { data, functionError });
+
       if (functionError) {
         console.error('Erro na função GPT:', functionError);
         throw new Error(functionError.message || 'Erro ao gerar cardápio com IA');
       }
 
-      if (!data.success) {
-        throw new Error(data.error || 'Erro na geração do cardápio');
+      if (!data || !data.success) {
+        console.error('Dados inválidos da função GPT:', data);
+        throw new Error(data?.error || 'Erro na geração do cardápio');
       }
 
       const aiGeneratedMenu = data.menu;
       console.log('Cardápio gerado pela IA:', aiGeneratedMenu);
+
+      // Validar se o cardápio tem custo válido
+      if (!aiGeneratedMenu || aiGeneratedMenu.total_cost === 0) {
+        console.warn('Cardápio gerado com custo zero - verificando fallback...');
+        if (aiGeneratedMenu?.summary?.fallback_used) {
+          console.log('Sistema de fallback foi usado, mas retornou custo zero');
+        }
+      }
 
       // Processar o cardápio retornado pela IA
       if (!aiGeneratedMenu || !aiGeneratedMenu.recipes) {

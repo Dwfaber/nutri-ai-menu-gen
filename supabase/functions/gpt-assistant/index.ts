@@ -588,7 +588,7 @@ ${receitaIngredientes?.slice(0, 30).map(ing => `Receita ${ing.receita_id_legado}
         
         // Continue with normal processing using the enhanced response
         if (assistantResponse) {
-          return await processMenuResponse(assistantResponse, marketProducts, budget, restrictions, totalFuncionarios, {});
+          return await processMenuResponse(supabaseClient, assistantResponse, marketProducts, budget, restrictions, totalFuncionarios, {});
         }
       }
     }
@@ -606,148 +606,9 @@ ${receitaIngredientes?.slice(0, 30).map(ing => `Receita ${ing.receita_id_legado}
     
     const assistantResponse = data.choices[0].message.content;
 
-    // Try to parse JSON response
-    let menuItems;
-    let summary;
-    try {
-      const jsonMatch = assistantResponse.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        const parsedResponse = JSON.parse(jsonMatch[0]);
-        menuItems = parsedResponse.items || [];
-        summary = parsedResponse.summary || {};
-      } else {
-        throw new Error('No JSON found in response');
-      }
-    } catch (parseError) {
-      console.error('JSON parsing error:', parseError);
-      // Fallback: create structured menu from available products
-      menuItems = createFallbackMenu(marketProducts || [], budget, restrictions, totalFuncionarios);
-      summary = {
-        total_cost: menuItems.reduce((sum: number, item: any) => sum + (item.cost || 0), 0),
-        average_cost_per_person: budget,
-        within_budget: true,
-        promotions_used: 0
-      };
-    }
+    // Use centralized response processing
+    return await processMenuResponse(supabaseClient, assistantResponse, marketProducts, budget, restrictions, totalFuncionarios, {});
 
-    // Convert menuItems to recipes format expected by frontend
-    const recipes = menuItems.map((item: any, index: number) => ({
-      id: `recipe_${index + 1}`,
-      name: item.name || `Receita ${index + 1}`,
-      description: item.description || 'Prato nutritivo e saboroso',
-      category: item.category || 'Principal',
-      costPerServing: item.cost || 0,
-      prepTime: item.prepTime || 30,
-      difficulty: item.difficulty || 'Médio',
-      nutritionalInfo: {
-        calories: item.nutritionalInfo?.calories || 450,
-        protein: item.nutritionalInfo?.protein || 25,
-        carbs: item.nutritionalInfo?.carbs || 45,
-        fat: item.nutritionalInfo?.fat || 15,
-        fiber: item.nutritionalInfo?.fiber || 8
-      },
-      ingredients: item.ingredients || [
-        { name: 'Ingrediente principal', quantity: 200, unit: 'g' },
-        { name: 'Temperos', quantity: 10, unit: 'g' }
-      ],
-      instructions: item.instructions || 'Seguir receita padrão'
-    }));
-
-    // Create menu object in the format expected by frontend
-    const menu = {
-      id: Date.now().toString(),
-      total_cost: summary.total_cost || 0,
-      cost_per_meal: summary.average_cost_per_person || 0,
-      within_budget: summary.within_budget || true,
-      recipes: recipes,
-      summary: {
-        total_recipes: recipes.length,
-        total_cost: summary.total_cost || 0,
-        average_cost_per_meal: summary.average_cost_per_person || 0,
-        within_budget: summary.within_budget || true,
-        promotions_used: summary.promotions_used || 0
-      },
-      // Three specialized versions for different audiences
-      versions: {
-        nutritionist: recipes.map(recipe => ({
-          ...recipe,
-          detailedCost: {
-            totalCost: recipe.costPerServing * (recipe.servings || totalFuncionarios),
-            costBreakdown: recipe.ingredients?.map((ing: any, idx: number) => ({
-              ingredient: ing.name,
-              cost: (recipe.costPerServing || 0) * 0.15 * (idx + 1), // Distribute cost among ingredients
-              percentage: Math.round((100 / (recipe.ingredients?.length || 1)) * 100) / 100
-            })) || [],
-            profitMargin: Math.round(((recipe.costPerServing || 0) * 0.2) * 100) / 100
-          },
-          nutritionalAnalysis: {
-            isBalanced: recipe.nutritionalInfo.protein >= 20 && recipe.nutritionalInfo.carbs <= 60,
-            recommendations: [
-              recipe.nutritionalInfo.protein < 20 ? "Aumentar proteína" : "Proteína adequada",
-              recipe.nutritionalInfo.fiber < 5 ? "Adicionar fibras" : "Fibras adequadas"
-            ].filter(Boolean),
-            dietaryCompliance: recipe.restrictions || []
-          },
-          costPerServing: recipe.costPerServing,
-          allergens: recipe.allergens || [],
-          substitutions: recipe.substitutions || []
-        })),
-        kitchen: recipes.map(recipe => ({
-          ...recipe,
-          preparationSteps: [
-            { step: 1, instruction: "Preparar todos os ingredientes", timeMinutes: 5, equipment: ["Facas", "Tábuas"] },
-            { step: 2, instruction: recipe.instructions || "Seguir receita padrão", timeMinutes: (recipe.prepTime || 30) - 10, equipment: ["Fogão", "Panelas"] },
-            { step: 3, instruction: "Finalizar preparo e temperar", timeMinutes: 5, equipment: ["Temperos"] }
-          ],
-          ingredientsInGrams: recipe.ingredients?.map((ing: any, idx: number) => ({
-            name: ing.name,
-            weightInGrams: Math.round(ing.quantity * (ing.unit === 'g' ? 1 : ing.unit === 'kg' ? 1000 : 100)),
-            produto_base_id: 1000 + idx, // Placeholder - will be mapped properly
-            preparation: idx % 3 === 0 ? "picado" : idx % 3 === 1 ? "cortado em cubos" : "inteiro"
-          })) || [],
-          cookingTips: [
-            "Manter ingredientes frescos até o momento do preparo",
-            "Seguir ordem de adição dos ingredientes",
-            "Controlar temperatura durante todo o processo"
-          ],
-          yieldInformation: {
-            expectedYield: recipe.servings || totalFuncionarios,
-            servingSize: "200g por porção",
-            wastePercentage: 5
-          },
-          difficulty: recipe.difficulty,
-          servings: recipe.servings || totalFuncionarios
-        })),
-        client: recipes.map(recipe => ({
-          id: recipe.id,
-          name: recipe.name,
-          description: recipe.description || "Prato nutritivo e saboroso, preparado com ingredientes frescos",
-          category: recipe.category,
-          nutritionalHighlights: {
-            calories: recipe.nutritionalInfo.calories,
-            healthBenefits: [
-              recipe.nutritionalInfo.protein >= 25 ? "Rico em proteínas" : "Fonte de proteínas",
-              recipe.nutritionalInfo.fiber >= 8 ? "Rico em fibras" : "Fonte de fibras",
-              "Balanceado nutricionalmente"
-            ]
-          },
-          allergenInfo: recipe.restrictions || [],
-          isVegetarian: !recipe.category?.includes('protein') || recipe.category === 'vegetable',
-          isVegan: recipe.category === 'vegetable',
-          isGlutenFree: !recipe.restrictions?.includes('gluten')
-        }))
-      },
-      marketConnection: {
-        totalProductsBase: marketProducts?.length || 0,
-        connectedIngredients: Math.round((marketProducts?.length || 0) * 0.8), // Estimate 80% connection
-        missingConnections: ["Temperos especiais", "Ervas frescas"] // Common missing items
-      }
-    };
-
-    return new Response(
-      JSON.stringify({ success: true, menu, assistantResponse }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
 
   } catch (error) {
     console.error('Error generating menu with assistant:', error);
@@ -826,14 +687,26 @@ Analise o comando e retorne em JSON:
   }
 }
 
-function createFallbackMenu(products: any[], budget: number, restrictions: string[], totalFuncionarios: number) {
-  console.log('Creating realistic fallback menu...');
+async function createFallbackMenu(supabaseClient: any, products: any[], budget: number, restrictions: string[], totalFuncionarios: number) {
+  console.log('Creating smart fallback menu with real cost calculations...');
   
+  // Get real recipes from database for fallback
+  const { data: receitas } = await supabaseClient
+    .from('receitas_legado')
+    .select('receita_id_legado, nome_receita, categoria_descricao, porcoes, quantidade_refeicoes, custo_total')
+    .eq('inativa', false)
+    .limit(20);
+
+  const { data: receitaIngredientes } = await supabaseClient
+    .from('receita_ingredientes')
+    .select('receita_id_legado, produto_base_id, quantidade, unidade, produto_base_descricao, quantidade_refeicoes')
+    .limit(100);
+
   // Filter out inappropriate products (non-food items)
   const inappropriateTerms = ['couro', 'pele', 'saco', 'embalagem', 'papel', 'plástico', 'vidro'];
   const validProducts = products.filter(product => {
     const name = (product.descricao || '').toLowerCase();
-    const hasPrice = product.preco > 2 && product.preco < 50; // Reasonable price range
+    const hasPrice = product.preco > 0.50 && product.preco < 100; // Reasonable price range
     const notInappropriate = !inappropriateTerms.some(term => name.includes(term));
     
     return hasPrice && notInappropriate && product.produto_base_id;
@@ -842,118 +715,209 @@ function createFallbackMenu(products: any[], budget: number, restrictions: strin
   const days = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta'];
   const menuItems: any[] = [];
 
-  // Create realistic menu for each day
+  // Function to calculate real ingredient cost
+  const calculateIngredientCost = (ingredient: any, marketProduct: any, targetServings: number) => {
+    if (!ingredient || !marketProduct) return 0;
+    
+    const originalServings = ingredient.quantidade_refeicoes || 1;
+    const scalingFactor = targetServings / originalServings;
+    const adjustedQuantity = (ingredient.quantidade || 0) * scalingFactor;
+    const unitPrice = marketProduct.preco || 0;
+    
+    return adjustedQuantity * unitPrice;
+  };
+
+  // Function to calculate total recipe cost
+  const calculateRecipeCost = (receitaId: string, targetServings: number) => {
+    const ingredients = receitaIngredientes?.filter(ing => ing.receita_id_legado === receitaId) || [];
+    let totalCost = 0;
+    
+    for (const ingredient of ingredients) {
+      const marketProduct = validProducts.find(p => p.produto_base_id === ingredient.produto_base_id);
+      if (marketProduct) {
+        totalCost += calculateIngredientCost(ingredient, marketProduct, targetServings);
+      }
+    }
+    
+    return Math.max(totalCost, 3.0); // Minimum viable cost
+  };
+
+  // Create realistic menu for each day using real recipes when possible
   days.forEach((day, dayIndex) => {
-    // Protein - look for meat/chicken products
-    const proteins = validProducts.filter(p => {
-      const desc = (p.descricao || '').toLowerCase();
-      return desc.includes('frango') || desc.includes('boi') || desc.includes('carne') || 
-             desc.includes('peixe') || (p.categoria_descricao === 'Carnes');
-    });
+    const dayRecipes = receitas?.slice(dayIndex * 4, (dayIndex + 1) * 4) || [];
     
-    if (proteins.length > 0) {
-      const protein = proteins[dayIndex % proteins.length];
-      menuItems.push({
-        id: `protein_${dayIndex}`,
-        name: `${protein.descricao} Grelhado`,
-        category: 'protein',
-        cost: Math.min(protein.preco * 0.3, budget * 0.4),
-        servings: totalFuncionarios,
-        day: day,
-        nutritionalInfo: { calories: 350, protein: 30, carbs: 5, fat: 15 },
-        ingredients: [{
-          nome: protein.descricao,
-          produto_base_id: protein.produto_base_id,
-          quantidade: 150,
-          unidade: protein.unidade || 'g'
-        }],
-        description: `${protein.descricao} temperado e grelhado`
+    // Try to use real recipes first
+    if (dayRecipes.length > 0) {
+      dayRecipes.forEach((receita, recipeIndex) => {
+        const realCost = calculateRecipeCost(receita.receita_id_legado, totalFuncionarios);
+        const adjustedCost = Math.min(realCost, budget * 0.8); // Stay within budget
+        
+        const recipeIngredients = receitaIngredientes?.filter(ing => 
+          ing.receita_id_legado === receita.receita_id_legado
+        ) || [];
+        
+        const categoryMap: { [key: string]: string } = {
+          'Carnes': 'protein',
+          'Proteína': 'protein',
+          'Carboidrato': 'carb',
+          'Gêneros': 'carb',
+          'Verduras': 'vegetable',
+          'Hortifruti': 'vegetable',
+          'Frutas': 'fruit',
+          'Sobremesa': 'fruit'
+        };
+        
+        const category = categoryMap[receita.categoria_descricao || ''] || 
+                        (recipeIndex % 4 === 0 ? 'protein' : 
+                         recipeIndex % 4 === 1 ? 'vegetable' : 
+                         recipeIndex % 4 === 2 ? 'carb' : 'fruit');
+
+        menuItems.push({
+          id: `recipe_${dayIndex}_${recipeIndex}`,
+          name: receita.nome_receita,
+          category: category,
+          cost: adjustedCost,
+          servings: totalFuncionarios,
+          day: day,
+          receita_id_legado: receita.receita_id_legado,
+          nutritionalInfo: { 
+            calories: 300 + (recipeIndex * 50), 
+            protein: category === 'protein' ? 25 : 10, 
+            carbs: category === 'carb' ? 40 : 15, 
+            fat: category === 'protein' ? 12 : 5 
+          },
+          ingredients: recipeIngredients.map(ing => ({
+            nome: ing.produto_base_descricao || 'Ingrediente',
+            produto_base_id: ing.produto_base_id,
+            quantidade: (ing.quantidade || 0) * (totalFuncionarios / (ing.quantidade_refeicoes || 1)),
+            unidade: ing.unidade || 'g'
+          })),
+          description: `Receita tradicional: ${receita.nome_receita}`
+        });
       });
+    } else {
+      // Fallback to product-based menu if no recipes available
+      const proteins = validProducts.filter(p => {
+        const desc = (p.descricao || '').toLowerCase();
+        return desc.includes('frango') || desc.includes('boi') || desc.includes('carne') || 
+               desc.includes('peixe') || (p.categoria_descricao === 'Carnes');
+      });
+      
+      if (proteins.length > 0) {
+        const protein = proteins[dayIndex % proteins.length];
+        const realCost = (protein.preco || 0) * 0.2 * totalFuncionarios; // 200g per person
+        menuItems.push({
+          id: `fallback_protein_${dayIndex}`,
+          name: `${protein.descricao} Grelhado`,
+          category: 'protein',
+          cost: Math.min(realCost, budget * 0.4),
+          servings: totalFuncionarios,
+          day: day,
+          nutritionalInfo: { calories: 350, protein: 30, carbs: 5, fat: 15 },
+          ingredients: [{
+            nome: protein.descricao,
+            produto_base_id: protein.produto_base_id,
+            quantidade: 200,
+            unidade: protein.unidade || 'g'
+          }],
+          description: `${protein.descricao} temperado e grelhado`
+        });
+      }
     }
 
-    // Vegetables/Salads - look for vegetables
-    const vegetables = validProducts.filter(p => {
-      const desc = (p.descricao || '').toLowerCase();
-      return desc.includes('alface') || desc.includes('tomate') || desc.includes('cenoura') ||
-             desc.includes('verdura') || (p.categoria_descricao === 'Hortifruti');
-    });
-    
-    if (vegetables.length > 0) {
-      const vegetable = vegetables[dayIndex % vegetables.length];
-      menuItems.push({
-        id: `vegetable_${dayIndex}`,
-        name: `Salada de ${vegetable.descricao}`,
-        category: 'vegetable',
-        cost: Math.min(vegetable.preco * 0.2, budget * 0.25),
-        servings: totalFuncionarios,
-        day: day,
-        nutritionalInfo: { calories: 50, protein: 2, carbs: 8, fat: 1 },
-        ingredients: [{
-          nome: vegetable.descricao,
-          produto_base_id: vegetable.produto_base_id,
-          quantidade: 80,
-          unidade: vegetable.unidade || 'g'
-        }],
-        description: `Salada fresca de ${vegetable.descricao}`
-      });
-    }
+      // Add complementary dishes if needed to reach 4 per day
+      const currentDayItems = menuItems.filter(item => item.day === day);
+      const neededItems = 4 - currentDayItems.length;
+      
+      if (neededItems > 0) {
+        // Add vegetables
+        const vegetables = validProducts.filter(p => {
+          const desc = (p.descricao || '').toLowerCase();
+          return desc.includes('alface') || desc.includes('tomate') || desc.includes('cenoura') ||
+                 desc.includes('verdura') || (p.categoria_descricao === 'Hortifruti');
+        });
+        
+        if (vegetables.length > 0 && neededItems > 0) {
+          const vegetable = vegetables[dayIndex % vegetables.length];
+          const vegCost = (vegetable.preco || 0) * 0.08 * totalFuncionarios; // 80g per person
+          menuItems.push({
+            id: `fallback_vegetable_${dayIndex}`,
+            name: `Salada de ${vegetable.descricao}`,
+            category: 'vegetable',
+            cost: Math.min(vegCost, budget * 0.25),
+            servings: totalFuncionarios,
+            day: day,
+            nutritionalInfo: { calories: 50, protein: 2, carbs: 8, fat: 1 },
+            ingredients: [{
+              nome: vegetable.descricao,
+              produto_base_id: vegetable.produto_base_id,
+              quantidade: 80,
+              unidade: vegetable.unidade || 'g'
+            }],
+            description: `Salada fresca de ${vegetable.descricao}`
+          });
+        }
 
-    // Carbohydrates - look for rice, beans, etc.
-    const carbs = validProducts.filter(p => {
-      const desc = (p.descricao || '').toLowerCase();
-      return desc.includes('arroz') || desc.includes('feijão') || desc.includes('batata') ||
-             desc.includes('macarrão') || (p.categoria_descricao === 'Gêneros');
-    });
-    
-    if (carbs.length > 0) {
-      const carb = carbs[dayIndex % carbs.length];
-      menuItems.push({
-        id: `carb_${dayIndex}`,
-        name: `${carb.descricao} Temperado`,
-        category: 'carb',
-        cost: Math.min(carb.preco * 0.2, budget * 0.25),
-        servings: totalFuncionarios,
-        day: day,
-        nutritionalInfo: { calories: 200, protein: 8, carbs: 40, fat: 2 },
-        ingredients: [{
-          nome: carb.descricao,
-          produto_base_id: carb.produto_base_id,
-          quantidade: 100,
-          unidade: carb.unidade || 'g'
-        }],
-        description: `${carb.descricao} bem temperado`
-      });
-    }
+        // Add carbohydrates
+        const carbs = validProducts.filter(p => {
+          const desc = (p.descricao || '').toLowerCase();
+          return desc.includes('arroz') || desc.includes('feijão') || desc.includes('batata') ||
+                 desc.includes('macarrão') || (p.categoria_descricao === 'Gêneros');
+        });
+        
+        if (carbs.length > 0 && neededItems > 1) {
+          const carb = carbs[dayIndex % carbs.length];
+          const carbCost = (carb.preco || 0) * 0.1 * totalFuncionarios; // 100g per person
+          menuItems.push({
+            id: `fallback_carb_${dayIndex}`,
+            name: `${carb.descricao} Temperado`,
+            category: 'carb',
+            cost: Math.min(carbCost, budget * 0.25),
+            servings: totalFuncionarios,
+            day: day,
+            nutritionalInfo: { calories: 200, protein: 8, carbs: 40, fat: 2 },
+            ingredients: [{
+              nome: carb.descricao,
+              produto_base_id: carb.produto_base_id,
+              quantidade: 100,
+              unidade: carb.unidade || 'g'
+            }],
+            description: `${carb.descricao} bem temperado`
+          });
+        }
 
-    // Fruits - look for fruits
-    const fruits = validProducts.filter(p => {
-      const desc = (p.descricao || '').toLowerCase();
-      return desc.includes('banana') || desc.includes('maçã') || desc.includes('laranja') ||
-             desc.includes('fruta') || desc.includes('uva');
-    });
-    
-    if (fruits.length > 0) {
-      const fruit = fruits[dayIndex % fruits.length];
-      menuItems.push({
-        id: `fruit_${dayIndex}`,
-        name: `${fruit.descricao} Natural`,
-        category: 'fruit',
-        cost: Math.min(fruit.preco * 0.15, budget * 0.15),
-        servings: totalFuncionarios,
-        day: day,
-        nutritionalInfo: { calories: 80, protein: 1, carbs: 20, fat: 0 },
-        ingredients: [{
-          nome: fruit.descricao,
-          produto_base_id: fruit.produto_base_id,
-          quantidade: 120,
-          unidade: fruit.unidade || 'g'
-        }],
-        description: `${fruit.descricao} fresca da estação`
-      });
+        // Add fruits
+        const fruits = validProducts.filter(p => {
+          const desc = (p.descricao || '').toLowerCase();
+          return desc.includes('banana') || desc.includes('maçã') || desc.includes('laranja') ||
+                 desc.includes('fruta') || desc.includes('uva');
+        });
+        
+        if (fruits.length > 0 && neededItems > 2) {
+          const fruit = fruits[dayIndex % fruits.length];
+          const fruitCost = (fruit.preco || 0) * 0.12 * totalFuncionarios; // 120g per person
+          menuItems.push({
+            id: `fallback_fruit_${dayIndex}`,
+            name: `${fruit.descricao} Natural`,
+            category: 'fruit',
+            cost: Math.min(fruitCost, budget * 0.15),
+            servings: totalFuncionarios,
+            day: day,
+            nutritionalInfo: { calories: 80, protein: 1, carbs: 20, fat: 0 },
+            ingredients: [{
+              nome: fruit.descricao,
+              produto_base_id: fruit.produto_base_id,
+              quantidade: 120,
+              unidade: fruit.unidade || 'g'
+            }],
+            description: `${fruit.descricao} fresca da estação`
+          });
+        }
+      }
     }
   });
 
-  console.log(`Created realistic fallback menu with ${menuItems.length} items`);
+  console.log(`Created smart fallback menu with ${menuItems.length} items using real recipes and cost calculations`);
   return menuItems;
 }
 
@@ -1196,66 +1160,123 @@ async function executeFunctionValidateIngredients(supabaseClient: any, args: any
   }
 }
 
-async function processMenuResponse(assistantResponse: string, marketProducts: any[], budget: number, restrictions: string[], totalFuncionarios: number, summary: any) {
-  // Try to parse JSON response
+async function processMenuResponse(supabaseClient: any, assistantResponse: string, marketProducts: any[], budget: number, restrictions: string[], totalFuncionarios: number, summary: any) {
+  // Try to parse JSON response with improved error handling
   let menuItems;
   try {
-    const jsonMatch = assistantResponse.match(/\{[\s\S]*\}/);
+    console.log('Parsing GPT Assistant response...');
+    
+    // Try multiple JSON extraction methods
+    let jsonMatch = assistantResponse.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      // Try finding JSON between code blocks
+      jsonMatch = assistantResponse.match(/```json\s*(\{[\s\S]*?\})\s*```/);
+      if (jsonMatch) {
+        jsonMatch[0] = jsonMatch[1];
+      }
+    }
+    
     if (jsonMatch) {
       const parsedResponse = JSON.parse(jsonMatch[0]);
-      menuItems = parsedResponse.items || [];
-      summary = parsedResponse.summary || summary;
+      
+      // Validate parsed response structure
+      if (parsedResponse && (parsedResponse.items || parsedResponse.recipes)) {
+        menuItems = parsedResponse.items || parsedResponse.recipes || [];
+        summary = parsedResponse.summary || summary;
+        
+        console.log(`Successfully parsed ${menuItems.length} menu items from GPT response`);
+        
+        // Validate and fix menu items costs
+        menuItems = menuItems.map((item: any) => ({
+          ...item,
+          cost: Math.max(item.cost || 0, 2.0), // Ensure minimum cost
+          servings: item.servings || totalFuncionarios
+        }));
+        
+      } else {
+        throw new Error('Invalid response structure - missing items/recipes');
+      }
     } else {
       throw new Error('No JSON found in response');
     }
   } catch (parseError) {
     console.error('JSON parsing error:', parseError);
-    // Fallback: create structured menu from available products
-    menuItems = createFallbackMenu(marketProducts || [], budget, restrictions, totalFuncionarios);
+    console.log('Creating smart fallback menu with real cost calculations...');
+    
+    // Enhanced fallback: create structured menu using database and market data
+    menuItems = await createFallbackMenu(supabaseClient, marketProducts || [], budget, restrictions, totalFuncionarios);
+    
+    const totalCost = menuItems.reduce((sum: number, item: any) => sum + (item.cost || 0), 0);
     summary = {
-      total_cost: menuItems.reduce((sum: number, item: any) => sum + (item.cost || 0), 0),
-      average_cost_per_person: budget,
-      within_budget: true,
-      promotions_used: 0
+      total_cost: totalCost,
+      average_cost_per_person: totalCost / totalFuncionarios,
+      within_budget: totalCost <= (budget * totalFuncionarios),
+      total_recipes: menuItems.length,
+      promotions_used: menuItems.filter((item: any) => item.promocao).length,
+      fallback_used: true
     };
+    
+    console.log(`Fallback menu created with total cost: R$${totalCost.toFixed(2)}`);
   }
 
-  // Convert menuItems to recipes format expected by frontend
-  const recipes = menuItems.map((item: any, index: number) => ({
-    id: `recipe_${index + 1}`,
-    name: item.name || `Receita ${index + 1}`,
-    description: item.description || 'Prato nutritivo e saboroso',
-    category: item.category || 'Principal',
-    costPerServing: item.cost || 0,
-    prepTime: item.prepTime || 30,
-    difficulty: item.difficulty || 'Médio',
-    nutritionalInfo: {
-      calories: item.nutritionalInfo?.calories || 450,
-      protein: item.nutritionalInfo?.protein || 25,
-      carbs: item.nutritionalInfo?.carbs || 45,
-      fat: item.nutritionalInfo?.fat || 15,
-      fiber: item.nutritionalInfo?.fiber || 8
-    },
-    ingredients: item.ingredients || [
-      { name: 'Ingrediente principal', quantity: 200, unit: 'g' },
-      { name: 'Temperos', quantity: 10, unit: 'g' }
-    ],
-    instructions: item.instructions || 'Seguir receita padrão'
-  }));
+  // Convert menuItems to recipes format expected by frontend with proper cost calculation
+  const recipes = menuItems.map((item: any, index: number) => {
+    // Ensure minimum cost calculation based on ingredients or fallback
+    const baseCost = item.cost || 0;
+    const ingredientCount = item.ingredients?.length || 2;
+    const minimumCost = Math.max(baseCost, ingredientCount * 1.5); // R$1.50 per ingredient minimum
+    
+    return {
+      id: item.receita_id_legado || `recipe_${index + 1}`,
+      name: item.name || `Receita ${index + 1}`,
+      description: item.description || 'Prato nutritivo e saboroso',
+      category: item.category || 'Principal',
+      costPerServing: minimumCost,
+      prepTime: item.prepTime || item.tempo_preparo || 30,
+      difficulty: item.difficulty || 'Médio',
+      day: item.day || 'Sem especificação',
+      nutritionalInfo: {
+        calories: item.nutritionalInfo?.calories || 300 + (index * 50),
+        protein: item.nutritionalInfo?.protein || (item.category === 'protein' ? 25 : 10),
+        carbs: item.nutritionalInfo?.carbs || (item.category === 'carb' ? 45 : 20),
+        fat: item.nutritionalInfo?.fat || 15,
+        fiber: item.nutritionalInfo?.fiber || 8
+      },
+      ingredients: item.ingredients?.map((ing: any) => ({
+        name: ing.nome || ing.name || 'Ingrediente',
+        quantity: ing.quantidade || ing.quantity || 100,
+        unit: ing.unidade || ing.unit || 'g',
+        produto_base_id: ing.produto_base_id
+      })) || [
+        { name: 'Ingrediente principal', quantity: 200, unit: 'g' },
+        { name: 'Temperos', quantity: 10, unit: 'g' }
+      ],
+      instructions: item.instructions || item.modo_preparo || 'Seguir receita padrão',
+      receita_id_legado: item.receita_id_legado,
+      servings: item.servings || totalFuncionarios
+    };
+  });
 
-  // Create menu object in the format expected by frontend
+  // Calculate accurate totals based on recipes
+  const calculatedTotalCost = recipes.reduce((sum: number, recipe: any) => sum + (recipe.costPerServing || 0), 0);
+  const calculatedCostPerMeal = calculatedTotalCost / Math.max(totalFuncionarios, 1);
+  const isWithinBudget = calculatedCostPerMeal <= budget;
+  
+  // Create menu object in the format expected by frontend with accurate calculations
   const menu = {
     id: Date.now().toString(),
-    total_cost: summary.total_cost || 0,
-    cost_per_meal: summary.average_cost_per_person || 0,
-    within_budget: summary.within_budget || true,
+    total_cost: Math.max(calculatedTotalCost, summary.total_cost || 0),
+    cost_per_meal: Math.max(calculatedCostPerMeal, summary.average_cost_per_person || 0),
+    within_budget: isWithinBudget,
     recipes: recipes,
     summary: {
       total_recipes: recipes.length,
-      total_cost: summary.total_cost || 0,
-      average_cost_per_meal: summary.average_cost_per_person || 0,
-      within_budget: summary.within_budget || true,
-      promotions_used: summary.promotions_used || 0
+      total_cost: Math.max(calculatedTotalCost, summary.total_cost || 0),
+      average_cost_per_meal: Math.max(calculatedCostPerMeal, summary.average_cost_per_person || 0),
+      within_budget: isWithinBudget,
+      promotions_used: summary.promotions_used || 0,
+      fallback_used: summary.fallback_used || false,
+      cost_calculation_method: summary.fallback_used ? 'database_fallback' : 'ai_generated'
     },
     functionsUsed: true // Flag to indicate function calling was used
   };
