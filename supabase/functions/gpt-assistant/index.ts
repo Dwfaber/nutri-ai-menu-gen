@@ -828,8 +828,8 @@ async function createFallbackMenu(supabaseClient: any, products: any[], budget: 
     // Add complementary dishes if needed to reach 4 per day
     const currentDayItems = menuItems.filter(item => item.day === day);
     const neededItems = 4 - currentDayItems.length;
-      
-      if (neededItems > 0) {
+    
+    if (neededItems > 0) {
         // Add vegetables
         const vegetables = validProducts.filter(p => {
           const desc = (p.descricao || '').toLowerCase();
@@ -915,7 +915,6 @@ async function createFallbackMenu(supabaseClient: any, products: any[], budget: 
         }
       }
     }
-    } // Close if (neededItems > 0) block
   });
 
   console.log(`Created smart fallback menu with ${menuItems.length} items using real recipes and cost calculations`);
