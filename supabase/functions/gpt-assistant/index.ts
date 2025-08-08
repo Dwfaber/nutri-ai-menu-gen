@@ -825,9 +825,9 @@ async function createFallbackMenu(supabaseClient: any, products: any[], budget: 
       }
     }
 
-      // Add complementary dishes if needed to reach 4 per day
-      const currentDayItems = menuItems.filter(item => item.day === day);
-      const neededItems = 4 - currentDayItems.length;
+    // Add complementary dishes if needed to reach 4 per day
+    const currentDayItems = menuItems.filter(item => item.day === day);
+    const neededItems = 4 - currentDayItems.length;
       
       if (neededItems > 0) {
         // Add vegetables
