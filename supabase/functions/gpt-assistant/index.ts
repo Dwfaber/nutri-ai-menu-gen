@@ -915,6 +915,7 @@ async function createFallbackMenu(supabaseClient: any, products: any[], budget: 
         }
       }
     }
+    } // Close if (neededItems > 0) block
   });
 
   console.log(`Created smart fallback menu with ${menuItems.length} items using real recipes and cost calculations`);
