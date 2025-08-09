@@ -276,13 +276,15 @@ export const useIntegratedMenuGeneration = () => {
     // Use the selected client from context or override with form data
     const clientToUse = selectedClient?.id === formData.clientId ? selectedClient : formData.contractData;
     
-    return generateMenu(weekPeriod, preferences, clientToUse);
+    return generateMenu(weekPeriod, preferences, clientToUse, formData.mealsPerDay, formData.totalMeals);
   };
 
   const generateMenu = async (
     weekPeriod: string,
     preferences?: string[],
-    clientOverride?: any
+    clientOverride?: any,
+    mealsPerDay?: number,
+    totalMeals?: number
   ): Promise<GeneratedMenu | null> => {
     const clientToUse = clientOverride || selectedClient;
     
@@ -317,11 +319,10 @@ export const useIntegratedMenuGeneration = () => {
           restrictions: clientToUse.restricoes_alimentares || [],
           preferences: preferences?.join(', ') || '',
           weekPeriod,
-          totalEmployees: clientToUse.total_funcionarios || 100,
-          totalMealsPerMonth: clientToUse.total_refeicoes_mes || 2000,
-          // Instruir IA a usar quantidade_refeicoes para cálculos proporcionais
-          useProportionalCalculation: true,
-          targetServings: clientToUse.total_funcionarios || 100
+          // Basear nos dados informados pelo usuário
+          targetServings: mealsPerDay || clientToUse.total_funcionarios || 100,
+          totalMeals: totalMeals || ((mealsPerDay || clientToUse.total_funcionarios || 100) * 5),
+          useProportionalCalculation: true
         }
       });
 
@@ -360,7 +361,7 @@ export const useIntegratedMenuGeneration = () => {
         category: recipe.category || recipe.categoria,
         day: recipe.day || recipe.dia,
         cost: recipe.cost || recipe.custo_real || recipe.costPerServing || recipe.custo_por_porcao || recipe.custo_adaptado || 0,
-        servings: recipe.servings || recipe.porcoes || 50,
+        servings: recipe.servings || recipe.porcoes || mealsPerDay || 50,
         ingredients: recipe.ingredients || [],
         nutritionalInfo: recipe.nutritionalInfo || {}
       }));
@@ -535,6 +536,10 @@ export const useIntegratedMenuGeneration = () => {
           menuId: menu.id,
           clientName: menu.clientName,
           budgetPredicted: menu.totalCost,
+          // Quantidades baseadas em refeições
+          servingsPerDay: (menu.recipes?.[0]?.servings) || 50,
+          totalServingsWeek: ((menu.recipes?.[0]?.servings) || 50) * 5,
+          servingsByRecipe: Object.fromEntries(menu.recipes.map((r) => [r.id, r.servings])),
           menuItems: menu.recipes.map(recipe => ({
             receita_id: recipe.id,
             name: recipe.name,

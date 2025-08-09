@@ -32,8 +32,9 @@ serve(async (req) => {
       const actualBudget = budget || client_data?.max_cost_per_meal || 10;
       const actualRestrictions = restrictions || client_data?.dietary_restrictions || [];
       const actualPreferences = preferences || client_data?.preferences || [];
+      const options = { targetServings: body.targetServings || body.mealsPerDay, totalMeals: body.totalMeals, weekPeriod: body.weekPeriod || week_period };
       
-      return await generateMenuWithAssistant(supabaseClient, actualClientId, actualBudget, actualRestrictions, actualPreferences);
+      return await generateMenuWithAssistant(supabaseClient, actualClientId, actualBudget, actualRestrictions, actualPreferences, options);
     } else if (action === 'editMenu' || action === 'edit_menu') {
       return await editMenuWithAssistant(supabaseClient, menuId, command);
     } else {
