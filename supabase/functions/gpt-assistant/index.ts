@@ -1229,6 +1229,7 @@ async function processMenuResponse(supabaseClient: any, assistantResponse: strin
       name: item.name || `Receita ${index + 1}`,
       description: item.description || 'Prato nutritivo e saboroso',
       category: item.category || 'Principal',
+      cost: minimumCost,
       costPerServing: minimumCost,
       prepTime: item.prepTime || item.tempo_preparo || 30,
       difficulty: item.difficulty || 'Médio',

@@ -359,7 +359,7 @@ export const useIntegratedMenuGeneration = () => {
         name: recipe.name || recipe.nome_receita,
         category: recipe.category || recipe.categoria,
         day: recipe.day || recipe.dia,
-        cost: recipe.cost || recipe.custo_real || 0,
+        cost: recipe.cost || recipe.custo_real || recipe.costPerServing || recipe.custo_por_porcao || recipe.custo_adaptado || 0,
         servings: recipe.servings || recipe.porcoes || 50,
         ingredients: recipe.ingredients || [],
         nutritionalInfo: recipe.nutritionalInfo || {}
