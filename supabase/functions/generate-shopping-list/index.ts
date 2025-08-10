@@ -195,7 +195,7 @@ serve(async (req) => {
     // First, get the actual menu with recipe IDs
     const { data: menuData, error: menuError } = await supabaseClient
       .from('generated_menus')
-      .select('receitas_ids')
+      .select('receitas_ids, receitas_adaptadas')
       .eq('id', menuId)
       .single();
 
@@ -223,8 +223,49 @@ serve(async (req) => {
             .single();
 
           if (recipeError || !recipe) {
-            console.log(`Recipe ${realRecipeId} not found in receitas_legado`);
-            continue;
+            console.log(`Recipe ${realRecipeId} not found in receitas_legado, trying receitas_adaptadas fallback`);
+            const adaptedList = menuData.receitas_adaptadas || [];
+            const adapted = adaptedList.find((r: any) => String(r?.receita_id_legado) === String(realRecipeId) || String(r?.receita_id_legado) === String(recipeId));
+            if (adapted && Array.isArray(adapted.ingredientes) && adapted.ingredientes.length > 0) {
+              const recipeBaseServings = adapted.porcoes || 100;
+              const defaultNeededServings = typeof servingsPerDay === 'number' && servingsPerDay > 0 ? servingsPerDay : 100;
+              const recipeNeededServings = (servingsByRecipe && (servingsByRecipe[realRecipeId] || servingsByRecipe[recipeId])) || defaultNeededServings;
+              const multiplier = recipeBaseServings > 0 ? (recipeNeededServings / recipeBaseServings) : 1;
+              console.log(`Fallback adapted recipe multiplier: base=${recipeBaseServings}, need=${recipeNeededServings}, mult=${multiplier}`);
+
+              for (const ing of adapted.ingredientes) {
+                const baseId = ing.produto_base_id;
+                if (!baseId) continue;
+                const baseQuantity = parseFloat((ing.quantidade ?? ing.quantity ?? 0).toString()) || 0;
+                const adjustedQuantity = baseQuantity * multiplier;
+                if (adjustedQuantity <= 0) continue;
+
+                const firstProduct = productsByBase.get(baseId)?.[0];
+                const name = ing.nome || ing.name || firstProduct?.descricao || 'Ingrediente';
+                const unit = ing.unidade || ing.unit || firstProduct?.unidade || 'kg';
+                const category = firstProduct?.categoria_descricao || 'Outros';
+                if (ingredientMap.has(baseId)) {
+                  const existing = ingredientMap.get(baseId);
+                  existing.quantity += adjustedQuantity;
+                  existing.recipes.push(adapted.nome_receita || adapted.nome || `receita_${realRecipeId}`);
+                } else {
+                  ingredientMap.set(baseId, {
+                    produto_base_id: baseId,
+                    name,
+                    quantity: adjustedQuantity,
+                    unit,
+                    category,
+                    opcoes_embalagem: productsByBase.get(baseId) || [] ,
+                    recipes: [adapted.nome_receita || adapted.nome || `receita_${realRecipeId}`]
+                  });
+                }
+              }
+              // Done with fallback for this recipe id
+              continue;
+            } else {
+              // No fallback available for this recipe id
+              continue;
+            }
           }
 
           console.log(`Found recipe: ${recipe.nome_receita} (serves ${recipe.quantidade_refeicoes})`);
@@ -242,6 +283,42 @@ serve(async (req) => {
 
           if (!ingredients || ingredients.length === 0) {
             console.log(`No ingredients found for recipe ${realRecipeId}`);
+            // Try adapted fallback for missing ingredients
+            const adaptedList = menuData.receitas_adaptadas || [];
+            const adapted = adaptedList.find((r: any) => String(r?.receita_id_legado) === String(realRecipeId));
+            if (adapted && Array.isArray(adapted.ingredientes) && adapted.ingredientes.length > 0) {
+              const recipeBaseServings = adapted.porcoes || 100;
+              const defaultNeededServings = typeof servingsPerDay === 'number' && servingsPerDay > 0 ? servingsPerDay : 100;
+              const recipeNeededServings = (servingsByRecipe && (servingsByRecipe[realRecipeId] || servingsByRecipe[recipeId])) || defaultNeededServings;
+              const multiplier = recipeBaseServings > 0 ? (recipeNeededServings / recipeBaseServings) : 1;
+              for (const ing of adapted.ingredientes) {
+                const baseId = ing.produto_base_id;
+                if (!baseId) continue;
+                const baseQuantity = parseFloat((ing.quantidade ?? ing.quantity ?? 0).toString()) || 0;
+                const adjustedQuantity = baseQuantity * multiplier;
+                if (adjustedQuantity <= 0) continue;
+                const firstProduct = productsByBase.get(baseId)?.[0];
+                const name = ing.nome || ing.name || firstProduct?.descricao || 'Ingrediente';
+                const unit = ing.unidade || ing.unit || firstProduct?.unidade || 'kg';
+                const category = firstProduct?.categoria_descricao || 'Outros';
+                if (ingredientMap.has(baseId)) {
+                  const existing = ingredientMap.get(baseId);
+                  existing.quantity += adjustedQuantity;
+                  existing.recipes.push(adapted.nome_receita || adapted.nome || `receita_${realRecipeId}`);
+                } else {
+                  ingredientMap.set(baseId, {
+                    produto_base_id: baseId,
+                    name,
+                    quantity: adjustedQuantity,
+                    unit,
+                    category,
+                    opcoes_embalagem: productsByBase.get(baseId) || [] ,
+                    recipes: [adapted.nome_receita || adapted.nome || `receita_${realRecipeId}`]
+                  });
+                }
+              }
+              continue;
+            }
             continue;
           }
 
