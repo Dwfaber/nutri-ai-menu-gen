@@ -53,9 +53,13 @@ serve(async (req) => {
   }
 });
 
-async function generateMenuWithAssistant(supabaseClient: any, clientId: string, budget: number, restrictions: string[], preferences?: string) {
+async function generateMenuWithAssistant(supabaseClient: any, clientId: string, budget: number, restrictions: string[], preferences?: string, options?: { targetServings?: number; totalMeals?: number; weekPeriod?: string }) {
   try {
     console.log(`Generating menu for client ${clientId} with budget ${budget}`);
+    // Quantidades baseadas em refeições (não por funcionários)
+    const targetServings = options?.targetServings ?? 100;
+    const totalMeals = options?.totalMeals ?? targetServings * 5;
+    const weekPeriod = options?.weekPeriod;
     
     // Validate OpenAI API Key
     if (!openAIApiKey) {
@@ -146,7 +150,7 @@ async function generateMenuWithAssistant(supabaseClient: any, clientId: string, 
       return acc;
     }, {});
 
-    const totalFuncionarios = clientData?.total_funcionarios || 100;
+    const totalFuncionarios = targetServings;
     const budgetPerPerson = budget || 0;
 
     // Calculate daily costs for adaptation
@@ -186,7 +190,8 @@ async function generateMenuWithAssistant(supabaseClient: any, clientId: string, 
 Você é um nutricionista corporativo especializado. Crie um cardápio COMPLETO E BALANCEADO para a semana usando dados reais do sistema.
 
 **Cliente:** ${clientData?.nome_empresa || 'Empresa'}
-**Funcionários:** ${totalFuncionarios}
+**Refeições por dia:** ${targetServings}
+**Total na semana:** ${totalMeals}
 **Orçamento por refeição:** R$ ${budgetPerPerson.toFixed(2)}
 **Restrições:** ${restrictions.join(', ') || 'Nenhuma'}
 **Preferências:** ${preferences || 'Não especificadas'}
@@ -208,14 +213,14 @@ ${receitasFormatted.map(r => `- ID: ${r.id} | ${r.nome} | Categoria: ${r.categor
 ${receitaIngredientes?.slice(0, 30).map(ing => `Receita ${ing.receita_id_legado}: ${ing.quantidade || 0}${ing.unidade || 'un'} - Produto Base ID: ${ing.produto_base_id}`).join('\n') || 'Sem ingredientes detalhados'}
 
 **INSTRUÇÕES ESPECIAIS - SISTEMA DE ADAPTAÇÃO POR CUSTO DIÁRIO:**
-1. **PRIMEIRO:** Para CADA DIA, use adapt_recipe_to_daily_cost() para adaptar receitas legado ao custo específico do dia
-2. **SEGUNDO:** Use validate_daily_budget() para validar se o cardápio do dia cabe no orçamento
-3. **TERCEIRO:** UTILIZE EXCLUSIVAMENTE receitas legado! Selecione das ${receitasFormatted.length} receitas disponíveis e adapte para ${totalFuncionarios} funcionários
-4. **QUARTO:** Use get_produtos_carnes() para buscar proteínas complementares
-5. **QUINTO:** Use get_produtos_hortifruti() para buscar frutas/vegetais frescos
-6. **SEXTO:** Use get_produtos_generos() para buscar grãos/carboidratos
-7. **SÉTIMO:** Use get_promotional_products() para identificar promoções
-8. **OITAVO:** Use calculate_real_costs() para calcular custos exatos finais
+1. Para CADA DIA, use adapt_recipe_to_daily_cost() para adaptar receitas legado ao custo específico do dia
+2. Use validate_daily_budget() para validar se o cardápio do dia cabe no orçamento
+3. UTILIZE EXCLUSIVAMENTE receitas legado! Selecione das ${receitasFormatted.length} receitas disponíveis e adapte para ${targetServings} porções por dia
+4. Use get_produtos_carnes() para buscar proteínas complementares
+5. Use get_produtos_hortifruti() para buscar frutas/vegetais frescos
+6. Use get_produtos_generos() para buscar grãos/carboidratos
+7. Use get_promotional_products() para identificar promoções
+8. Use calculate_real_costs() para calcular custos exatos finais
 
 **PROCESSO OBRIGATÓRIO - ADAPTAÇÃO POR CUSTO DIÁRIO:**
 1. Para CADA DIA da semana (Segunda a Sexta):
@@ -227,13 +232,13 @@ ${receitaIngredientes?.slice(0, 30).map(ing => `Receita ${ing.receita_id_legado}
 2. Para CADA receita do cardápio:
    - OBRIGATÓRIO: Use APENAS receitas legado da lista (${receitasFormatted.length} disponíveis)
    - Adapte receita selecionada com adapt_recipe_to_daily_cost()
-   - Ajuste porções de porcoes_originais para ${totalFuncionarios} pessoas
+   - Ajuste porções de porcoes_originais para ${targetServings} porções
    - Use ingredientes originais com produto_base_id corretos
 
 **ADAPTAÇÃO INTELIGENTE DE RECEITAS:**
-- Receita adaptada = receita_original × fator_adaptacao_custo × fator_funcionarios
+- Receita adaptada = receita_original × fator_adaptacao_custo × fator_refeicoes
 - Fator custo = custo_alvo_dia ÷ custo_original_receita
-- Fator funcionários = ${totalFuncionarios} ÷ porcoes_originais
+- Fator refeições = ${targetServings} ÷ porcoes_originais
 - Limite: Não reduzir abaixo de 30% nem aumentar acima de 200% das quantidades originais
 - SEMPRE mantenha proporções nutricionais e sabor original
 
@@ -258,7 +263,7 @@ ${receitaIngredientes?.slice(0, 30).map(ing => `Receita ${ing.receita_id_legado}
       "name": "Frango Grelhado",
       "category": "protein",
       "cost": 6.50,
-      "servings": ${totalFuncionarios},
+      "servings": ${targetServings},
       "day": "Segunda",
       "custo_alvo_dia": ${dailyCostConstraints.segunda.toFixed(2)},
       "custo_dentro_limite": true,
@@ -272,7 +277,7 @@ ${receitaIngredientes?.slice(0, 30).map(ing => `Receita ${ing.receita_id_legado}
       "porcoes_originais": 10,
       "modo_preparo": "Tempere e grelhe por 15min",
       "tempo_preparo": 30,
-      "adaptacao_porcoes": "De 10 para ${totalFuncionarios} porções",
+      "adaptacao_porcoes": "De 10 para ${targetServings} porções",
       "custo_original": 7.65,
       "economia_obtida": 1.15
     }
@@ -304,7 +309,7 @@ ${receitaIngredientes?.slice(0, 30).map(ing => `Receita ${ing.receita_id_legado}
 - Use EXCLUSIVAMENTE as ${receitasFormatted.length} receitas legado da lista acima
 - NUNCA crie receitas novas - apenas adapte as existentes
 - Cada item deve ter receita_id_legado válido da lista
-- Mantenha ingredientes originais, adapte apenas quantidades para ${totalFuncionarios} pessoas
+- Mantenha ingredientes originais, adapte apenas quantidades para ${targetServings} porções
 - Use as funções para validar custos reais!
     `;
 
@@ -458,7 +463,7 @@ ${receitaIngredientes?.slice(0, 30).map(ing => `Receita ${ing.receita_id_legado}
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'gpt-4o-mini',
+        model: 'gpt-4o',
         messages: [
           {
             role: 'system',
@@ -576,7 +581,7 @@ ${receitaIngredientes?.slice(0, 30).map(ing => `Receita ${ing.receita_id_legado}
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          model: 'gpt-4o-mini',
+          model: 'gpt-4o',
           messages: messages,
           temperature: 0.7,
           max_tokens: 3000
@@ -640,7 +645,7 @@ Analise o comando e retorne em JSON:
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'gpt-4o-mini',
+        model: 'gpt-4o',
         messages: [
           {
             role: 'system',

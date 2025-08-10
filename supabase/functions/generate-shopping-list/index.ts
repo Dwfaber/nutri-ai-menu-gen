@@ -104,14 +104,16 @@ serve(async (req) => {
   try {
     console.log('Received request body:', JSON.stringify(await req.clone().json()))
     
-    const { menuId, clientName, budgetPredicted, menuItems, optimizationConfig } = await req.json()
+    const { menuId, clientName, budgetPredicted, menuItems, optimizationConfig, servingsPerDay, totalServingsWeek, servingsByRecipe } = await req.json()
 
     console.log('Parsed parameters:', { 
       menuId, 
       clientName, 
       budgetPredicted: typeof budgetPredicted, 
       menuItemsLength: menuItems?.length,
-      optimizationConfig: !!optimizationConfig 
+      optimizationConfig: !!optimizationConfig,
+      servingsPerDay, totalServingsWeek,
+      hasServingsByRecipe: !!servingsByRecipe 
     })
 
     if (!menuId || !clientName || budgetPredicted === undefined || budgetPredicted === null) {
@@ -247,10 +249,11 @@ serve(async (req) => {
           
           // Calculate quantity multiplier based on servings needed vs recipe base
           const recipeBaseServings = recipe.quantidade_refeicoes || 100;
-          const neededServings = 100; // Default servings needed
-          const multiplier = neededServings / recipeBaseServings;
+          const defaultNeededServings = typeof servingsPerDay === 'number' && servingsPerDay > 0 ? servingsPerDay : 100;
+          const recipeNeededServings = (servingsByRecipe && servingsByRecipe[realRecipeId]) || defaultNeededServings;
+          const multiplier = recipeBaseServings > 0 ? (recipeNeededServings / recipeBaseServings) : 1;
           
-          console.log(`Recipe serves ${recipeBaseServings}, need ${neededServings}, multiplier: ${multiplier}`);
+          console.log(`Recipe serves ${recipeBaseServings}, need ${recipeNeededServings}, multiplier: ${multiplier}`);
           
           // Process each ingredient
           for (const ingredient of ingredients) {
@@ -389,7 +392,7 @@ serve(async (req) => {
                 'Content-Type': 'application/json',
               },
               body: JSON.stringify({
-                model: 'gpt-4o-mini',
+                model: 'gpt-4o',
                 messages: [
                   {
                     role: 'system',
