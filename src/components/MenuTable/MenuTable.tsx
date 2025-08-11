@@ -4,6 +4,12 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Edit, Download, Copy } from 'lucide-react';
 
+interface Ingredient {
+  name: string;
+  quantity?: number;
+  unit?: string;
+}
+
 interface MenuRecipe {
   id: string;
   name: string;
@@ -11,6 +17,7 @@ interface MenuRecipe {
   day: string;
   cost: number;
   servings: number;
+  ingredients?: Ingredient[];
 }
 
 interface MenuTableProps {
@@ -135,6 +142,20 @@ const MenuTable: React.FC<MenuTableProps> = ({
                             <div className="text-xs text-gray-500">
                               R$ {recipe.cost.toFixed(2)} • {recipe.servings}p
                             </div>
+                            {recipe.ingredients && recipe.ingredients.length > 0 && (
+                              <ul className="mt-1 space-y-0.5">
+                                {recipe.ingredients.slice(0, 3).map((ing, i) => (
+                                  <li key={i} className="text-[11px] text-gray-500 truncate">
+                                    {ing.name}
+                                    {ing.quantity ? ` - ${Number(ing.quantity).toLocaleString('pt-BR')}` : ''}
+                                    {ing.unit ? ` ${ing.unit}` : ''}
+                                  </li>
+                                ))}
+                                {recipe.ingredients.length > 3 && (
+                                  <li className="text-[11px] text-gray-400">+{recipe.ingredients.length - 3} ingredientes</li>
+                                )}
+                              </ul>
+                            )}
                           </div>
                         ) : (
                           <div className="text-gray-400 text-center text-xs">

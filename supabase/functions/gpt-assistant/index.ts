@@ -1279,7 +1279,7 @@ async function processMenuResponse(supabaseClient: any, assistantResponse: strin
       })) || defaultIngredients),
       instructions: item.instructions || item.modo_preparo || 'Seguir receita padrão',
       receita_id_legado: item.receita_id_legado,
-      servings: item.servings || totalFuncionarios
+      servings: item.servings || targetServings || totalFuncionarios
     };
   });
 

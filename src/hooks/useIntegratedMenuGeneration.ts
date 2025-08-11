@@ -158,16 +158,29 @@ export const useIntegratedMenuGeneration = () => {
         status: menu.status as 'pending_approval' | 'approved' | 'rejected',
         approvedBy: menu.approved_by,
         rejectedReason: menu.rejected_reason,
-        recipes: (Array.isArray(menu.receitas_adaptadas) ? menu.receitas_adaptadas : []).map((recipe: any) => ({
-          id: recipe.receita_id_legado,
-          name: recipe.nome_receita,
-          category: recipe.categoria_descricao,
-          day: recipe.day,
-          cost: recipe.custo_adaptado,
-          servings: recipe.porcoes,
-          ingredients: recipe.ingredientes || [],
-          nutritionalInfo: recipe.nutritional_info || {}
-        })),
+        recipes: (Array.isArray(menu.receitas_adaptadas) ? menu.receitas_adaptadas : []).map((recipe: any, idx: number) => {
+          const mapped = mapCategoryToMenuStructure(recipe.categoria_descricao || '');
+          let finalCategory = mapped;
+          if (mapped === 'Salada') finalCategory = categorizeSalad(recipe.nome_receita || '', idx);
+          if (mapped === 'Suco') finalCategory = categorizeJuice(recipe.nome_receita || '', idx);
+          const s = String(recipe.day || '').toLowerCase();
+          const normalizedDay = s.includes('seg') ? 'Segunda'
+            : (s.includes('terç') || s.includes('terc') || s === 'terca') ? 'Terça'
+            : s.includes('qua') ? 'Quarta'
+            : s.includes('qui') ? 'Quinta'
+            : s.includes('sex') ? 'Sexta'
+            : 'Segunda';
+          return {
+            id: recipe.receita_id_legado,
+            name: recipe.nome_receita,
+            category: finalCategory,
+            day: normalizedDay,
+            cost: recipe.custo_adaptado,
+            servings: recipe.porcoes,
+            ingredients: recipe.ingredientes || [],
+            nutritionalInfo: recipe.nutritional_info || {}
+          };
+        }),
         createdAt: menu.created_at
       })) || [];
 
@@ -355,16 +368,41 @@ export const useIntegratedMenuGeneration = () => {
       }
 
       // Converter receitas da IA para formato interno
-      const receitasCardapio: MenuRecipe[] = aiGeneratedMenu.recipes.map((recipe: any) => ({
-        id: recipe.id || recipe.receita_id_legado,
-        name: recipe.name || recipe.nome_receita,
-        category: recipe.category || recipe.categoria,
-        day: recipe.day || recipe.dia,
-        cost: recipe.cost || recipe.custo_real || recipe.costPerServing || recipe.custo_por_porcao || recipe.custo_adaptado || 0,
-        servings: recipe.servings || recipe.porcoes || mealsPerDay || 50,
-        ingredients: recipe.ingredients || [],
-        nutritionalInfo: recipe.nutritionalInfo || {}
-      }));
+      // Normalização de dia e categoria + garantia de ingredientes
+      const normalizeDay = (value: any) => {
+        const s = String(value || '').toLowerCase();
+        if (s.includes('seg')) return 'Segunda';
+        if (s.includes('terç') || s.includes('terc') || s === 'terca') return 'Terça';
+        if (s.includes('qua')) return 'Quarta';
+        if (s.includes('qui')) return 'Quinta';
+        if (s.includes('sex')) return 'Sexta';
+        return 'Segunda';
+      };
+
+      const receitasCardapio: MenuRecipe[] = aiGeneratedMenu.recipes.map((recipe: any, idx: number) => {
+        const rawCategory = recipe.category || recipe.categoria || '';
+        const mapped = mapCategoryToMenuStructure(rawCategory);
+        let finalCategory = mapped;
+        const recipeName = recipe.name || recipe.nome_receita || '';
+        if (mapped === 'Salada') {
+          finalCategory = categorizeSalad(recipeName, idx);
+        } else if (mapped === 'Suco') {
+          finalCategory = categorizeJuice(recipeName, idx);
+        }
+
+        const ing = Array.isArray(recipe.ingredients) ? recipe.ingredients : [];
+
+        return {
+          id: recipe.receita_id_legado || recipe.id,
+          name: recipeName,
+          category: finalCategory,
+          day: normalizeDay(recipe.day || recipe.dia),
+          cost: recipe.cost || recipe.custo_real || recipe.costPerServing || recipe.custo_por_porcao || recipe.custo_adaptado || 0,
+          servings: recipe.servings || recipe.porcoes || mealsPerDay || 50,
+          ingredients: ing,
+          nutritionalInfo: recipe.nutritionalInfo || {}
+        } as MenuRecipe;
+      });
 
       console.log(`IA gerou ${receitasCardapio.length} receitas com custos calculados`);
 
