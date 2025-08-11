@@ -432,10 +432,34 @@ serve(async (req) => {
       }
     }
 
-    const aggregatedIngredients = Array.from(ingredientMap.values());
+    let aggregatedIngredients = Array.from(ingredientMap.values());
+    
+    if (aggregatedIngredients.length === 0) {
+      console.log('Ingredient map is empty, using market products fallback to build basic list');
+      const sampleProducts = marketProducts?.slice(0, 10) || [];
+      for (const product of sampleProducts) {
+        if (product.preco > 0) {
+          const baseId = product.produto_base_id || product.produto_id;
+          const qty = product.per_capita > 0
+            ? product.per_capita * (typeof servingsPerDay === 'number' && servingsPerDay > 0 ? servingsPerDay : 100)
+            : 1.0;
+          ingredientMap.set(baseId, {
+            produto_base_id: baseId,
+            name: product.descricao,
+            quantity: qty,
+            unit: product.unidade || 'kg',
+            category: product.categoria_descricao || 'Outros',
+            opcoes_embalagem: productsByBase.get(baseId) || [product]
+          });
+        }
+      }
+      aggregatedIngredients = Array.from(ingredientMap.values());
+    }
     
     console.log('Total ingredients processed:', aggregatedIngredients.length);
-    console.log('Sample processed ingredient:', aggregatedIngredients[0]);
+    if (aggregatedIngredients[0]) {
+      console.log('Sample processed ingredient:', aggregatedIngredients[0]);
+    }
 
     // Apply optimization if enabled
     let totalCost = 0;

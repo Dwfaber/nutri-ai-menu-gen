@@ -1230,6 +1230,30 @@ async function processMenuResponse(supabaseClient: any, assistantResponse: strin
     const ingredientCount = item.ingredients?.length || 2;
     const minimumCost = Math.max(baseCost, ingredientCount * 1.5); // R$1.50 per ingredient minimum
     
+    // Heuristic to pick a valid produto_base_id when missing
+    const pickFallbackBaseProduct = (category?: string) => {
+      const products = Array.isArray(marketProducts) ? marketProducts : [];
+      const valid = products.filter((p: any) => p?.produto_base_id && (p?.preco > 0 || p?.preco_compra > 0));
+      const cat = (category || '').toLowerCase();
+      const byCategory = valid.filter((p: any) => {
+        const c = (p.categoria_descricao || p.grupo || '').toString().toLowerCase();
+        if (cat.includes('protein')) return c.includes('carne') || c.includes('carnes') || c.includes('prote');
+        if (cat.includes('carb')) return c.includes('arroz') || c.includes('feij') || c.includes('grão') || c.includes('grao') || c.includes('genero');
+        if (cat.includes('vegetable') || cat.includes('salada')) return c.includes('hort') || c.includes('verdura') || c.includes('legume');
+        if (cat.includes('fruit') || cat.includes('sobremesa')) return c.includes('fruta') || c.includes('hort');
+        return false;
+      });
+      const chosen = (byCategory[0] || valid[0]) as any;
+      return chosen;
+    };
+
+    const fallbackProduct = pickFallbackBaseProduct(item.category);
+    const defaultIngredients = fallbackProduct ? [
+      { name: fallbackProduct.descricao || 'Ingrediente principal', quantity: 200, unit: fallbackProduct.unidade || 'g', produto_base_id: fallbackProduct.produto_base_id },
+    ] : [
+      { name: 'Ingrediente principal', quantity: 200, unit: 'g' },
+    ];
+    
     return {
       id: item.receita_id_legado || `recipe_${index + 1}`,
       name: item.name || `Receita ${index + 1}`,
@@ -1247,15 +1271,12 @@ async function processMenuResponse(supabaseClient: any, assistantResponse: strin
         fat: item.nutritionalInfo?.fat || 15,
         fiber: item.nutritionalInfo?.fiber || 8
       },
-      ingredients: item.ingredients?.map((ing: any) => ({
+      ingredients: (item.ingredients?.map((ing: any) => ({
         name: ing.nome || ing.name || 'Ingrediente',
         quantity: ing.quantidade || ing.quantity || 100,
         unit: ing.unidade || ing.unit || 'g',
         produto_base_id: ing.produto_base_id
-      })) || [
-        { name: 'Ingrediente principal', quantity: 200, unit: 'g' },
-        { name: 'Temperos', quantity: 10, unit: 'g' }
-      ],
+      })) || defaultIngredients),
       instructions: item.instructions || item.modo_preparo || 'Seguir receita padrão',
       receita_id_legado: item.receita_id_legado,
       servings: item.servings || totalFuncionarios
