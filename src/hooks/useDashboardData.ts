@@ -36,9 +36,8 @@ export const useDashboardData = () => {
 
       // Fetch active clients data
       const { data: clients, error: clientsError } = await supabase
-        .from('contratos_corporativos_v2')
-        .select('*')
-        .eq('ativo', true);
+        .from('contratos_corporativos')
+        .select('*');
 
       if (clientsError) {
         throw new Error(clientsError.message);
@@ -53,18 +52,17 @@ export const useDashboardData = () => {
         throw new Error(shoppingError.message);
       }
 
-      // Calculate metrics
+      // Calculate metrics (adapted to contratos_corporativos schema)
       const activeClients = clients?.length || 0;
-      const totalEmployees = clients?.reduce((sum, client) => sum + client.total_funcionarios, 0) || 0;
-      const monthlyMeals = clients?.reduce((sum, client) => sum + client.total_refeicoes_mes, 0) || 0;
-      const monthlyBudget = clients?.reduce((sum, client) => 
-        sum + (client.custo_maximo_refeicao * client.total_refeicoes_mes), 0) || 0;
-      const averageMealCost = monthlyMeals > 0 ? monthlyBudget / monthlyMeals : 0;
+      const totalEmployees = 0; // Not available in contratos_corporativos
+      const monthlyMeals = 0;   // Not available in contratos_corporativos
       const generatedMenus = shoppingLists?.length || 0;
 
-      // Calculate savings (difference between budget and actual costs)
-      const actualCosts = shoppingLists?.reduce((sum, list) => sum + (list.cost_actual || 0), 0) || 0;
-      const predictedBudget = shoppingLists?.reduce((sum, list) => sum + list.budget_predicted, 0) || 0;
+      // Derive budget/costs from shopping lists
+      const actualCosts = shoppingLists?.reduce((sum, list) => sum + Number(list.cost_actual || 0), 0) || 0;
+      const predictedBudget = shoppingLists?.reduce((sum, list) => sum + Number(list.budget_predicted || 0), 0) || 0;
+      const monthlyBudget = predictedBudget;
+      const averageMealCost = generatedMenus > 0 ? actualCosts / generatedMenus : 0;
       const totalSavings = Math.max(0, predictedBudget - actualCosts);
 
       // Calculate acceptance rate (mock calculation - in real scenario would come from user feedback)
