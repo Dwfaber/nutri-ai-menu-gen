@@ -330,16 +330,18 @@ export const useIntegratedMenuGeneration = () => {
       // Use GPT Assistant para gerar cardápio com custos reais e proporções corretas
       const { data, error: functionError } = await supabase.functions.invoke('gpt-assistant', {
         body: {
-          action: 'generateMenu',
+          action: 'generate_menu',
           clientId: legacyId,
+          filialIdLegado: legacyId,
+          numDays: 7,
+          refeicoesPorDia: mpd,
+          mealsPerDay: mpd,
+          targetServings: mpd,
+          totalMeals: tMeals,
           budget: clientToUse.custo_maximo_refeicao || 15,
           restrictions: clientToUse.restricoes_alimentares || [],
           preferences: preferences?.join(', ') || '',
           weekPeriod,
-          mealsPerDay: mpd,
-          refeicoesPorDia: mpd,
-          targetServings: mpd,
-          totalMeals: tMeals,
           useProportionalCalculation: true
         }
       });
@@ -357,10 +359,11 @@ export const useIntegratedMenuGeneration = () => {
       }
 
       const aiMenu = data.menu || {};
-      console.log('Cardápio gerado pela IA (novo formato):', aiMenu);
+      console.log('Cardápio gerado pela IA (formatos compatíveis):', aiMenu);
 
-      const cardapio = Array.isArray(aiMenu.cardapio) ? aiMenu.cardapio : [];
-      if (!cardapio.length) {
+      const cardapioV1 = Array.isArray(aiMenu.cardapio) ? aiMenu.cardapio : [];
+      const daysV2 = Array.isArray(aiMenu.days) ? aiMenu.days : [];
+      if (!cardapioV1.length && !daysV2.length) {
         throw new Error('IA não retornou um cardápio válido');
       }
 
@@ -371,10 +374,16 @@ export const useIntegratedMenuGeneration = () => {
         if (s.includes('QUA')) return 'Quarta';
         if (s.includes('QUI')) return 'Quinta';
         if (s.includes('SEX')) return 'Sexta';
+        if (s.includes('SÁB') || s.includes('SAB')) return 'Sábado';
+        if (s.includes('DOM')) return 'Domingo';
         return 'Segunda';
       };
 
-      const mpdFromSummary = Number(aiMenu.summary?.refeicoes_por_dia ?? mpd ?? 50);
+      const mpdFromSummary = Number(
+        aiMenu.summary?.refeicoes_por_dia ??
+        (aiMenu.portions_total && daysV2.length ? aiMenu.portions_total / daysV2.length : undefined) ??
+        mpd ?? 50
+      );
 
       const mapCategory = (c: string) => {
         const s = String(c || '').toUpperCase();
@@ -390,22 +399,77 @@ export const useIntegratedMenuGeneration = () => {
       };
 
       const receitasCardapio: MenuRecipe[] = [];
-      for (const dia of cardapio) {
-        const dayName = dayLabelToTitle(dia.dia_label);
-        const itens = Array.isArray(dia.itens) ? dia.itens : [];
-        for (const it of itens) {
-          if (!it || !it.receita_id_legado) continue;
-          receitasCardapio.push({
-            id: String(it.receita_id_legado),
-            name: String(it.nome || ''),
-            day: dayName,
-            category: mapCategory(it.categoria),
-            cost: Number(it.custo_por_refeicao || 0),
-            servings: mpdFromSummary,
-            ingredients: [],
-            nutritionalInfo: {}
-          });
+      if (cardapioV1.length) {
+        for (const dia of cardapioV1) {
+          const dayName = dayLabelToTitle(dia.dia_label || dia.dia);
+          const itens = Array.isArray(dia.itens) ? dia.itens : [];
+          for (const it of itens) {
+            const rid = it.receita_id_legado || it.receita_id;
+            if (!rid) continue;
+            receitasCardapio.push({
+              id: String(rid),
+              name: String(it.nome || ''),
+              day: dayName,
+              category: mapCategory(it.categoria || it.slot || ''),
+              cost: Number(it.custo_por_refeicao || 0),
+              servings: mpdFromSummary,
+              ingredients: [],
+              nutritionalInfo: {}
+            });
+          }
         }
+      } else if (daysV2.length) {
+        for (const dia of daysV2) {
+          const dayName = dayLabelToTitle(dia.label_orcamento || dia.dia);
+          const itens = Array.isArray(dia.itens) ? dia.itens : [];
+          for (const it of itens) {
+            if (!it || !it.receita_id) continue;
+            if (it.placeholder) continue; // pular placeholders (ex.: FEIJÃO ausente)
+            receitasCardapio.push({
+              id: String(it.receita_id),
+              name: String(it.nome || ''),
+              day: dayName,
+              category: mapCategory(it.slot || ''),
+              cost: Number(it.custo_por_refeicao || 0),
+              servings: mpdFromSummary,
+              ingredients: [],
+              nutritionalInfo: {}
+            });
+          }
+        }
+      }
+
+      // Enriquecer com ingredientes (até 3 por receita)
+      const recipeIds = Array.from(new Set(receitasCardapio.map(r => r.id).filter(Boolean)));
+      if (recipeIds.length) {
+        const { data: ingredientsData, error: ingError } = await supabase
+          .from('receita_ingredientes')
+          .select('receita_id_legado,nome,quantidade,unidade')
+          .in('receita_id_legado', recipeIds);
+        if (!ingError && ingredientsData) {
+          const byRecipe: Record<string, { name: string; quantity: number; unit: string }[]> = {};
+          for (const ing of ingredientsData as any[]) {
+            const recId = String(ing.receita_id_legado);
+            if (!byRecipe[recId]) byRecipe[recId] = [];
+            if (byRecipe[recId].length < 3) {
+              byRecipe[recId].push({
+                name: ing.nome,
+                quantity: Number(ing.quantidade ?? 0),
+                unit: ing.unidade || ''
+              });
+            }
+          }
+          for (const r of receitasCardapio) {
+            r.ingredients = byRecipe[r.id] || [];
+          }
+        }
+      }
+
+      if (Array.isArray(data.warnings) && data.warnings.length) {
+        toast({
+          title: 'Avisos do gerador',
+          description: `${data.warnings.length} aviso(s). Ex.: ${String(data.warnings[0]).slice(0, 120)}...`,
+        });
       }
 
       console.log(`IA gerou ${receitasCardapio.length} itens precificados`);
@@ -415,9 +479,16 @@ export const useIntegratedMenuGeneration = () => {
       console.log('Validação de regras:', businessRules);
       console.log('Violações encontradas:', violations);
       
-      // Custos a partir do resumo da função
-      const totalCost = Number(aiMenu.summary?.total_custo || 0);
-      const costPerMeal = Number(aiMenu.summary?.custo_medio_por_refeicao || 0);
+      // Custos a partir do resumo da função (compatível com v1 e v2)
+      const totalCost =
+        Number(aiMenu.summary?.total_custo) ||
+        Number(aiMenu.total_cost) ||
+        (daysV2.length ? daysV2.reduce((s: number, d: any) => s + Number(d.custo_total_dia || 0), 0) : 0);
+
+      const costPerMeal =
+        Number(aiMenu.summary?.custo_medio_por_refeicao) ||
+        Number(aiMenu.average_cost_per_meal) ||
+        (daysV2.length ? totalCost / (mpdFromSummary * daysV2.length) : 0);
       const budgetLimit = clientToUse.custo_maximo_refeicao || 15;
       
       if (costPerMeal > budgetLimit) {
