@@ -22,7 +22,7 @@ const CATS = [
   "SUCO 2",
 ];
 
-const WEEK_LABELS = ["SEGUNDA", "TERÇA", "QUARTA", "QUINTA", "SEXTA"];
+const WEEK_LABELS = ["SEGUNDA", "TERÇA", "QUARTA", "QUINTA", "SEXTA", "SÁBADO", "DOMINGO"];
 const RECIPE_BASE = 100; // receitas padrão são para 100 refeições
 
 // ---------------- helpers ----------------
@@ -31,6 +31,14 @@ const json = (payload: any, status = 200) =>
     status,
     headers: { ...corsHeaders, "Content-Type": "application/json" },
   });
+
+const bad = (status: number, msg: string, extra?: any) =>
+  json({ success: false, error: msg, ...extra }, status);
+
+const parseNumber = (value: unknown): number | null => {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+};
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
@@ -78,53 +86,72 @@ serve(async (req) => {
 
     const body = await req.json().catch(() => ({}));
     const action = body?.action;
-    const clientIdInput = body?.clientId ?? body?.client_id ?? body?.client_data?.id;
-    const numDays = Number(body?.numDays ?? body?.days ?? 5);
-    const refeicoesPorDia = Number(body?.refeicoesPorDia ?? body?.mealsPerDay ?? 100);
+    const filialIdLegado = parseNumber(body?.filialIdLegado);
+    const numDays = parseNumber(body?.numDays);
+    const refeicoesPorDia = parseNumber(body?.refeicoesPorDia);
+    const useDiaEspecial = body?.useDiaEspecial === true;
+    const baseRecipes = body?.baseRecipes || {};
 
-    console.log("[menu] payload", { action, clientId: clientIdInput, numDays, refeicoesPorDia });
+    console.log("[menu] payload", { action, filialIdLegado, numDays, refeicoesPorDia, useDiaEspecial });
 
-    if (!action || (action !== "generate_menu" && action !== "generateMenu")) {
-      return json({ success: false, error: "Invalid action" }, 400);
+    // Validate action
+    if (!action || !["generate_menu", "generate-menu", "generateMenu"].includes(action)) {
+      return bad(400, "action deve ser 'generate_menu', 'generate-menu' ou 'generateMenu'");
     }
 
-    const clientIdNum = safeInt(clientIdInput);
-    if (clientIdNum === null) {
-      console.error("[menu] clientId inválido:", clientIdInput);
-      return json({ success: false, error: "clientId inválido (esperado inteiro)" }, 400);
+    // Validate filialIdLegado
+    if (filialIdLegado === null || filialIdLegado <= 0) {
+      return bad(400, "filialIdLegado deve ser um número positivo");
     }
 
-    if (!(numDays > 0) || !(refeicoesPorDia > 0)) {
-      return json(
-        { success: false, error: "numDays e refeicoesPorDia devem ser maiores que zero" },
-        400,
-      );
+    // Validate numDays
+    if (numDays === null || numDays < 5 || numDays > 15) {
+      return bad(400, "numDays deve estar entre 5 e 15");
     }
 
-    // 1) Teto por refeição (último registro do cliente)
+    // Validate refeicoesPorDia
+    if (refeicoesPorDia === null || refeicoesPorDia <= 0) {
+      return bad(400, "refeicoesPorDia deve ser maior que 0");
+    }
+
+    // 1) Teto por refeição (buscar por filial_id)
     const { data: custos, error: custosErr } = await supabase
       .from("custos_filiais")
       .select("*")
-      .eq("cliente_id_legado", clientIdNum)
+      .eq("filial_id", filialIdLegado)
       .order("created_at", { ascending: false })
       .limit(1);
 
     if (custosErr) {
       console.error("[custos_filiais]", custosErr);
-      return json({ success: false, error: "Erro ao consultar custos_filiais" }, 500);
+      return bad(500, "Erro ao consultar custos_filiais");
     }
 
-    const c0: any = custos?.[0] ?? {};
+    if (!custos?.length) {
+      return bad(400, `Nenhum custo encontrado para filial_id ${filialIdLegado}`);
+    }
+
+    const c0: any = custos[0];
     const refCostWeek = [
-      Number(c0.RefCustoSegunda ?? c0.ref_custo_segunda ?? 0),
-      Number(c0.RefCustoTerca ?? c0.ref_custo_terca ?? 0),
-      Number(c0.RefCustoQuarta ?? c0.ref_custo_quarta ?? 0),
-      Number(c0.RefCustoQuinta ?? c0.ref_custo_quinta ?? 0),
-      Number(c0.RefCustoSexta ?? c0.ref_custo_sexta ?? 0),
+      parseNumber(c0.RefCustoSegunda),
+      parseNumber(c0.RefCustoTerca), 
+      parseNumber(c0.RefCustoQuarta),
+      parseNumber(c0.RefCustoQuinta),
+      parseNumber(c0.RefCustoSexta),
+      parseNumber(c0.RefCustoSabado),
+      parseNumber(c0.RefCustoDomingo)
     ];
 
-    if (!refCostWeek.some((v) => v > 0)) {
-      return json({ success: false, error: "RefCusto* não configurado para o cliente." }, 400);
+    // Se useDiaEspecial, substituir todos os dias pelo RefCustoDiaEspecial
+    if (useDiaEspecial) {
+      const especialCost = parseNumber(c0.RefCustoDiaEspecial);
+      if (especialCost && especialCost > 0) {
+        refCostWeek.fill(especialCost);
+      }
+    }
+
+    if (!refCostWeek.some((v) => v && v > 0)) {
+      return bad(400, "RefCusto* não configurado para a filial");
     }
 
     // 2) Receitas ativas (candidatas)
@@ -135,7 +162,7 @@ serve(async (req) => {
 
     if (rErr) {
       console.error("[receitas_legado]", rErr);
-      return json({ success: false, error: "Erro ao consultar receitas_legado" }, 500);
+      return bad(500, "Erro ao consultar receitas_legado");
     }
 
     // Candidatos por categoria da grade
@@ -158,11 +185,19 @@ serve(async (req) => {
       candidatesByCat[cat] = (receitas ?? []).filter((r) => f?.(r));
     }
 
-    if (!candidatesByCat["ARROZ BRANCO"]?.length) {
-      return json({ success: false, error: "Nenhuma receita de ARROZ encontrada." }, 400);
+    // Use baseRecipes.arroz se fornecido, senão busca automaticamente
+    let arrozReceita = null;
+    if (baseRecipes.arroz) {
+      arrozReceita = (receitas ?? []).find(r => r.receita_id_legado === baseRecipes.arroz);
     }
+    if (!arrozReceita && !candidatesByCat["ARROZ BRANCO"]?.length) {
+      return bad(400, "Nenhuma receita de ARROZ encontrada");
+    }
+
+    // FEIJÃO será placeholder por enquanto - não requer validação
+    const warnings = [];
     if (!candidatesByCat["FEIJÃO"]?.length) {
-      return json({ success: false, error: "Nenhuma receita de FEIJÃO encontrada." }, 400);
+      warnings.push("Sem receita de feijão — usado placeholder");
     }
 
     // 3) Ingredientes de todas as receitas candidatas
@@ -170,7 +205,7 @@ serve(async (req) => {
       ...new Set(CATS.flatMap((c) => candidatesByCat[c].map((r) => String(r.receita_id_legado)))),
     ];
     if (candidateIds.length === 0) {
-      return json({ success: false, error: "Nenhuma receita candidata encontrada." }, 400);
+      return bad(400, "Nenhuma receita candidata encontrada");
     }
 
     const { data: ingredientes, error: iErr } = await supabase
@@ -180,7 +215,7 @@ serve(async (req) => {
 
     if (iErr) {
       console.error("[receita_ingredientes]", iErr);
-      return json({ success: false, error: "Erro ao consultar receita_ingredientes" }, 500);
+      return bad(500, "Erro ao consultar receita_ingredientes");
     }
 
     const ingByReceita = new Map<string, any[]>();
@@ -214,10 +249,7 @@ serve(async (req) => {
         .gt("preco", 0);
       if (r.error) {
         console.error("[co_solicitacao_produto_listagem]", r.error);
-        return json(
-          { success: false, error: "Erro ao consultar co_solicitacao_produto_listagem" },
-          500,
-        );
+        return bad(500, "Erro ao consultar co_solicitacao_produto_listagem");
       }
       mercado = r.data ?? [];
     }
@@ -298,101 +330,108 @@ serve(async (req) => {
       return best ? { ...best.r, _cost: best.cost } : null;
     }
 
-    // ARROZ e FEIJÃO mais baratos
-    const arroz = pickCheapest("ARROZ BRANCO", refeicoesPorDia);
-    const feijao = pickCheapest("FEIJÃO", refeicoesPorDia);
-    if (!arroz || !feijao) {
-      return json({ success: false, error: "Não foi possível precificar ARROZ/FEIJÃO." }, 400);
+    // ARROZ obrigatório (usar baseRecipes.arroz se fornecido)
+    let arroz;
+    if (arrozReceita) {
+      const cost = costOfRecipe(arrozReceita.receita_id_legado, refeicoesPorDia);
+      if (cost !== null) {
+        arroz = { ...arrozReceita, _cost: cost };
+      }
     }
+    if (!arroz) {
+      arroz = pickCheapest("ARROZ BRANCO", refeicoesPorDia);
+    }
+    
+    if (!arroz) {
+      return bad(400, "Não foi possível precificar ARROZ");
+    }
+
+    // FEIJÃO será placeholder por enquanto
+    const feijao = null;
 
     const cardapio: any[] = [];
     let totalGeral = 0;
 
+    const days = [];
+
     for (let d = 0; d < numDays; d++) {
-      const weekdayIdx = d % 5;
-      const tetoPorRef = Number(refCostWeek[weekdayIdx] || 0);
-      if (!(tetoPorRef > 0)) {
-        return json({ success: false, error: `Teto não configurado (dia idx ${weekdayIdx}).` }, 400);
+      const weekdayIdx = d % 7;
+      const tetoPorRef = refCostWeek[weekdayIdx];
+      if (!tetoPorRef || tetoPorRef <= 0) {
+        return bad(400, `Teto não configurado para ${WEEK_LABELS[weekdayIdx]}`);
       }
 
-      const itensDia: any[] = [];
-      const usados = new Set<string>([
-        String(arroz.receita_id_legado),
-        String(feijao.receita_id_legado),
-      ]);
+      const itens: any[] = [];
+      const usados = new Set<string>([String(arroz.receita_id_legado)]);
 
-      // fixos
-      itensDia.push({
-        categoria: "ARROZ BRANCO",
-        receita_id_legado: String(arroz.receita_id_legado),
+      // ARROZ BRANCO (obrigatório)
+      itens.push({
+        slot: "ARROZ BRANCO",
+        receita_id: String(arroz.receita_id_legado),
         nome: arroz.nome_receita,
-        custo_total_dia: arroz._cost,
+        custo_total: round2(arroz._cost),
         custo_por_refeicao: round2(arroz._cost / refeicoesPorDia),
       });
-      itensDia.push({
-        categoria: "FEIJÃO",
-        receita_id_legado: String(feijao.receita_id_legado),
-        nome: feijao.nome_receita,
-        custo_total_dia: feijao._cost,
-        custo_por_refeicao: round2(feijao._cost / refeicoesPorDia),
+
+      // FEIJÃO (placeholder)
+      itens.push({
+        slot: "FEIJÃO",
+        placeholder: true,
       });
 
-      // demais categorias (pega as mais baratas disponíveis)
+      // Demais categorias na ordem dos slots
       for (const cat of CATS) {
         if (cat === "ARROZ BRANCO" || cat === "FEIJÃO") continue;
         const pick = pickCheapest(cat, refeicoesPorDia, usados);
         if (pick) {
           usados.add(String(pick.receita_id_legado));
-          itensDia.push({
-            categoria: cat,
-            receita_id_legado: String(pick.receita_id_legado),
+          itens.push({
+            slot: cat,
+            receita_id: String(pick.receita_id_legado),
             nome: pick.nome_receita,
-            custo_total_dia: pick._cost,
+            custo_total: round2(pick._cost),
             custo_por_refeicao: round2(pick._cost / refeicoesPorDia),
           });
         } else {
-          // sem candidato: mantém slot vazio
-          itensDia.push({
-            categoria: cat,
-            receita_id_legado: null,
-            nome: "-",
-            custo_total_dia: 0,
-            custo_por_refeicao: 0,
+          // Sem candidato: placeholder
+          itens.push({
+            slot: cat,
+            placeholder: true,
           });
         }
       }
 
-      // valida teto — tenta baratear trocando estas categorias na ordem:
+      // Otimização de custo - trocar por alternativas mais baratas se exceder orçamento
       const ordemTroca = [
         "PRATO PRINCIPAL 2",
-        "SALADA 2 (LEGUMES)",
+        "SALADA 2 (LEGUMES)", 
         "SALADA 1 (VERDURAS)",
         "SUCO 2",
         "SUCO 1",
         "PRATO PRINCIPAL 1",
       ];
 
-      const somaTotalDia = () => itensDia.reduce((s, it) => s + Number(it.custo_total_dia || 0), 0);
-
+      const somaTotalDia = () => itens.reduce((s, it) => s + (it.custo_total || 0), 0);
+      
       let totalDia = somaTotalDia();
       let porRef = totalDia / refeicoesPorDia;
 
       for (const cat of ordemTroca) {
         if (porRef <= tetoPorRef) break;
-        const idx = itensDia.findIndex((x: any) => x.categoria === cat && x.receita_id_legado);
+        const idx = itens.findIndex((x: any) => x.slot === cat && x.receita_id);
         if (idx === -1) continue;
 
-        const atualId = String(itensDia[idx].receita_id_legado);
+        const atualId = String(itens[idx].receita_id);
         const exclude = new Set<string>([...usados, atualId]);
         const melhor = pickCheapest(cat, refeicoesPorDia, exclude);
 
-        if (melhor && melhor._cost < itensDia[idx].custo_total_dia) {
+        if (melhor && melhor._cost < itens[idx].custo_total) {
           usados.add(String(melhor.receita_id_legado));
-          itensDia[idx] = {
-            categoria: cat,
-            receita_id_legado: String(melhor.receita_id_legado),
+          itens[idx] = {
+            slot: cat,
+            receita_id: String(melhor.receita_id_legado),
             nome: melhor.nome_receita,
-            custo_total_dia: melhor._cost,
+            custo_total: round2(melhor._cost),
             custo_por_refeicao: round2(melhor._cost / refeicoesPorDia),
           };
           totalDia = somaTotalDia();
@@ -400,17 +439,14 @@ serve(async (req) => {
         }
       }
 
-      // ordena pelas linhas do grid
-      itensDia.sort((a, b) => CATS.indexOf(a.categoria) - CATS.indexOf(b.categoria));
-
-      cardapio.push({
-        dia_index: d,
-        dia_label: WEEK_LABELS[weekdayIdx],
-        itens: itensDia,
-        teto_por_refeicao: round2(tetoPorRef),
+      days.push({
+        dia: WEEK_LABELS[weekdayIdx],
+        label_orcamento: WEEK_LABELS[weekdayIdx],
+        budget_per_meal: round2(tetoPorRef),
         custo_total_dia: round2(totalDia),
         custo_por_refeicao: round2(porRef),
-        dentro_do_teto: porRef <= tetoPorRef,
+        dentro_orcamento: porRef <= tetoPorRef,
+        itens,
       });
 
       totalGeral += totalDia;
@@ -419,22 +455,61 @@ serve(async (req) => {
     const totalPorcoes = refeicoesPorDia * numDays;
     const custoMedioPorPorcao = totalGeral / Math.max(totalPorcoes, 1);
 
+    // Gerar shopping list básico
+    const shoppingList: any[] = [];
+    const produtosUsados = new Map<number, { nome: string; quantidade: number; unidade: string; custo: number }>();
+
+    for (const day of days) {
+      for (const item of day.itens) {
+        if (item.placeholder || !item.receita_id) continue;
+        
+        const ings = ingByReceita.get(item.receita_id) ?? [];
+        const fator = refeicoesPorDia / RECIPE_BASE;
+        
+        for (const ing of ings) {
+          const prodId = Number(ing.produto_base_id);
+          if (!prodId) continue;
+          
+          const { qty: qtyBase } = toBaseQty(Number(ing.quantidade ?? 0), String(ing.unidade ?? ""));
+          const necessidade = qtyBase * fator;
+          
+          if (produtosUsados.has(prodId)) {
+            produtosUsados.get(prodId)!.quantidade += necessidade;
+          } else {
+            produtosUsados.set(prodId, {
+              nome: ing.produto_base_descricao || ing.nome || `Produto ${prodId}`,
+              quantidade: necessidade,
+              unidade: toBaseQty(1, String(ing.unidade ?? "")).base,
+              custo: 0 // TODO: calcular custo estimado
+            });
+          }
+        }
+      }
+    }
+
+    for (const [prodId, info] of produtosUsados) {
+      shoppingList.push({
+        produto_base_id: prodId,
+        nome: info.nome,
+        unidade_base: info.unidade,
+        quantidade_base: round2(info.quantidade),
+        custo_estimado: round2(info.custo),
+      });
+    }
+
     return json({
       success: true,
       menu: {
-        cardapio,
-        summary: {
-          total_custo: round2(totalGeral),
-          custo_medio_por_refeicao: round2(custoMedioPorPorcao),
-          porcoes_totais: totalPorcoes,
-          dias: numDays,
-          refeicoes_por_dia: refeicoesPorDia,
-          total_de_itens: numDays * CATS.length,
-        },
+        days,
+        total_cost: round2(totalGeral),
+        average_cost_per_meal: round2(custoMedioPorPorcao),
+        portions_total: totalPorcoes,
       },
+      shoppingList,
+      warnings,
     });
   } catch (e: any) {
     console.error("[menu] unhandled", e);
-    return json({ success: false, error: e?.message ?? "Erro desconhecido" }, 500);
+    return bad(500, e?.message ?? "Erro interno do servidor");
   }
 });
