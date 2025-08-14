@@ -224,42 +224,78 @@ serve(async (req) => {
       (ingByReceita.get(key) ?? ingByReceita.set(key, []).get(key))!.push(ing);
     }
 
-    // 4) Preços do mercado (com pacote & inteiro)
-    const produtoIds = [
-      ...new Set(
+    // 4) Preços do mercado (com pacote & inteiro) - NORMALIZAÇÃO ROBUSTA
+    const produtoIds = Array.from(
+      new Set(
         (ingredientes ?? [])
           .map((i) => Number(i.produto_base_id))
-          .filter((v) => Number.isFinite(v) && v > 0),
-      ),
-    ];
-    console.log("[menu] produtoIds:", produtoIds.length);
+          .filter((v) => Number.isFinite(v) && v > 0)
+      )
+    );
+    
+    console.log("[menu] produtoIds:", JSON.stringify(produtoIds));
 
     let mercado: any[] = [];
     if (produtoIds.length) {
-      const r = await supabase
+      const { data: mercadoRows, error: mercadoErr } = await supabase
         .from("co_solicitacao_produto_listagem")
         .select(`
           produto_base_id,
+          descricao,
           preco,
           unidade,
           apenas_valor_inteiro_sim_nao,
-          produto_base_quantidade_embalagem
+          produto_base_quantidade_embalagem,
+          em_promocao_sim_nao
         `)
         .in("produto_base_id", produtoIds)
         .gt("preco", 0);
-      if (r.error) {
-        console.error("[co_solicitacao_produto_listagem]", r.error);
-        return bad(500, "Erro ao consultar co_solicitacao_produto_listagem");
+        
+      if (mercadoErr) {
+        console.error("[menu] erro mercado .in()", mercadoErr);
+        return bad(500, "Erro ao consultar co_solicitacao_produto_listagem", { produtoIds });
       }
-      mercado = r.data ?? [];
+
+      // Sanitiza números e evita NaN
+      mercado = (mercadoRows ?? []).map((r) => ({
+        produto_base_id: Number(r.produto_base_id) || 0,
+        descricao: r.descricao || '',
+        preco: Number(r.preco) || 0,
+        unidade: (r.unidade || '').toUpperCase(),
+        apenas_valor_inteiro_sim_nao: !!r.apenas_valor_inteiro_sim_nao,
+        produto_base_quantidade_embalagem: Number(r.produto_base_quantidade_embalagem) || 1, // fallback 1
+        em_promocao_sim_nao: !!r.em_promocao_sim_nao,
+      }));
     }
+
+    // Conversor de unidades robusto
+    const toMercadoBase = (qtd: number, unidadeIngrediente: string, unidadeMercado: string) => {
+      const uIng = (unidadeIngrediente || '').toUpperCase();
+      const uMerc = (unidadeMercado || '').toUpperCase();
+      let base = Number(qtd) || 0;
+      
+      if (uIng === 'G' && uMerc === 'KG') base = base / 1000;
+      if (uIng === 'KG' && uMerc === 'G') base = base * 1000;
+      if (uIng === 'ML' && uMerc === 'LT') base = base / 1000;
+      if (uIng === 'LT' && uMerc === 'ML') base = base * 1000;
+      
+      // Verificar se unidades são compatíveis
+      const validUnits = ['KG', 'G', 'LT', 'ML', 'UN'];
+      if (!validUnits.includes(uMerc)) {
+        return { ok: false, valor: 0 };
+      }
+      
+      return { ok: true, valor: base };
+    };
 
     type MarketRow = {
       produto_base_id: number;
+      descricao: string;
       preco: number;
       unidade: string;
       apenas_valor_inteiro_sim_nao: boolean;
-      produto_base_quantidade_embalagem: number | null;
+      produto_base_quantidade_embalagem: number;
+      em_promocao_sim_nao: boolean;
     };
 
     const marketByProduto = new Map<number, MarketRow[]>();
@@ -269,52 +305,69 @@ serve(async (req) => {
       marketByProduto.get(id)!.push(row);
     }
 
-    function costOfRecipe(receitaId: string, servings: number): number | null {
-      const ings = ingByReceita.get(String(receitaId)) ?? [];
-      if (!ings.length) return null;
-
-      const fator = servings / RECIPE_BASE;
-      let total = 0;
-
-      for (const ing of ings) {
-        const prodId = Number(ing.produto_base_id);
-        const ofertas = marketByProduto.get(prodId) ?? [];
-        if (!ofertas.length) return null;
+    // Cálculo do custo por ingrediente com proteção contra erros
+    const calcularCustoIngrediente = (ing: any) => {
+      try {
+        const ofertas = marketByProduto.get(Number(ing.produto_base_id)) ?? [];
+        if (!ofertas.length) {
+          warnings.push(`Sem preço no mercado para produto_base_id=${ing.produto_base_id} (${ing.produto_base_descricao || 'N/A'})`);
+          return 0;
+        }
 
         const { qty: qtyBase, base: baseIng } = toBaseQty(
           Number(ing.quantidade ?? 0),
-          String(ing.unidade ?? ""),
+          String(ing.unidade ?? "")
         );
-        const necessidade = qtyBase * fator; // KG/LT/UN
+        const necessidade = qtyBase; // Já escalado no ingrediente
 
-        let melhor: number | null = null;
+        let melhor = Infinity;
         for (const ofe of ofertas) {
-          const baseMercado = normBase(ofe.unidade);
-          if (baseMercado !== baseIng) continue;
+          const conv = toMercadoBase(necessidade, baseIng, ofe.unidade);
+          if (!conv.ok) continue;
 
-          const packSize = packSizeToBase(ofe.produto_base_quantidade_embalagem, baseMercado);
-          const preco = Number(ofe.preco || 0);
-          if (!(preco > 0)) continue;
+          const emb = ofe.produto_base_quantidade_embalagem > 0 ? ofe.produto_base_quantidade_embalagem : 1;
+          const quantidadeCompra = ofe.apenas_valor_inteiro_sim_nao
+            ? Math.ceil(conv.valor / emb) * emb
+            : conv.valor;
 
-          let custo: number;
-          if (ofe.apenas_valor_inteiro_sim_nao) {
-            // compra por PACOTE inteiro
-            const pacotes = Math.ceil(necessidade / Math.max(packSize, 1));
-            custo = pacotes * preco; // preço do pacote
-          } else {
-            // fracionável: se veio packSize, considere preco do pacote → converte pra preço unitário
-            const unitPrice = packSize > 1 ? preco / packSize : preco;
-            custo = necessidade * unitPrice;
-          }
-
-          if (melhor == null || custo < melhor) melhor = custo;
+          const custo = quantidadeCompra * ofe.preco;
+          if (custo < melhor) melhor = custo;
         }
 
-        if (melhor == null) return null; // nenhuma oferta compatível
-        total += melhor;
+        return Number.isFinite(melhor) ? melhor : 0;
+      } catch (e) {
+        console.error('[menu] erro calcularCustoIngrediente', ing, e);
+        warnings.push(`Falha no cálculo de custo para ${ing.produto_base_descricao || ing.produto_base_id}`);
+        return 0;
       }
+    };
 
-      return total;
+    function costOfRecipe(receitaId: string, servings: number): number | null {
+      try {
+        const ings = ingByReceita.get(String(receitaId)) ?? [];
+        if (!ings.length) return null;
+
+        const fator = servings / RECIPE_BASE;
+        let total = 0;
+
+        // Escalar ingredientes
+        const ingredientesEscalados = ings.map((ing) => ({
+          produto_base_id: ing.produto_base_id,
+          produto_base_descricao: ing.produto_base_descricao,
+          quantidade: Number(ing.quantidade ?? 0) * fator,
+          unidade: ing.unidade
+        }));
+
+        // Calcular custo de cada ingrediente com proteção
+        for (const ing of ingredientesEscalados) {
+          total += calcularCustoIngrediente(ing);
+        }
+
+        return total;
+      } catch (e) {
+        console.error('[menu] erro costOfRecipe', receitaId, e);
+        return null;
+      }
     }
 
     function pickCheapest(cat: string, servings: number, excludeIds = new Set<string>()) {

@@ -359,31 +359,41 @@ export const useIntegratedMenuGeneration = () => {
         
         // Tratamento detalhado de erros da Edge Function
         let errorDetails = functionError.message || 'Erro ao gerar cardápio com IA';
-        let errorStatus = 'Erro desconhecido';
+        let errorStatus = 'Erro da função';
         
-        // Capturar detalhes específicos dos diferentes tipos de erro
-        if (functionError.name === 'FunctionsHttpError') {
-          errorStatus = `HTTP ${functionError.status || 'N/A'}`;
-          try {
-            const context = functionError.context;
-            if (context) {
-              const contextData = typeof context === 'string' ? JSON.parse(context) : context;
-              if (contextData.error) {
-                errorDetails = contextData.error;
+        // Extrair contexto detalhado quando possível
+        try {
+          // Verificar se é erro HTTP (mais comum) e extrair contexto
+          if (functionError.name === 'FunctionsHttpError' && functionError.context) {
+            errorStatus = `HTTP ${(functionError as any).status || 'N/A'}`;
+            try {
+              const contextResponse = functionError.context;
+              if (typeof contextResponse.json === 'function') {
+                const contextData = await contextResponse.json();
+                if (contextData?.error) {
+                  errorDetails = contextData.error;
+                }
+                if (contextData?.details) {
+                  errorDetails += ` | Detalhes: ${contextData.details}`;
+                }
+                if (contextData?.produtoIds) {
+                  errorDetails += ` | IDs: ${JSON.stringify(contextData.produtoIds)}`;
+                }
               }
-              if (contextData.details) {
-                errorDetails += ` | Detalhes: ${contextData.details}`;
-              }
+            } catch (parseError) {
+              console.warn('[Frontend] Erro ao processar contexto HTTP:', parseError);
+              errorDetails = `${errorStatus}: ${functionError.message}`;
             }
-          } catch (parseError) {
-            console.warn('[Frontend] Erro ao processar contexto do erro:', parseError);
+          } else if (functionError.name === 'FunctionsRelayError') {
+            errorStatus = 'Erro de comunicação';
+            errorDetails = 'Falha na comunicação com o servidor. Tente novamente.';
+          } else if (functionError.name === 'FunctionsFetchError') {
+            errorStatus = 'Erro de rede';
+            errorDetails = 'Problema de conectividade. Verifique sua conexão.';
           }
-        } else if (functionError.name === 'FunctionsRelayError') {
-          errorStatus = 'Erro de comunicação';
-          errorDetails = 'Falha na comunicação com o servidor. Tente novamente.';
-        } else if (functionError.name === 'FunctionsFetchError') {
-          errorStatus = 'Erro de rede';
-          errorDetails = 'Problema de conectividade. Verifique sua conexão.';
+        } catch (processingError) {
+          console.warn('[Frontend] Erro ao processar detalhes do erro:', processingError);
+          errorDetails = functionError.message || String(functionError);
         }
         
         console.error(`[Frontend] ${errorStatus}: ${errorDetails}`);
