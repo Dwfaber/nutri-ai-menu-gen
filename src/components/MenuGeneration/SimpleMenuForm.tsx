@@ -25,6 +25,7 @@ export const SimpleMenuForm: React.FC<SimpleMenuFormProps> = ({
   const [weekEnd, setWeekEnd] = useState('');
   const [preferences, setPreferences] = useState('');
   const [mealsPerDay, setMealsPerDay] = useState(50);
+  const [workingDays, setWorkingDays] = useState(5);
   const [totalMeals, setTotalMeals] = useState(250); // 50 refeições x 5 dias
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -52,14 +53,14 @@ export const SimpleMenuForm: React.FC<SimpleMenuFormProps> = ({
     onSubmit(formData);
   };
 
-  // Função para calcular data fim automaticamente (5 dias úteis)
+  // Função para calcular data fim automaticamente
   const handleWeekStartChange = (value: string) => {
     setWeekStart(value);
     
     if (value) {
       const startDate = new Date(value);
       const endDate = new Date(startDate);
-      endDate.setDate(startDate.getDate() + 4); // Adicionar 4 dias para ter 5 dias úteis
+      endDate.setDate(startDate.getDate() + (workingDays - 1)); // Adicionar dias conforme configurado
       
       setWeekEnd(endDate.toISOString().split('T')[0]);
       // Recalcular total de refeições quando a data muda
@@ -69,8 +70,7 @@ export const SimpleMenuForm: React.FC<SimpleMenuFormProps> = ({
 
   // Função para atualizar total de refeições
   const updateTotalMeals = (mealsPerDayValue: number) => {
-    const totalDays = 5; // 5 dias úteis
-    setTotalMeals(mealsPerDayValue * totalDays);
+    setTotalMeals(mealsPerDayValue * workingDays);
   };
 
   return (
@@ -122,15 +122,35 @@ export const SimpleMenuForm: React.FC<SimpleMenuFormProps> = ({
               </div>
             </div>
             <p className="text-xs text-gray-500">
-              O cardápio será gerado para 5 dias úteis (segunda a sexta)
+              O cardápio será gerado para {workingDays} dia{workingDays !== 1 ? 's' : ''} úteis
             </p>
           </div>
 
-          {/* Número de Refeições */}
+          {/* Configuração do Período */}
           <div className="space-y-4">
-            <Label className="text-base font-medium">Número de Refeições</Label>
+            <Label className="text-base font-medium">Configuração do Período</Label>
             
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <Label htmlFor="workingDays">Dias Úteis *</Label>
+                <Input
+                  id="workingDays"
+                  type="number"
+                  min="1"
+                  max="7"
+                  value={workingDays}
+                  onChange={(e) => {
+                    const value = parseInt(e.target.value) || 1;
+                    setWorkingDays(value);
+                    updateTotalMeals(mealsPerDay);
+                    // Recalcular data fim se houver data início
+                    if (weekStart) {
+                      handleWeekStartChange(weekStart);
+                    }
+                  }}
+                  required
+                />
+              </div>
               <div>
                 <Label htmlFor="mealsPerDay">Refeições por Dia *</Label>
                 <Input
@@ -147,7 +167,7 @@ export const SimpleMenuForm: React.FC<SimpleMenuFormProps> = ({
                 />
               </div>
               <div>
-                <Label htmlFor="totalMeals">Total de Refeições (5 dias)</Label>
+                <Label htmlFor="totalMeals">Total de Refeições ({workingDays} dia{workingDays !== 1 ? 's' : ''})</Label>
                 <Input
                   id="totalMeals"
                   type="number"
