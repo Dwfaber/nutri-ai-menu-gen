@@ -226,6 +226,7 @@ serve(async (req) => {
       "SUCO 2": (r) => like(r.categoria_descricao, ["suco", "bebida"]),
     };
 
+    const CATS = Object.keys(CAT_MATCHERS);
     const candidatesByCat: Record<string, any[]> = {};
     for (const cat of CATS) {
       const f = CAT_MATCHERS[cat];
