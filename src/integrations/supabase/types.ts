@@ -7,7 +7,7 @@ export type Json =
   | Json[]
 
 export type Database = {
-  // Allows to automatically instanciate createClient with right options
+  // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
     PostgrestVersion: "12.2.3 (519615d)"
@@ -59,15 +59,11 @@ export type Database = {
           descricao: string | null
           em_promocao_sim_nao: boolean | null
           grupo: string | null
-          inteiro: boolean | null
           per_capita: number | null
           preco: number | null
-          preco_compra: number | null
           produto_base_id: number | null
           produto_base_quantidade_embalagem: number | null
           produto_id: number | null
-          promocao: boolean | null
-          quantidade_embalagem: number | null
           solicitacao_id: number | null
           solicitacao_produto_categoria_id: number | null
           solicitacao_produto_listagem_id: number
@@ -81,15 +77,11 @@ export type Database = {
           descricao?: string | null
           em_promocao_sim_nao?: boolean | null
           grupo?: string | null
-          inteiro?: boolean | null
           per_capita?: number | null
           preco?: number | null
-          preco_compra?: number | null
           produto_base_id?: number | null
           produto_base_quantidade_embalagem?: number | null
           produto_id?: number | null
-          promocao?: boolean | null
-          quantidade_embalagem?: number | null
           solicitacao_id?: number | null
           solicitacao_produto_categoria_id?: number | null
           solicitacao_produto_listagem_id?: number
@@ -103,15 +95,11 @@ export type Database = {
           descricao?: string | null
           em_promocao_sim_nao?: boolean | null
           grupo?: string | null
-          inteiro?: boolean | null
           per_capita?: number | null
           preco?: number | null
-          preco_compra?: number | null
           produto_base_id?: number | null
           produto_base_quantidade_embalagem?: number | null
           produto_id?: number | null
-          promocao?: boolean | null
-          quantidade_embalagem?: number | null
           solicitacao_id?: number | null
           solicitacao_produto_categoria_id?: number | null
           solicitacao_produto_listagem_id?: number
@@ -182,48 +170,6 @@ export type Database = {
           ratear_custo?: boolean | null
           razao_social?: string | null
           tipo_custo?: number | null
-        }
-        Relationships: []
-      }
-      contratos_corporativos_v2: {
-        Row: {
-          ativo: boolean | null
-          cliente_id_legado: string
-          created_at: string
-          custo_maximo_refeicao: number | null
-          id: string
-          nome_empresa: string
-          periodicidade: string | null
-          restricoes_alimentares: string[] | null
-          sync_at: string
-          total_funcionarios: number | null
-          total_refeicoes_mes: number | null
-        }
-        Insert: {
-          ativo?: boolean | null
-          cliente_id_legado: string
-          created_at?: string
-          custo_maximo_refeicao?: number | null
-          id?: string
-          nome_empresa: string
-          periodicidade?: string | null
-          restricoes_alimentares?: string[] | null
-          sync_at?: string
-          total_funcionarios?: number | null
-          total_refeicoes_mes?: number | null
-        }
-        Update: {
-          ativo?: boolean | null
-          cliente_id_legado?: string
-          created_at?: string
-          custo_maximo_refeicao?: number | null
-          id?: string
-          nome_empresa?: string
-          periodicidade?: string | null
-          restricoes_alimentares?: string[] | null
-          sync_at?: string
-          total_funcionarios?: number | null
-          total_refeicoes_mes?: number | null
         }
         Relationships: []
       }
@@ -846,8 +792,8 @@ export type Database = {
       }
       has_role: {
         Args: {
-          _user_id: string
           _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
         }
         Returns: boolean
       }
