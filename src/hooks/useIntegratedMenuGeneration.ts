@@ -327,30 +327,75 @@ export const useIntegratedMenuGeneration = () => {
       const mpd = mealsPerDay || clientToUse.total_funcionarios || 100;
       const tMeals = totalMeals || (mpd * 5);
       
+      // Validação de entrada
+      const numericLegacyId = Number(legacyId);
+      if (!numericLegacyId || numericLegacyId <= 0) {
+        throw new Error('ID do cliente deve ser um número válido maior que zero');
+      }
+      
+      if (!mpd || mpd <= 0) {
+        throw new Error('Número de refeições por dia deve ser maior que zero');
+      }
+
+      // Payload padronizado - apenas campos necessários para Edge Function
+      const payload = {
+        action: 'generate_menu',
+        filialIdLegado: numericLegacyId,
+        numDays: 7,
+        refeicoesPorDia: mpd,
+        useDiaEspecial: false
+      };
+
+      console.log('[Frontend] Enviando payload padronizado:', payload);
+
       // Use GPT Assistant para gerar cardápio com custos reais e proporções corretas
       const { data, error: functionError } = await supabase.functions.invoke('gpt-assistant', {
-        body: {
-          action: 'generate_menu',
-          clientId: legacyId,
-          filialIdLegado: legacyId,
-          numDays: 7,
-          refeicoesPorDia: mpd,
-          mealsPerDay: mpd,
-          targetServings: mpd,
-          totalMeals: tMeals,
-          budget: clientToUse.custo_maximo_refeicao || 15,
-          restrictions: clientToUse.restricoes_alimentares || [],
-          preferences: preferences?.join(', ') || '',
-          weekPeriod,
-          useProportionalCalculation: true
-        }
+        body: payload
       });
 
       console.log('Resposta da função GPT Assistant:', { data, functionError });
 
       if (functionError) {
-        console.error('Erro na função GPT:', functionError);
-        throw new Error(functionError.message || 'Erro ao gerar cardápio com IA');
+        console.error('[Frontend] Erro na função GPT:', functionError);
+        
+        // Tratamento detalhado de erros da Edge Function
+        let errorDetails = functionError.message || 'Erro ao gerar cardápio com IA';
+        let errorStatus = 'Erro desconhecido';
+        
+        // Capturar detalhes específicos dos diferentes tipos de erro
+        if (functionError.name === 'FunctionsHttpError') {
+          errorStatus = `HTTP ${functionError.status || 'N/A'}`;
+          try {
+            const context = functionError.context;
+            if (context) {
+              const contextData = typeof context === 'string' ? JSON.parse(context) : context;
+              if (contextData.error) {
+                errorDetails = contextData.error;
+              }
+              if (contextData.details) {
+                errorDetails += ` | Detalhes: ${contextData.details}`;
+              }
+            }
+          } catch (parseError) {
+            console.warn('[Frontend] Erro ao processar contexto do erro:', parseError);
+          }
+        } else if (functionError.name === 'FunctionsRelayError') {
+          errorStatus = 'Erro de comunicação';
+          errorDetails = 'Falha na comunicação com o servidor. Tente novamente.';
+        } else if (functionError.name === 'FunctionsFetchError') {
+          errorStatus = 'Erro de rede';
+          errorDetails = 'Problema de conectividade. Verifique sua conexão.';
+        }
+        
+        console.error(`[Frontend] ${errorStatus}: ${errorDetails}`);
+        
+        toast({
+          title: `Erro na geração (${errorStatus})`,
+          description: errorDetails,
+          variant: "destructive"
+        });
+        
+        throw new Error(errorDetails);
       }
 
       if (!data || !data.success) {
@@ -465,11 +510,25 @@ export const useIntegratedMenuGeneration = () => {
         }
       }
 
+      // Processar warnings informativos da Edge Function
       if (Array.isArray(data.warnings) && data.warnings.length) {
-        toast({
-          title: 'Avisos do gerador',
-          description: `${data.warnings.length} aviso(s). Ex.: ${String(data.warnings[0]).slice(0, 120)}...`,
+        console.log('[Frontend] Warnings recebidos da Edge Function:', data.warnings);
+        
+        // Exibir warnings como informação (não erro)
+        data.warnings.forEach((warning: string, index: number) => {
+          if (index < 3) { // Limitar a 3 toasts para não sobrecarregar
+            toast({
+              title: `Aviso ${index + 1}/${data.warnings.length}`,
+              description: String(warning).slice(0, 150) + (String(warning).length > 150 ? '...' : ''),
+              variant: "default" // Info, não destructive
+            });
+          }
         });
+        
+        if (data.warnings.length > 3) {
+          console.log(`[Frontend] ${data.warnings.length - 3} warnings adicionais não exibidos:`, 
+            data.warnings.slice(3));
+        }
       }
 
       console.log(`IA gerou ${receitasCardapio.length} itens precificados`);
