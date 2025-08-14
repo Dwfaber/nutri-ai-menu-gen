@@ -11,19 +11,28 @@ const corsHeaders = {
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SERVICE_ROLE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 
-const CATS = [
-  "PRATO PRINCIPAL 1",
-  "PRATO PRINCIPAL 2",
-  "ARROZ BRANCO",
-  "FEIJÃO",
-  "SALADA 1 (VERDURAS)",
-  "SALADA 2 (LEGUMES)",
-  "SUCO 1",
-  "SUCO 2",
+type DiaLabel = 'SEGUNDA'|'TERÇA'|'QUARTA'|'QUINTA'|'SEXTA'|'SÁBADO'|'DOMINGO';
+
+const REQUIRED_SLOTS = [
+  'ARROZ BRANCO',
+  'FEIJÃO',
+  'PRATO PRINCIPAL 1',
+  'PRATO PRINCIPAL 2',
+  'SALADA 1 (VERDURAS)',
+  'SALADA 2 (LEGUMES)',
+  'SUCO 1',
+  'SUCO 2',
+] as const;
+
+const WEEK: DiaLabel[] = ['SEGUNDA','TERÇA','QUARTA','QUINTA','SEXTA','SÁBADO','DOMINGO'];
+const RECIPE_BASE = 100; // receitas padrão são para 100 refeições
+
+const DEFAULT_JUICES = [
+  { id: 599, nome: 'SUCO EM PÓ DE LARANJA' },
+  { id: 656, nome: 'SUCO TETRA PAK' },
 ];
 
-const WEEK_LABELS = ["SEGUNDA", "TERÇA", "QUARTA", "QUINTA", "SEXTA", "SÁBADO", "DOMINGO"];
-const RECIPE_BASE = 100; // receitas padrão são para 100 refeições
+type UsedTracker = Record<string, Set<string>>; // slot -> set de receita_id
 
 // ---------------- helpers ----------------
 const json = (payload: any, status = 200) =>
@@ -51,6 +60,44 @@ const like = (s: string | null | undefined, keys: string[]) => {
   const t = (s ?? "").toLowerCase();
   return keys.some((k) => t.includes(k));
 };
+
+function dayLabelByIndex(i: number): DiaLabel {
+  return WEEK[i % 7];
+}
+
+function getBudgetLabel(i: number, useDiaEspecial: boolean): 'SEGUNDA'|'TERÇA'|'QUARTA'|'QUINTA'|'SEXTA'|'SÁBADO'|'DOMINGO'|'ESPECIAL' {
+  const label = dayLabelByIndex(i);
+  if (useDiaEspecial && (label === 'SÁBADO' || label === 'DOMINGO')) return 'ESPECIAL';
+  return label;
+}
+
+function getBudgetPerMealFromCustos(row: any, label: string): number {
+  switch (label) {
+    case 'SEGUNDA':  return Number(row.RefCustoSegunda) || 0;
+    case 'TERÇA':
+    case 'TERCA':    return Number(row.RefCustoTerça ?? row.RefCustoTerca) || 0;
+    case 'QUARTA':   return Number(row.RefCustoQuarta) || 0;
+    case 'QUINTA':   return Number(row.RefCustoQuinta) || 0;
+    case 'SEXTA':    return Number(row.RefCustoSexta) || 0;
+    case 'SÁBADO':
+    case 'SABADO':   return Number(row.RefCustoSabado) || 0;
+    case 'DOMINGO':  return Number(row.RefCustoDomingo) || 0;
+    case 'ESPECIAL': return Number(row.RefCustoDiaEspecial) || 0;
+    default:         return 0;
+  }
+}
+
+function getArrozBaseId(baseRecipes?: any): number | null {
+  const v = baseRecipes?.arroz ?? baseRecipes?.ARROZ ?? baseRecipes?.arroz_branco;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+}
+
+function getFeijaoBaseId(baseRecipes?: any): number | null {
+  const v = baseRecipes?.feijao ?? baseRecipes?.FEIJÃO ?? baseRecipes?.feijao_carioca;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+}
 
 function toBaseQty(qtd: number, unidade: string): { qty: number; base: "KG" | "LT" | "UN" } {
   const u = (unidade ?? "").trim().toUpperCase();
@@ -210,7 +257,7 @@ serve(async (req) => {
 
     const { data: ingredientes, error: iErr } = await supabase
       .from("receita_ingredientes")
-      .select("receita_id_legado, produto_base_id, quantidade, unidade, produto_base_descricao")
+      .select("receita_id_legado, produto_base_id, produto_base_descricao, quantidade, unidade, quantidade_refeicoes")
       .in("receita_id_legado", candidateIds);
 
     if (iErr) {
@@ -350,10 +397,10 @@ serve(async (req) => {
         const fator = servings / RECIPE_BASE;
         let total = 0;
 
-        // Escalar ingredientes
+    // Escalar ingredientes
         const ingredientesEscalados = ings.map((ing) => ({
           produto_base_id: ing.produto_base_id,
-          produto_base_descricao: ing.produto_base_descricao,
+          nome: ing.produto_base_descricao || '',
           quantidade: Number(ing.quantidade ?? 0) * fator,
           unidade: ing.unidade
         }));
@@ -370,6 +417,24 @@ serve(async (req) => {
       }
     }
 
+    const usedBySlot: UsedTracker = {};
+
+    function markUsed(slot: string, id: string) {
+      if (!usedBySlot[slot]) usedBySlot[slot] = new Set();
+      usedBySlot[slot].add(id);
+    }
+    function isUsed(slot: string, id: string) {
+      return !!usedBySlot[slot]?.has(id);
+    }
+    function pickUnique(pool: any[], slot: string) {
+      let r = pool?.find(x => !isUsed(slot, String(x.receita_id_legado)));
+      if (!r && pool?.length) {           // se esgotou, zera para recomeçar o ciclo
+        usedBySlot[slot] = new Set();
+        r = pool[0];
+      }
+      return r ?? null;
+    }
+
     function pickCheapest(cat: string, servings: number, excludeIds = new Set<string>()) {
       const list = candidatesByCat[cat] ?? [];
       let best: { r: any; cost: number } | null = null;
@@ -382,6 +447,68 @@ serve(async (req) => {
       }
       return best ? { ...best.r, _cost: best.cost } : null;
     }
+
+    // Pools de candidatos com custo
+    const poolPP1: any[] = [];
+    const poolPP2: any[] = [];
+    const poolSaladas: any[] = [];
+    const poolSucos: any[] = [];
+
+    // Preencher pools com custos calculados
+    for (const cat of ["PRATO PRINCIPAL 1", "PRATO PRINCIPAL 2"]) {
+      const candidates = candidatesByCat[cat] ?? [];
+      const pool = cat === "PRATO PRINCIPAL 1" ? poolPP1 : poolPP2;
+      
+      for (const r of candidates) {
+        const cost = costOfRecipe(String(r.receita_id_legado), refeicoesPorDia);
+        if (cost !== null) {
+          pool.push({
+            id: String(r.receita_id_legado),
+            receita_id_legado: r.receita_id_legado,
+            nome: r.nome_receita,
+            _cost: cost,
+            custo_por_refeicao: cost / refeicoesPorDia
+          });
+        }
+      }
+      pool.sort((a, b) => a._cost - b._cost); // mais baratos primeiro
+    }
+
+    // Saladas
+    for (const cat of ["SALADA 1 (VERDURAS)", "SALADA 2 (LEGUMES)"]) {
+      const candidates = candidatesByCat[cat] ?? [];
+      for (const r of candidates) {
+        const cost = costOfRecipe(String(r.receita_id_legado), refeicoesPorDia);
+        if (cost !== null) {
+          poolSaladas.push({
+            id: String(r.receita_id_legado),
+            receita_id_legado: r.receita_id_legado,
+            nome: r.nome_receita,
+            _cost: cost,
+            custo_por_refeicao: cost / refeicoesPorDia
+          });
+        }
+      }
+    }
+    poolSaladas.sort((a, b) => a._cost - b._cost);
+
+    // Sucos
+    for (const cat of ["SUCO 1", "SUCO 2"]) {
+      const candidates = candidatesByCat[cat] ?? [];
+      for (const r of candidates) {
+        const cost = costOfRecipe(String(r.receita_id_legado), refeicoesPorDia);
+        if (cost !== null) {
+          poolSucos.push({
+            id: String(r.receita_id_legado),
+            receita_id_legado: r.receita_id_legado,
+            nome: r.nome_receita,
+            _cost: cost,
+            custo_por_refeicao: cost / refeicoesPorDia
+          });
+        }
+      }
+    }
+    poolSucos.sort((a, b) => a._cost - b._cost);
 
     // ARROZ obrigatório (usar baseRecipes.arroz se fornecido)
     let arroz;
@@ -399,110 +526,257 @@ serve(async (req) => {
       return bad(400, "Não foi possível precificar ARROZ");
     }
 
-    // FEIJÃO será placeholder por enquanto
-    const feijao = null;
+    function ensureDayItems(
+      dia: DiaLabel,
+      refeicoesPorDia: number,
+      budgetPerMeal: number,
+      baseRecipes: any,
+      pools: {
+        pp1: Array<{ id: string; nome: string; custo_por_refeicao: number; _cost: number }>;
+        pp2: Array<{ id: string; nome: string; custo_por_refeicao: number; _cost: number }>;
+        saladas: Array<{ id: string; nome: string; custo_por_refeicao: number; _cost: number }>;
+        sucos?: Array<{ id: string; nome: string; custo_por_refeicao: number; _cost: number }>;
+      },
+    ) {
+      const itens: any[] = [];
 
-    const cardapio: any[] = [];
+      // ARROZ fixo
+      const arrozId = getArrozBaseId(baseRecipes);
+      if (arrozId && arroz) {
+        itens.push({
+          slot: 'ARROZ BRANCO',
+          receita_id: String(arrozId),
+          nome: 'ARROZ BRANCO',
+          custo_total: round2(arroz._cost),
+          custo_por_refeicao: round2(arroz._cost / refeicoesPorDia),
+        });
+        markUsed('ARROZ BRANCO', String(arrozId));
+      } else {
+        itens.push({ 
+          slot: 'ARROZ BRANCO', 
+          placeholder: true, 
+          nome: 'ARROZ (BASE NÃO CONFIGURADA)', 
+          custo_total: 0, 
+          custo_por_refeicao: 0 
+        });
+      }
+
+      // FEIJÃO (placeholder por enquanto)
+      const feijaoId = getFeijaoBaseId(baseRecipes);
+      if (feijaoId) {
+        itens.push({ 
+          slot: 'FEIJÃO', 
+          receita_id: String(feijaoId), 
+          nome: 'FEIJÃO',
+          custo_total: 0,
+          custo_por_refeicao: 0
+        });
+        markUsed('FEIJÃO', String(feijaoId));
+      } else {
+        itens.push({ 
+          slot: 'FEIJÃO', 
+          placeholder: true, 
+          nome: 'FEIJÃO (AGUARDANDO RECEITA)', 
+          custo_total: 0, 
+          custo_por_refeicao: 0 
+        });
+      }
+
+      // PP1
+      const pp1 = pickUnique(pools.pp1, 'PRATO PRINCIPAL 1');
+      if (pp1) {
+        itens.push({ 
+          slot: 'PRATO PRINCIPAL 1', 
+          receita_id: pp1.id,
+          nome: pp1.nome,
+          custo_total: round2(pp1._cost),
+          custo_por_refeicao: round2(pp1.custo_por_refeicao)
+        });
+        markUsed('PRATO PRINCIPAL 1', pp1.id);
+      } else {
+        itens.push({
+          slot: 'PRATO PRINCIPAL 1',
+          placeholder: true,
+          nome: 'PRATO PRINCIPAL 1 (sem seleção)',
+          custo_total: 0,
+          custo_por_refeicao: 0
+        });
+      }
+
+      // PP2
+      const pp2 = pickUnique(pools.pp2, 'PRATO PRINCIPAL 2');
+      if (pp2) {
+        itens.push({ 
+          slot: 'PRATO PRINCIPAL 2',
+          receita_id: pp2.id,
+          nome: pp2.nome,
+          custo_total: round2(pp2._cost),
+          custo_por_refeicao: round2(pp2.custo_por_refeicao)
+        });
+        markUsed('PRATO PRINCIPAL 2', pp2.id);
+      } else {
+        itens.push({
+          slot: 'PRATO PRINCIPAL 2',
+          placeholder: true,
+          nome: 'PRATO PRINCIPAL 2 (sem seleção)',
+          custo_total: 0,
+          custo_por_refeicao: 0
+        });
+      }
+
+      // Saladas (uma de folhas + uma de legumes)
+      const s1 = pickUnique(pools.saladas, 'SALADA 1 (VERDURAS)');
+      if (s1) {
+        itens.push({ 
+          slot: 'SALADA 1 (VERDURAS)',
+          receita_id: s1.id,
+          nome: s1.nome,
+          custo_total: round2(s1._cost),
+          custo_por_refeicao: round2(s1.custo_por_refeicao)
+        });
+        markUsed('SALADA 1 (VERDURAS)', s1.id);
+      } else {
+        itens.push({
+          slot: 'SALADA 1 (VERDURAS)',
+          placeholder: true,
+          nome: 'SALADA 1 (sem seleção)',
+          custo_total: 0,
+          custo_por_refeicao: 0
+        });
+      }
+
+      const s2 = pickUnique(pools.saladas.filter(x => x.id !== s1?.id), 'SALADA 2 (LEGUMES)');
+      if (s2) {
+        itens.push({ 
+          slot: 'SALADA 2 (LEGUMES)',
+          receita_id: s2.id,
+          nome: s2.nome,
+          custo_total: round2(s2._cost),
+          custo_por_refeicao: round2(s2.custo_por_refeicao)
+        });
+        markUsed('SALADA 2 (LEGUMES)', s2.id);
+      } else {
+        itens.push({
+          slot: 'SALADA 2 (LEGUMES)',
+          placeholder: true,
+          nome: 'SALADA 2 (sem seleção)',
+          custo_total: 0,
+          custo_por_refeicao: 0
+        });
+      }
+
+      // SUCOS (se não vierem do pool, usa defaults)
+      const sucos = (pools.sucos || []).filter(r => !isUsed('SUCO 1', r.id) && !isUsed('SUCO 2', r.id));
+      if (sucos.length >= 2) {
+        const [a, b] = sucos;
+        itens.push({ 
+          slot: 'SUCO 1',
+          receita_id: a.id,
+          nome: a.nome,
+          custo_total: round2(a._cost),
+          custo_por_refeicao: round2(a.custo_por_refeicao)
+        });
+        markUsed('SUCO 1', a.id);
+        itens.push({ 
+          slot: 'SUCO 2',
+          receita_id: b.id,
+          nome: b.nome,
+          custo_total: round2(b._cost),
+          custo_por_refeicao: round2(b.custo_por_refeicao)
+        });
+        markUsed('SUCO 2', b.id);
+      } else if (sucos.length === 1) {
+        const [a] = sucos;
+        const [j1, j2] = DEFAULT_JUICES;
+        itens.push({ 
+          slot: 'SUCO 1',
+          receita_id: a.id,
+          nome: a.nome,
+          custo_total: round2(a._cost),
+          custo_por_refeicao: round2(a.custo_por_refeicao)
+        });
+        markUsed('SUCO 1', a.id);
+        itens.push({ 
+          slot: 'SUCO 2', 
+          receita_id: String(j2.id), 
+          nome: j2.nome, 
+          custo_total: 0, 
+          custo_por_refeicao: 0 
+        });
+        markUsed('SUCO 2', String(j2.id));
+      } else {
+        const [j1, j2] = DEFAULT_JUICES;
+        itens.push({ 
+          slot: 'SUCO 1', 
+          receita_id: String(j1.id), 
+          nome: j1.nome, 
+          custo_total: 0, 
+          custo_por_refeicao: 0 
+        });
+        itens.push({ 
+          slot: 'SUCO 2', 
+          receita_id: String(j2.id), 
+          nome: j2.nome, 
+          custo_total: 0, 
+          custo_por_refeicao: 0 
+        });
+        markUsed('SUCO 1', String(j1.id));
+        markUsed('SUCO 2', String(j2.id));
+      }
+
+      // Preenche slots faltantes com placeholders (segurança)
+      for (const slot of REQUIRED_SLOTS) {
+        if (!itens.some(x => x.slot === slot)) {
+          itens.push({ 
+            slot, 
+            placeholder: true, 
+            nome: `${slot} (sem seleção)`, 
+            custo_total: 0, 
+            custo_por_refeicao: 0 
+          });
+        }
+      }
+
+      return itens;
+    }
+
+    const days: any[] = [];
     let totalGeral = 0;
 
-    const days = [];
+    for (let i = 0; i < numDays; i++) {
+      const dia = dayLabelByIndex(i);
+      const budgetLabel = getBudgetLabel(i, useDiaEspecial === true);
+      const budgetPerMeal = getBudgetPerMealFromCustos(c0, budgetLabel);
 
-    for (let d = 0; d < numDays; d++) {
-      const weekdayIdx = d % 7;
-      const tetoPorRef = refCostWeek[weekdayIdx];
-      if (!tetoPorRef || tetoPorRef <= 0) {
-        return bad(400, `Teto não configurado para ${WEEK_LABELS[weekdayIdx]}`);
-      }
-
-      const itens: any[] = [];
-      const usados = new Set<string>([String(arroz.receita_id_legado)]);
-
-      // ARROZ BRANCO (obrigatório)
-      itens.push({
-        slot: "ARROZ BRANCO",
-        receita_id: String(arroz.receita_id_legado),
-        nome: arroz.nome_receita,
-        custo_total: round2(arroz._cost),
-        custo_por_refeicao: round2(arroz._cost / refeicoesPorDia),
-      });
-
-      // FEIJÃO (placeholder)
-      itens.push({
-        slot: "FEIJÃO",
-        placeholder: true,
-      });
-
-      // Demais categorias na ordem dos slots
-      for (const cat of CATS) {
-        if (cat === "ARROZ BRANCO" || cat === "FEIJÃO") continue;
-        const pick = pickCheapest(cat, refeicoesPorDia, usados);
-        if (pick) {
-          usados.add(String(pick.receita_id_legado));
-          itens.push({
-            slot: cat,
-            receita_id: String(pick.receita_id_legado),
-            nome: pick.nome_receita,
-            custo_total: round2(pick._cost),
-            custo_por_refeicao: round2(pick._cost / refeicoesPorDia),
-          });
-        } else {
-          // Sem candidato: placeholder
-          itens.push({
-            slot: cat,
-            placeholder: true,
-          });
+      const itens = ensureDayItems(
+        dia,
+        refeicoesPorDia,
+        budgetPerMeal,
+        baseRecipes,
+        {
+          pp1: poolPP1,
+          pp2: poolPP2,
+          saladas: poolSaladas,
+          sucos: poolSucos,
         }
-      }
+      );
 
-      // Otimização de custo - trocar por alternativas mais baratas se exceder orçamento
-      const ordemTroca = [
-        "PRATO PRINCIPAL 2",
-        "SALADA 2 (LEGUMES)", 
-        "SALADA 1 (VERDURAS)",
-        "SUCO 2",
-        "SUCO 1",
-        "PRATO PRINCIPAL 1",
-      ];
-
-      const somaTotalDia = () => itens.reduce((s, it) => s + (it.custo_total || 0), 0);
-      
-      let totalDia = somaTotalDia();
-      let porRef = totalDia / refeicoesPorDia;
-
-      for (const cat of ordemTroca) {
-        if (porRef <= tetoPorRef) break;
-        const idx = itens.findIndex((x: any) => x.slot === cat && x.receita_id);
-        if (idx === -1) continue;
-
-        const atualId = String(itens[idx].receita_id);
-        const exclude = new Set<string>([...usados, atualId]);
-        const melhor = pickCheapest(cat, refeicoesPorDia, exclude);
-
-        if (melhor && melhor._cost < itens[idx].custo_total) {
-          usados.add(String(melhor.receita_id_legado));
-          itens[idx] = {
-            slot: cat,
-            receita_id: String(melhor.receita_id_legado),
-            nome: melhor.nome_receita,
-            custo_total: round2(melhor._cost),
-            custo_por_refeicao: round2(melhor._cost / refeicoesPorDia),
-          };
-          totalDia = somaTotalDia();
-          porRef = totalDia / refeicoesPorDia;
-        }
-      }
+      const custo_total_dia = itens.reduce((s, it) =>
+        s + (Number(it.custo_total || 0)), 0);
+      const custo_por_refeicao = custo_total_dia / refeicoesPorDia;
+      const dentro_orcamento = budgetPerMeal ? (custo_por_refeicao <= budgetPerMeal) : true;
 
       days.push({
-        dia: WEEK_LABELS[weekdayIdx],
-        label_orcamento: WEEK_LABELS[weekdayIdx],
-        budget_per_meal: round2(tetoPorRef),
-        custo_total_dia: round2(totalDia),
-        custo_por_refeicao: round2(porRef),
-        dentro_orcamento: porRef <= tetoPorRef,
-        itens,
+        dia,
+        label_orcamento: budgetLabel,
+        budget_per_meal: round2(budgetPerMeal),
+        custo_total_dia: round2(custo_total_dia),
+        custo_por_refeicao: round2(custo_por_refeicao),
+        dentro_orcamento,
+        itens
       });
 
-      totalGeral += totalDia;
+      totalGeral += custo_total_dia;
     }
 
     const totalPorcoes = refeicoesPorDia * numDays;

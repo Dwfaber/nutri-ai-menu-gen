@@ -336,11 +336,17 @@ export const useIntegratedMenuGeneration = () => {
         throw new Error('Número de refeições por dia deve ser maior que zero');
       }
 
+      // Calculate requested number of days
+      const requestedNumDays =
+        (typeof tMeals === 'number' && tMeals > 0 && mpd > 0)
+          ? Math.max(1, Math.ceil(tMeals / mpd))
+          : 7;
+
       // Payload padronizado - apenas campos necessários para Edge Function
       const payload = {
         action: 'generate_menu',
         filialIdLegado: legacyId,
-        numDays: 7,
+        numDays: requestedNumDays,
         refeicoesPorDia: mpd,
         useDiaEspecial: false
       };
@@ -498,24 +504,58 @@ export const useIntegratedMenuGeneration = () => {
       if (recipeIds.length) {
         const { data: ingredientsData, error: ingError } = await supabase
           .from('receita_ingredientes')
-          .select('receita_id_legado,nome,quantidade,unidade')
+          .select('receita_id_legado,produto_base_id,produto_base_descricao,quantidade,unidade')
           .in('receita_id_legado', recipeIds);
+
         if (!ingError && ingredientsData) {
-          const byRecipe: Record<string, { name: string; quantity: number; unit: string }[]> = {};
+          const byRecipe: Record<string, { produto_base_id:number; name: string; quantity: number; unit: string }[]> = {};
           for (const ing of ingredientsData as any[]) {
             const recId = String(ing.receita_id_legado);
             if (!byRecipe[recId]) byRecipe[recId] = [];
             if (byRecipe[recId].length < 3) {
               byRecipe[recId].push({
-                name: ing.nome,
+                produto_base_id: Number(ing.produto_base_id),
+                name: ing.produto_base_descricao || '',
                 quantity: Number(ing.quantidade ?? 0),
                 unit: ing.unidade || ''
               });
             }
           }
-          for (const r of receitasCardapio) {
-            r.ingredients = byRecipe[r.id] || [];
-          }
+          for (const r of receitasCardapio) r.ingredients = byRecipe[r.id] || [];
+        }
+
+        // Ensure juices are present for each day
+        const daySlots = new Map<string, Set<string>>();
+        for (const r of receitasCardapio) {
+          const key = r.day;
+          if (!daySlots.has(key)) daySlots.set(key, new Set());
+          daySlots.get(key)!.add(r.category.toUpperCase());
+        }
+
+        const dias = Array.from(new Set(receitasCardapio.map(r => r.day)));
+        
+        for (const d of dias) {
+          const have = daySlots.get(d) || new Set();
+          const need1 = !have.has('SUCO 1');
+          const need2 = !have.has('SUCO 2');
+          if (need1) receitasCardapio.push({ 
+            id: '599', 
+            name: 'SUCO EM PÓ DE LARANJA', 
+            day: d, 
+            category: 'Suco 1', 
+            cost: 0, 
+            servings: mpdFromSummary,
+            ingredients: []
+          });
+          if (need2) receitasCardapio.push({ 
+            id: '656', 
+            name: 'SUCO TETRA PAK', 
+            day: d, 
+            category: 'Suco 2', 
+            cost: 0, 
+            servings: mpdFromSummary,
+            ingredients: []
+          });
         }
       }
 
