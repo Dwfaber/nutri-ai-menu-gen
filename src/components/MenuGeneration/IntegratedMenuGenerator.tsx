@@ -147,7 +147,7 @@ const IntegratedMenuGenerator = () => {
             <p className="text-gray-600 text-sm">
               Sistema inteligente que verifica disponibilidade no mercado e aplica regras de negócio.
               Estrutura: PP1, PP2, Arroz Branco, Feijão, Salada 1 (Verduras), Salada 2 (Legumes), Suco 1, Suco 2.
-              Garante variedade de proteínas, evita processos nas segundas e controla custos.
+              Garante variedade de proteínas, evita processos e controla custos para qualquer período.
             </p>
             <Button 
               onClick={handleShowForm}
@@ -156,7 +156,7 @@ const IntegratedMenuGenerator = () => {
               size="lg"
             >
               <Plus className="w-4 h-4 mr-2" />
-              Gerar Cardápio da Semana
+              Gerar Cardápio
             </Button>
           </CardContent>
         </Card>

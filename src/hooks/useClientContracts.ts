@@ -30,21 +30,18 @@ export const useClientContracts = () => {
   ): number => {
     const start = new Date(startDate);
     const end = new Date(endDate);
-    const days = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
-    
-    // Assuming 5 working days per week
-    const workingDays = Math.ceil((days / 7) * 5);
+    const totalDays = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
     
     // Calculate based on contract frequency
     switch (periodicidade) {
       case 'diario':
-        return workingDays * employeeCount;
+        return totalDays * employeeCount;
       case 'semanal':
-        return Math.ceil(workingDays / 7) * employeeCount;
+        return Math.ceil(totalDays / 7) * employeeCount;
       case 'mensal':
-        return Math.ceil(days / 30) * employeeCount;
+        return Math.ceil(totalDays / 30) * employeeCount;
       default:
-        return workingDays * employeeCount;
+        return totalDays * employeeCount;
     }
   };
 
