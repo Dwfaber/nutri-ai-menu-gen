@@ -7,10 +7,9 @@ export interface MarketIngredient {
   categoria_descricao: string;
   unidade: string;
   preco: number;
-  promocao: boolean;
   em_promocao_sim_nao: boolean;
   disponivel: boolean;
-  quantidade_embalagem?: number;
+  produto_base_quantidade_embalagem?: number;
 }
 
 export interface ViableRecipe {
@@ -44,9 +43,8 @@ export const useMarketAvailability = () => {
           categoria_descricao,
           unidade,
           preco,
-          promocao,
           em_promocao_sim_nao,
-          quantidade_embalagem
+          produto_base_quantidade_embalagem
         `)
         .not('produto_base_id', 'is', null)
         .order('categoria_descricao');
@@ -255,7 +253,7 @@ export const useMarketAvailability = () => {
           const baseServings = ingredient.quantidade_refeicoes || 1;
           // Calculate proportional quantity based on original servings, then apply scaling factor
           const proportionalQuantity = (baseQuantity / baseServings) * scalingFactor;
-          const packageQuantity = parseFloat(marketIngredient.quantidade_embalagem?.toString()) || 1;
+          const packageQuantity = parseFloat(marketIngredient.produto_base_quantidade_embalagem?.toString()) || 1;
           
           // Use promotion price if available
           const unitPrice = marketIngredient.em_promocao_sim_nao ? 
