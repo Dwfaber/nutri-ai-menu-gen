@@ -323,14 +323,13 @@ export const useIntegratedMenuGeneration = () => {
         restricoes: clientToUse.restricoes_alimentares
       });
       
-      const legacyId = clientToUse.cliente_id_legado || clientToUse.empresa_id_legado || clientToUse.filial_id_legado || clientToUse.id;
+      const legacyId = clientToUse.filial_id;
       const mpd = mealsPerDay || clientToUse.total_funcionarios || 100;
       const tMeals = totalMeals || (mpd * 5);
       
       // Validação de entrada
-      const numericLegacyId = Number(legacyId);
-      if (!numericLegacyId || numericLegacyId <= 0) {
-        throw new Error('ID do cliente deve ser um número válido maior que zero');
+      if (!legacyId || legacyId <= 0) {
+        throw new Error('ID da filial deve ser um número válido maior que zero');
       }
       
       if (!mpd || mpd <= 0) {
@@ -340,7 +339,7 @@ export const useIntegratedMenuGeneration = () => {
       // Payload padronizado - apenas campos necessários para Edge Function
       const payload = {
         action: 'generate_menu',
-        filialIdLegado: numericLegacyId,
+        filialIdLegado: legacyId,
         numDays: 7,
         refeicoesPorDia: mpd,
         useDiaEspecial: false
