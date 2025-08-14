@@ -80,12 +80,15 @@ const Cardapios = () => {
   };
 
   const handleExportarCardapio = (menu: GeneratedMenu) => {
-    // Create CSV content
+    // Get dynamic days from the menu
+    const uniqueDays = [...new Set(menu.recipes?.map(r => r.day).filter(Boolean))].sort();
+    
+    // Create CSV content with dynamic days
     const csvContent = [
-      ['Categoria', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta'],
+      ['Categoria', ...uniqueDays],
       ...(['PP1', 'PP2', 'Arroz Branco', 'Feijão', 'Salada 1', 'Salada 2', 'Suco 1', 'Suco 2'].map(category => [
         category,
-        ...(['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta'].map(day => {
+        ...(uniqueDays.map(day => {
           const recipe = menu.recipes?.find(r => r.category === category && r.day?.toLowerCase().includes(day.toLowerCase()));
           return recipe ? `${recipe.name} (R$ ${recipe.cost?.toFixed(2) || '0.00'})` : '-';
         }))

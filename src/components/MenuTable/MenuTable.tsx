@@ -31,7 +31,11 @@ interface MenuTableProps {
   onCopy?: () => void;
 }
 
-const DAYS = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta'];
+// Dynamic days based on recipes
+const getDynamicDays = (recipes: MenuRecipe[]) => {
+  const uniqueDays = [...new Set(recipes.map(r => r.day).filter(Boolean))];
+  return uniqueDays.sort();
+};
 const NEW_MENU_CATEGORIES = [
   'PP1',
   'PP2', 
@@ -69,6 +73,8 @@ const MenuTable: React.FC<MenuTableProps> = ({
   onExport,
   onCopy
 }) => {
+  const dynamicDays = getDynamicDays(recipes);
+  
   const getRecipeForDayAndCategory = (day: string, category: string) => {
     return recipes.find(recipe => 
       recipe.day && recipe.day.toLowerCase().includes(day.toLowerCase()) && 
@@ -117,7 +123,7 @@ const MenuTable: React.FC<MenuTableProps> = ({
                 <th className="border border-gray-300 p-3 text-left font-semibold min-w-[120px]">
                   CATEGORIA
                 </th>
-                {DAYS.map(day => (
+                {dynamicDays.map(day => (
                   <th key={day} className="border border-gray-300 p-3 text-center font-semibold min-w-[150px]">
                     {day.toUpperCase()}
                   </th>
@@ -130,7 +136,7 @@ const MenuTable: React.FC<MenuTableProps> = ({
                   <td className="border border-gray-300 p-3 font-medium bg-gray-50">
                     {CATEGORY_DISPLAY_NAMES[category] || category}
                   </td>
-                  {DAYS.map(day => {
+                  {dynamicDays.map(day => {
                     const recipe = getRecipeForDayAndCategory(day, category);
                     return (
                       <td key={`${category}-${day}`} className="border border-gray-300 p-3 text-sm">
