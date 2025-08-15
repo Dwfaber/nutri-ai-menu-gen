@@ -9,6 +9,7 @@ import { CheckCircle, XCircle, AlertTriangle, Info, UserCheck, MessageSquare } f
 import { MenuBusinessRules, MenuViolation } from '@/hooks/useMenuBusinessRules';
 import { useViolationApproval } from '@/hooks/useViolationApproval';
 import NLPInput from '@/components/MenuGenerator/NLPInput';
+import ViolationAutoResolver from './ViolationAutoResolver';
 
 interface MenuValidationPanelProps {
   rules: MenuBusinessRules;
@@ -191,6 +192,18 @@ const MenuValidationPanel: React.FC<MenuValidationPanelProps> = ({
               </div>
             )}
           </div>
+        )}
+
+        {/* Auto-Resolution Component */}
+        {violations.length > 0 && (
+          <ViolationAutoResolver
+            violations={violations}
+            menuId={menuId}
+            onAutoResolved={(resolvedIndices) => {
+              console.log('Auto-resolved violations:', resolvedIndices);
+            }}
+            onViolationsChanged={onViolationsChanged}
+          />
         )}
 
         {/* Violations */}

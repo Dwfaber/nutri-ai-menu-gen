@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -44,12 +44,17 @@ const IntegratedMenuGenerator = () => {
     return validateMenu(generatedMenu.recipes);
   }, [generatedMenu?.recipes, validateMenu]);
 
+  // Memoize validation function to prevent infinite loops
+  const memoizedValidateMenuAndSetViolations = useCallback((recipes: any[]) => {
+    validateMenuAndSetViolations(recipes);
+  }, [validateMenuAndSetViolations]);
+
   // Update violations when menu changes
   useEffect(() => {
     if (generatedMenu?.recipes && generatedMenu.recipes.length > 0) {
-      validateMenuAndSetViolations(generatedMenu.recipes);
+      memoizedValidateMenuAndSetViolations(generatedMenu.recipes);
     }
-  }, [generatedMenu?.recipes, validateMenuAndSetViolations]);
+  }, [generatedMenu?.recipes, memoizedValidateMenuAndSetViolations]);
 
 
   const handleGenerateMenu = async (formData: ContractFormData) => {
@@ -220,7 +225,7 @@ const IntegratedMenuGenerator = () => {
                 onViolationsChanged={() => {
                   // Re-validate menu when violations are approved/suggestions are made
                   if (generatedMenu?.recipes && generatedMenu.recipes.length > 0) {
-                    validateMenuAndSetViolations(generatedMenu.recipes);
+                    memoizedValidateMenuAndSetViolations(generatedMenu.recipes);
                   }
                 }}
               />
