@@ -150,13 +150,7 @@ async function syncReceitas(supabaseClient: any, receitas: CpReceita[]) {
         console.log(`Processando receita ${processed}/${receitas.length}: ID ${receita.receita_id}`);
       }
 
-      // Verificar se a receita já existe
-      const { data: existing } = await supabaseClient
-        .from('receitas_legado')
-        .select('id')
-        .eq('receita_id_legado', receita.receita_id.toString())
-        .single();
-
+      // Preparar dados da receita
       const receitaData = {
         receita_id_legado: receita.receita_id.toString(),
         nome_receita: receita.nome,
@@ -174,36 +168,21 @@ async function syncReceitas(supabaseClient: any, receitas: CpReceita[]) {
         sync_at: new Date().toISOString()
       };
 
-      if (existing) {
-        // Atualizar receita existente
-        const { error } = await supabaseClient
-          .from('receitas_legado')
-          .update(receitaData)
-          .eq('id', existing.id);
+      // Usar UPSERT para inserir ou atualizar automaticamente
+      const { error } = await supabaseClient
+        .from('receitas_legado')
+        .upsert(receitaData, {
+          onConflict: 'receita_id_legado',
+          ignoreDuplicates: false
+        });
 
-        if (error) {
-          console.error(`Erro ao atualizar receita ${receita.receita_id}:`, error);
-          errors++;
-        } else {
-          success++;
-          if (processed <= 10 || processed % 100 === 0) {
-            console.log(`Receita ${receita.receita_id} atualizada com sucesso`);
-          }
-        }
+      if (error) {
+        console.error(`Erro ao fazer upsert da receita ${receita.receita_id}:`, error);
+        errors++;
       } else {
-        // Inserir nova receita
-        const { error } = await supabaseClient
-          .from('receitas_legado')
-          .insert(receitaData);
-
-        if (error) {
-          console.error(`Erro ao inserir receita ${receita.receita_id}:`, error);
-          errors++;
-        } else {
-          success++;
-          if (processed <= 10 || processed % 100 === 0) {
-            console.log(`Receita ${receita.receita_id} inserida com sucesso`);
-          }
+        success++;
+        if (processed <= 10 || processed % 100 === 0) {
+          console.log(`Receita ${receita.receita_id} sincronizada com sucesso (upsert)`);
         }
       }
 
