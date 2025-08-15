@@ -98,29 +98,31 @@ export const ClientContractsProvider = ({ children }: { children: ReactNode }) =
         throw fetchError;
       }
 
-      // Transform data to match ContractClient interface
-      const transformedData: ContractClient[] = (data || []).map(item => ({
-        id: item.id,
-        filial_id: item.filial_id,
-        nome_fantasia: item.nome_fantasia || `Cliente ${item.cliente_id_legado}`,
-        razao_social: item.razao_social,
-        nome_filial: item.nome_filial || `Filial ${item.filial_id}`,
-        tipo_refeicao: item.solicitacao_compra_tipo_descricao || 'REFEIÇÃO',
-        custo_medio_diario: (
-          Number(item.RefCustoSegunda || 0) + 
-          Number(item.RefCustoTerca || 0) + 
-          Number(item.RefCustoQuarta || 0) + 
-          Number(item.RefCustoQuinta || 0) + 
-          Number(item.RefCustoSexta || 0) + 
-          Number(item.RefCustoSabado || 0) + 
-          Number(item.RefCustoDomingo || 0)
-        ) / 7,
-        custo_dia_especial: Number(item.RefCustoDiaEspecial || 0),
-        usa_validacao_media: item.QtdeRefeicoesUsarMediaValidarSimNao || false,
-        limite_percentual_acima_media: Number(item.PorcentagemLimiteAcimaMedia || 0),
-        created_at: item.created_at,
-        updated_at: item.updated_at
-      }));
+      // Transform data to match ContractClient interface - with null safety
+      const transformedData: ContractClient[] = (data || [])
+        .filter(item => item.nome_fantasia || item.cliente_id_legado) // Filter out completely empty records
+        .map(item => ({
+          id: item.id,
+          filial_id: item.filial_id || 0,
+          nome_fantasia: item.nome_fantasia?.trim() || `Cliente ${item.cliente_id_legado || 'Sem ID'}`,
+          razao_social: item.razao_social?.trim() || undefined,
+          nome_filial: item.nome_filial?.trim() || `Filial ${item.filial_id || 'Sem ID'}`,
+          tipo_refeicao: item.solicitacao_compra_tipo_descricao?.trim() || 'REFEIÇÃO',
+          custo_medio_diario: (
+            Number(item.RefCustoSegunda || 0) + 
+            Number(item.RefCustoTerca || 0) + 
+            Number(item.RefCustoQuarta || 0) + 
+            Number(item.RefCustoQuinta || 0) + 
+            Number(item.RefCustoSexta || 0) + 
+            Number(item.RefCustoSabado || 0) + 
+            Number(item.RefCustoDomingo || 0)
+          ) / 7,
+          custo_dia_especial: Number(item.RefCustoDiaEspecial || 0),
+          usa_validacao_media: Boolean(item.QtdeRefeicoesUsarMediaValidarSimNao),
+          limite_percentual_acima_media: Number(item.PorcentagemLimiteAcimaMedia || 0),
+          created_at: item.created_at || new Date().toISOString(),
+          updated_at: item.updated_at || new Date().toISOString()
+        }));
 
       // Para carregamento inicial, mostrar amostra diversificada por empresa
       let finalClients = transformedData;
