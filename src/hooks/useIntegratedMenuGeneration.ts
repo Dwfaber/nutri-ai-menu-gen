@@ -342,13 +342,17 @@ export const useIntegratedMenuGeneration = () => {
           ? Math.max(1, Math.ceil(tMeals / mpd))
           : 7;
 
-      // Payload padronizado - apenas campos necessários para Edge Function
+      // Payload padronizado - incluindo receitas base obrigatórias
       const payload = {
         action: 'generate_menu',
         filialIdLegado: legacyId,
         numDays: requestedNumDays,
         refeicoesPorDia: mpd,
-        useDiaEspecial: false
+        useDiaEspecial: false,
+        baseRecipes: {
+          arroz: 580,    // ARROZ BRANCO
+          feijao: 1600   // FEIJÃO MIX - CARIOCA + BANDINHA 50%
+        }
       };
 
       console.log('[Frontend] Enviando payload padronizado:', payload);

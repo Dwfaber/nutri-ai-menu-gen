@@ -233,24 +233,26 @@ serve(async (req) => {
       candidatesByCat[cat] = (receitas ?? []).filter((r) => f?.(r));
     }
 
-    // Use baseRecipes.arroz se fornecido, senão busca automaticamente
-    let arrozReceita = null;
-    if (baseRecipes.arroz) {
-      arrozReceita = (receitas ?? []).find(r => r.receita_id_legado === baseRecipes.arroz);
-    }
-    if (!arrozReceita && !candidatesByCat["ARROZ BRANCO"]?.length) {
-      return bad(400, "Nenhuma receita de ARROZ encontrada");
-    }
-
-    // FEIJÃO será placeholder por enquanto - não requer validação
+    // Garantir arroz e feijão base (IDs fixos: 580 e 1600)
+    const arrozBaseId = getArrozBaseId(baseRecipes) || 580;
+    const feijaoBaseId = getFeijaoBaseId(baseRecipes) || 1600;
+    
+    let arrozReceita = (receitas ?? []).find(r => r.receita_id_legado === arrozBaseId);
+    let feijaoReceita = (receitas ?? []).find(r => r.receita_id_legado === feijaoBaseId);
+    
     const warnings = [];
-    if (!candidatesByCat["FEIJÃO"]?.length) {
-      warnings.push("Sem receita de feijão — usado placeholder");
+    if (!arrozReceita) {
+      warnings.push(`Receita de arroz ID ${arrozBaseId} não encontrada`);
+    }
+    if (!feijaoReceita) {
+      warnings.push(`Receita de feijão ID ${feijaoBaseId} não encontrada`);
     }
 
-    // 3) Ingredientes de todas as receitas candidatas
+    // 3) Ingredientes de todas as receitas candidatas + receitas base obrigatórias
     const candidateIds = [
       ...new Set(CATS.flatMap((c) => candidatesByCat[c].map((r) => String(r.receita_id_legado)))),
+      String(arrozBaseId),   // Incluir arroz base
+      String(feijaoBaseId)   // Incluir feijão base
     ];
     if (candidateIds.length === 0) {
       return bad(400, "Nenhuma receita candidata encontrada");
@@ -514,9 +516,9 @@ serve(async (req) => {
     // ARROZ obrigatório (usar baseRecipes.arroz se fornecido)
     let arroz;
     if (arrozReceita) {
-      const cost = costOfRecipe(arrozReceita.receita_id_legado, refeicoesPorDia);
+      const cost = costOfRecipe(String(arrozReceita.receita_id_legado), refeicoesPorDia);
       if (cost !== null) {
-        arroz = { ...arrozReceita, _cost: cost };
+        arroz = { ...arrozReceita, _cost: cost, id: String(arrozReceita.receita_id_legado) };
       }
     }
     if (!arroz) {
@@ -525,6 +527,27 @@ serve(async (req) => {
     
     if (!arroz) {
       return bad(400, "Não foi possível precificar ARROZ");
+    }
+
+    // FEIJÃO obrigatório (usar baseRecipes.feijao se fornecido)
+    let feijao;
+    if (feijaoReceita) {
+      const cost = costOfRecipe(String(feijaoReceita.receita_id_legado), refeicoesPorDia);
+      if (cost !== null) {
+        feijao = { ...feijaoReceita, _cost: cost, id: String(feijaoReceita.receita_id_legado) };
+      }
+    }
+    if (!feijao) {
+      feijao = pickCheapest("FEIJÃO", refeicoesPorDia);
+    }
+    
+    if (!feijao) {
+      warnings.push("Não foi possível precificar FEIJÃO - usando placeholder");
+      feijao = { 
+        id: String(feijaoBaseId), 
+        _cost: 0, 
+        nome_receita: 'FEIJÃO MIX - CARIOCA + BANDINHA 50%' 
+      };
     }
 
     function ensureDayItems(
@@ -541,43 +564,41 @@ serve(async (req) => {
     ) {
       const itens: any[] = [];
 
-      // ARROZ fixo
-      const arrozId = getArrozBaseId(baseRecipes);
-      if (arrozId && arroz) {
+      // ARROZ BRANCO (obrigatório)
+      if (arroz._cost > 0) {
         itens.push({
           slot: 'ARROZ BRANCO',
-          receita_id: String(arrozId),
-          nome: 'ARROZ BRANCO',
+          receita_id: arroz.id,
+          nome: arrozReceita?.nome_receita || 'ARROZ BRANCO',
           custo_total: round2(arroz._cost),
           custo_por_refeicao: round2(arroz._cost / refeicoesPorDia),
         });
-        markUsed('ARROZ BRANCO', String(arrozId));
+        markUsed('ARROZ BRANCO', arroz.id);
       } else {
         itens.push({ 
           slot: 'ARROZ BRANCO', 
           placeholder: true, 
-          nome: 'ARROZ (BASE NÃO CONFIGURADA)', 
+          nome: `ARROZ (ID ${arrozBaseId} - SEM CUSTO)`, 
           custo_total: 0, 
           custo_por_refeicao: 0 
         });
       }
 
-      // FEIJÃO (placeholder por enquanto)
-      const feijaoId = getFeijaoBaseId(baseRecipes);
-      if (feijaoId) {
+      // FEIJÃO (obrigatório com custo real)
+      if (feijao._cost > 0) {
         itens.push({ 
           slot: 'FEIJÃO', 
-          receita_id: String(feijaoId), 
-          nome: 'FEIJÃO',
-          custo_total: 0,
-          custo_por_refeicao: 0
+          receita_id: feijao.id, 
+          nome: feijaoReceita?.nome_receita || 'FEIJÃO MIX - CARIOCA + BANDINHA 50%',
+          custo_total: round2(feijao._cost),
+          custo_por_refeicao: round2(feijao._cost / refeicoesPorDia)
         });
-        markUsed('FEIJÃO', String(feijaoId));
+        markUsed('FEIJÃO', feijao.id);
       } else {
         itens.push({ 
           slot: 'FEIJÃO', 
           placeholder: true, 
-          nome: 'FEIJÃO (AGUARDANDO RECEITA)', 
+          nome: `FEIJÃO (ID ${feijaoBaseId} - SEM CUSTO)`, 
           custo_total: 0, 
           custo_por_refeicao: 0 
         });
