@@ -94,7 +94,7 @@ serve(async (req) => {
       .from('generated_menus')
       .select('*')
       .eq('id', menuId)
-      .single();
+      .maybeSingle();
 
     if (menuError || !menuData) {
       console.error('Erro ao buscar cardápio:', menuError);
@@ -108,16 +108,22 @@ serve(async (req) => {
     });
 
     // Buscar produtos do mercado
+    const { data: latestSolicitacao, error: solicitacaoError } = await supabase
+      .from('co_solicitacao_produto_listagem')
+      .select('solicitacao_id')
+      .order('solicitacao_id', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (solicitacaoError || !latestSolicitacao) {
+      console.error('Erro ao buscar última solicitação:', solicitacaoError);
+      throw new Error('Nenhuma solicitação de produtos encontrada');
+    }
+
     const { data: marketProducts, error: marketError } = await supabase
       .from('co_solicitacao_produto_listagem')
       .select('*')
-      .eq('solicitacao_id', (await supabase
-        .from('co_solicitacao_produto_listagem')
-        .select('solicitacao_id')
-        .order('solicitacao_id', { ascending: false })
-        .limit(1)
-        .single()
-      ).data?.solicitacao_id);
+      .eq('solicitacao_id', latestSolicitacao.solicitacao_id);
 
     if (marketError || !marketProducts) {
       console.error('Erro ao buscar produtos do mercado:', marketError);
@@ -382,7 +388,7 @@ serve(async (req) => {
         status: budgetStatus
       })
       .select('id')
-      .single();
+      .maybeSingle();
 
     if (listError) {
       console.error('Erro ao criar lista de compras:', listError);

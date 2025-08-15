@@ -201,7 +201,7 @@ async function syncViewWithData(supabaseClient: any, viewName: string, data: any
       }
     })
     .select()
-    .single();
+    .maybeSingle();
 
   const logId = logData?.id;
 

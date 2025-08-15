@@ -61,7 +61,7 @@ serve(async (req) => {
         status: 'iniciado'
       })
       .select()
-      .single();
+      .maybeSingle();
 
     const logId = logData?.id;
     const startTime = Date.now();
