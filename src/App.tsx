@@ -43,6 +43,7 @@ const App = () => {
               <Routes>
                 <Route path="/auth" element={<Auth />} />
                 <Route path="/*" element={
+                  <ProtectedRoute requireRole="viewer" fallbackPath="/auth">
                     <ClientSelectionWrapper>
                       <div className="flex min-h-screen w-full bg-gray-50">
                         <Sidebar />
@@ -63,6 +64,7 @@ const App = () => {
                         </div>
                       </div>
                     </ClientSelectionWrapper>
+                  </ProtectedRoute>
                 } />
               </Routes>
             </BrowserRouter>
