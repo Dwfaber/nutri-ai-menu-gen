@@ -186,7 +186,7 @@ serve(async (req) => {
         if (!consolidatedIngredients.has(produtoBaseId)) {
           consolidatedIngredients.set(produtoBaseId, {
             produto_base_id: produtoBaseId,
-            nome: adaptedIng.produto_base_descricao || adaptedIng.nome || '',
+            nome: adaptedIng.produto_base_descricao || 'Ingrediente não identificado',
             quantidade_total: 0,
             unidade: adaptedIng.unidade || 'GR',
             receitas: []
@@ -223,7 +223,7 @@ serve(async (req) => {
         if (!consolidatedIngredients.has(produtoBaseId)) {
           consolidatedIngredients.set(produtoBaseId, {
             produto_base_id: produtoBaseId,
-            nome: ingredient.produto_base_descricao || '',
+            nome: ingredient.produto_base_descricao || 'Ingrediente não identificado',
             quantidade_total: 0,
             unidade: ingredient.unidade || 'GR',
             receitas: []
@@ -351,7 +351,7 @@ serve(async (req) => {
 
           shoppingItems.push({
             product_id_legado: String(firstProduct.produto_id),
-            product_name: consolidatedIngredient.nome || firstProduct.descricao,
+            product_name: consolidatedIngredient.nome,
             category: firstProduct.categoria_descricao || 'Sem categoria',
             quantity: Math.ceil(embalagensNecessarias),
             unit: firstProduct.unidade,
