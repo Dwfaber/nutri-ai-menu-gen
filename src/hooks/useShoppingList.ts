@@ -1,5 +1,5 @@
 
-import { useState } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/components/ui/use-toast';
 import { withRetry } from '@/utils/connectionUtils';
@@ -82,76 +82,133 @@ export const useShoppingList = () => {
   const [lists, setLists] = useState<ShoppingList[]>([]);
   const [currentList, setCurrentList] = useState<ShoppingList | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
+  
+  // Refs for debouncing and preventing concurrent calls
+  const isLoadingRef = useRef(false);
+  const lastToastRef = useRef(0);
+  const toastTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Load shopping lists from database on component mount
-  const loadShoppingLists = async (): Promise<void> => {
+  // Debounced toast function to prevent spam
+  const showToast = useCallback((title: string, description: string, variant: 'default' | 'destructive' = 'default') => {
+    const now = Date.now();
+    
+    // Clear existing timeout
+    if (toastTimeoutRef.current) {
+      clearTimeout(toastTimeoutRef.current);
+    }
+    
+    // Only show toast if last one was more than 2 seconds ago
+    if (now - lastToastRef.current > 2000) {
+      toast({ title, description, variant });
+      lastToastRef.current = now;
+    } else {
+      // Queue the toast
+      toastTimeoutRef.current = setTimeout(() => {
+        toast({ title, description, variant });
+        lastToastRef.current = Date.now();
+      }, 2000 - (now - lastToastRef.current));
+    }
+  }, [toast]);
+
+  // Memoized load function to prevent infinite loops
+  const loadShoppingLists = useCallback(async (): Promise<void> => {
+    // Prevent concurrent calls
+    if (isLoadingRef.current) {
+      return;
+    }
+    
     try {
+      isLoadingRef.current = true;
       setIsLoading(true);
+      setError(null);
       
-      const { data: shoppingLists, error: listsError } = await supabase
-        .from('shopping_lists')
-        .select('*')
-        .order('created_at', { ascending: false });
+      const result = await withRetry(async () => {
+        const { data: shoppingLists, error: listsError } = await supabase
+          .from('shopping_lists')
+          .select('*')
+          .order('created_at', { ascending: false });
 
-      if (listsError) throw listsError;
+        if (listsError) throw listsError;
+        return shoppingLists;
+      }, {
+        maxRetries: 2,
+        initialDelay: 500,
+        maxDelay: 2000
+      });
 
-      if (shoppingLists && shoppingLists.length > 0) {
+      if (result && result.length > 0) {
         const mappedLists: ShoppingList[] = [];
         
-        for (const list of shoppingLists) {
-          const { data: items, error: itemsError } = await supabase
-            .from('shopping_list_items')
-            .select('*')
-            .eq('shopping_list_id', list.id);
+        // Process lists with batch requests
+        const itemsPromises = result.map(list => 
+          withRetry(async () => {
+            const { data: items, error: itemsError } = await supabase
+              .from('shopping_list_items')
+              .select('*')
+              .eq('shopping_list_id', list.id);
 
-          if (itemsError) {
-            console.error('Error loading items for list:', list.id, itemsError);
-            continue;
+            if (itemsError) throw itemsError;
+            return { list, items: items || [] };
+          }, { maxRetries: 1 })
+        );
+
+        const listsWithItems = await Promise.allSettled(itemsPromises);
+        
+        listsWithItems.forEach((result) => {
+          if (result.status === 'fulfilled') {
+            const { list, items } = result.value;
+            
+            const mappedItems: ShoppingItem[] = items.map(item => ({
+              id: item.id,
+              produto_id: item.product_id_legado,
+              produto_nome: item.product_name,
+              categoria: item.category,
+              quantidade_necessaria: item.quantity,
+              unidade: item.unit,
+              preco_unitario: item.unit_price,
+              valor_total: item.total_price,
+              fornecedor: '',
+              observacoes: '',
+              receita_origem: []
+            }));
+
+            mappedLists.push({
+              id: list.id,
+              nome: `Lista de Compras - ${new Date(list.created_at).toLocaleDateString()}`,
+              cardapio_id: list.menu_id,
+              itens: mappedItems,
+              valor_total: list.cost_actual || 0,
+              data_criacao: list.created_at,
+              status: list.status === 'pending' ? 'draft' : list.status === 'budget_ok' ? 'approved' : 'draft',
+              client_name: list.client_name,
+              budget_predicted: list.budget_predicted,
+              cost_actual: list.cost_actual || 0,
+              created_at: list.created_at
+            });
           }
-
-          const mappedItems: ShoppingItem[] = (items || []).map(item => ({
-            id: item.id,
-            produto_id: item.product_id_legado,
-            produto_nome: item.product_name,
-            categoria: item.category,
-            quantidade_necessaria: item.quantity,
-            unidade: item.unit,
-            preco_unitario: item.unit_price,
-            valor_total: item.total_price,
-            fornecedor: '',
-            observacoes: '',
-            receita_origem: []
-          }));
-
-          mappedLists.push({
-            id: list.id,
-            nome: `Lista de Compras - ${new Date(list.created_at).toLocaleDateString()}`,
-            cardapio_id: list.menu_id,
-            itens: mappedItems,
-            valor_total: list.cost_actual || 0,
-            data_criacao: list.created_at,
-            status: list.status === 'pending' ? 'draft' : list.status === 'budget_ok' ? 'approved' : 'draft',
-            client_name: list.client_name,
-            budget_predicted: list.budget_predicted,
-            cost_actual: list.cost_actual || 0,
-            created_at: list.created_at
-          });
-        }
+        });
         
         setLists(mappedLists);
+      } else {
+        setLists([]);
       }
     } catch (error) {
       console.error('Error loading shopping lists:', error);
-      toast({
-        title: "Erro ao Carregar",
-        description: "Não foi possível carregar as listas de compras",
-        variant: "destructive"
-      });
+      const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido';
+      setError(errorMessage);
+      
+      showToast(
+        "Problema de Conectividade",
+        "Tentando reconectar...",
+        "destructive"
+      );
     } finally {
       setIsLoading(false);
+      isLoadingRef.current = false;
     }
-  };
+  }, [showToast]);
 
   const generateShoppingList = async (
     menuId: string,
@@ -197,10 +254,10 @@ export const useShoppingList = () => {
       // Reload lists from database to get the actual saved data
       await loadShoppingLists();
 
-      toast({
-        title: "Lista de Compras Gerada!",
-        description: `Lista gerada com sucesso! Recarregando dados...`,
-      });
+      showToast(
+        "Lista de Compras Gerada!",
+        `Lista gerada com sucesso!`
+      );
 
       return newList;
 
@@ -208,11 +265,11 @@ export const useShoppingList = () => {
       console.error('Erro ao gerar lista de compras:', error);
       const errorMessage = error instanceof Error ? error.message : 'Erro na geração da lista';
       
-      toast({
-        title: "Erro na Geração",
-        description: errorMessage,
-        variant: "destructive"
-      });
+      showToast(
+        "Erro na Geração",
+        errorMessage,
+        "destructive"
+      );
 
       return null;
     } finally {
@@ -230,19 +287,19 @@ export const useShoppingList = () => {
         setCurrentList(list);
       }
 
-      toast({
-        title: "Lista Salva",
-        description: "Lista de compras salva com sucesso",
-      });
+      showToast(
+        "Lista Salva",
+        "Lista de compras salva com sucesso"
+      );
 
       return true;
     } catch (error) {
       console.error('Erro ao salvar lista:', error);
-      toast({
-        title: "Erro ao Salvar",
-        description: "Não foi possível salvar a lista",
-        variant: "destructive"
-      });
+      showToast(
+        "Erro ao Salvar",
+        "Não foi possível salvar a lista",
+        "destructive"
+      );
       return false;
     }
   };
@@ -271,19 +328,19 @@ export const useShoppingList = () => {
         setCurrentList(null);
       }
 
-      toast({
-        title: "Lista Excluída",
-        description: "Lista de compras excluída com sucesso",
-      });
+      showToast(
+        "Lista Excluída",
+        "Lista de compras excluída com sucesso"
+      );
 
       return true;
     } catch (error) {
       console.error('Erro ao excluir lista:', error);
-      toast({
-        title: "Erro ao Excluir",
-        description: "Não foi possível excluir a lista",
-        variant: "destructive"
-      });
+      showToast(
+        "Erro ao Excluir",
+        "Não foi possível excluir a lista",
+        "destructive"
+      );
       return false;
     }
   };
@@ -363,6 +420,7 @@ export const useShoppingList = () => {
     lists,
     currentList,
     isLoading,
+    error,
     generateShoppingList,
     saveShoppingList,
     deleteShoppingList,

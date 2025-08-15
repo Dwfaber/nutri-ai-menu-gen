@@ -18,10 +18,10 @@ export const withRetry = async <T>(
   options: RetryOptions = {}
 ): Promise<T> => {
   const {
-    maxRetries = 3,
+    maxRetries = 2,
     initialDelay = 1000,
-    maxDelay = 10000,
-    backoffFactor = 2
+    maxDelay = 5000,
+    backoffFactor = 1.5
   } = options;
 
   let lastError: Error;
@@ -48,18 +48,18 @@ export const withRetry = async <T>(
 };
 
 const isRetryableError = (error: any): boolean => {
-  // Erros HTTP que indicam problemas de conectividade
-  const retryableStatusCodes = [408, 429, 500, 502, 503, 504, 523];
+  // Erros HTTP que indicam problemas de conectividade (mais restrito)
+  const retryableStatusCodes = [408, 502, 503, 504];
   
   if (error?.status && retryableStatusCodes.includes(error.status)) {
     return true;
   }
 
-  // Erros de rede
-  if (error?.message?.includes('fetch')) return true;
-  if (error?.message?.includes('network')) return true;
+  // Erros de rede específicos
+  if (error?.message?.includes('Failed to fetch')) return true;
+  if (error?.message?.includes('NetworkError')) return true;
   if (error?.message?.includes('timeout')) return true;
-  if (error?.message?.includes('unreachable')) return true;
+  if (error?.code === 'NETWORK_ERROR') return true;
 
   return false;
 };

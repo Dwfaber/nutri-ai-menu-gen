@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useMemo, memo } from 'react';
 import { Plus, Search, Filter, ShoppingCart, Download, AlertCircle, CheckCircle, Package, Settings, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -30,6 +30,8 @@ const Compras = () => {
 
   const { 
     lists,
+    isLoading: isLoadingLists,
+    error: listsError,
     getShoppingLists, 
     getShoppingListItems, 
     exportToCSV, 
@@ -44,11 +46,14 @@ const Compras = () => {
 
   const marketStats = getProductStats();
 
+  // Memoized effect to prevent loops
   useEffect(() => {
     loadShoppingLists();
   }, [loadShoppingLists]);
 
-  const handleSelectList = async (list: ShoppingList) => {
+  const handleSelectList = useCallback(async (list: ShoppingList) => {
+    if (selectedList?.id === list.id) return; // Prevent reloading same list
+    
     setSelectedList(list);
     setIsLoadingItems(true);
     
@@ -72,33 +77,35 @@ const Compras = () => {
         setOptimizationSummary({
           enabled: true,
           products_optimized: optimizedItems.length,
-          total_savings: Math.max(0, list.budget_predicted - (list.cost_actual || 0)) * 0.1, // Estimate
+          total_savings: Math.max(0, list.budget_predicted - (list.cost_actual || 0)) * 0.1,
           promotions_used: promotionItems.length,
-          products_with_surplus: Math.floor(optimizedItems.length * 0.3) // Estimate
+          products_with_surplus: Math.floor(optimizedItems.length * 0.3)
         });
       } else {
         setOptimizationSummary(null);
       }
+    } catch (error) {
+      console.error('Error loading list items:', error);
     } finally {
       setIsLoadingItems(false);
     }
-  };
+  }, [selectedList?.id, getShoppingListItems]);
 
-  const handleExportList = () => {
+  const handleExportList = useCallback(() => {
     if (selectedList && listItems.length > 0) {
       exportToCSV(listItems, selectedList.client_name);
     }
-  };
+  }, [selectedList, listItems, exportToCSV]);
 
-  const handleUpdateQuantity = async (itemId: string, quantity: number) => {
+  const handleUpdateQuantity = useCallback(async (itemId: string, quantity: number) => {
     await updateItemQuantity(itemId, quantity);
     if (selectedList) {
       const updatedItems = await getShoppingListItems(selectedList.id);
       setListItems(updatedItems);
     }
-  };
+  }, [selectedList, updateItemQuantity, getShoppingListItems]);
 
-  const handleDeleteList = async (list: ShoppingList) => {
+  const handleDeleteList = useCallback(async (list: ShoppingList) => {
     const success = await deleteShoppingList(list.id);
     if (success) {
       // Reset selected list if it was the one deleted
@@ -107,7 +114,7 @@ const Compras = () => {
         setListItems([]);
       }
     }
-  };
+  }, [deleteShoppingList, selectedList?.id]);
 
   const getStatusBadge = (status: ShoppingListStatus) => {
     switch (status) {
@@ -130,20 +137,33 @@ const Compras = () => {
     }
   };
 
-  const totalCost = listItems.reduce((sum, item) => sum + item.total_price, 0);
-  const totalItems = listItems.length;
+  // Memoized calculations
+  const totalCost = useMemo(() => 
+    listItems.reduce((sum, item) => sum + item.total_price, 0), 
+    [listItems]
+  );
+  const totalItems = useMemo(() => listItems.length, [listItems]);
 
-  // Group items by category
-  const groupedByCategory = listItems.reduce((acc, item) => {
-    if (!acc[item.category]) {
-      acc[item.category] = [];
-    }
-    acc[item.category].push(item);
-    return acc;
-  }, {} as Record<string, ShoppingListItem[]>);
+  // Memoized group items by category
+  const groupedByCategory = useMemo(() => 
+    listItems.reduce((acc, item) => {
+      if (!acc[item.category]) {
+        acc[item.category] = [];
+      }
+      acc[item.category].push(item);
+      return acc;
+    }, {} as Record<string, ShoppingListItem[]>),
+    [listItems]
+  );
 
-  // Use lists from hook
-  const displayLists = lists;
+  // Memoized filtered lists
+  const displayLists = useMemo(() => {
+    if (!searchTerm.trim()) return lists;
+    return lists.filter(list => 
+      list.client_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      list.nome.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+  }, [lists, searchTerm]);
 
   // Helper function to check if status indicates success
   const isSuccessStatus = (status: ShoppingListStatus) => {
@@ -254,12 +274,37 @@ const Compras = () => {
             {/* Lista de Shopping Lists */}
             <div className="space-y-4">
               <h3 className="text-lg font-semibold">Listas de Compras Disponíveis</h3>
-              {displayLists.length === 0 ? (
+              
+              {isLoadingLists ? (
+                <Card>
+                  <CardContent className="p-8 text-center text-gray-500">
+                    <div className="animate-pulse">
+                      <ShoppingCart className="w-12 h-12 mx-auto mb-4 text-gray-300" />
+                      <p className="text-lg font-medium mb-2">Carregando listas...</p>
+                    </div>
+                  </CardContent>
+                </Card>
+              ) : listsError ? (
+                <Card>
+                  <CardContent className="p-8 text-center text-red-500">
+                    <AlertCircle className="w-12 h-12 mx-auto mb-4" />
+                    <p className="text-lg font-medium mb-2">Erro de Conectividade</p>
+                    <p className="text-sm mb-4">{listsError}</p>
+                    <Button onClick={loadShoppingLists} variant="outline">
+                      Tentar Novamente
+                    </Button>
+                  </CardContent>
+                </Card>
+              ) : displayLists.length === 0 ? (
                 <Card>
                   <CardContent className="p-8 text-center text-gray-500">
                     <ShoppingCart className="w-12 h-12 mx-auto mb-4 text-gray-300" />
-                    <p className="text-lg font-medium mb-2">Nenhuma lista de compras encontrada</p>
-                    <p className="text-sm">Gere cardápios na aba "Cardápios" para criar listas automaticamente</p>
+                    <p className="text-lg font-medium mb-2">
+                      {searchTerm ? 'Nenhuma lista encontrada' : 'Nenhuma lista de compras encontrada'}
+                    </p>
+                    <p className="text-sm">
+                      {searchTerm ? 'Tente ajustar o termo de busca' : 'Gere cardápios na aba "Cardápios" para criar listas automaticamente'}
+                    </p>
                   </CardContent>
                 </Card>
               ) : (
@@ -525,4 +570,4 @@ const Compras = () => {
   );
 };
 
-export default Compras;
+export default memo(Compras);
