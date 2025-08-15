@@ -1,756 +1,440 @@
-import "https://deno.land/x/xhr@0.1.0/mod.ts";
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-}
+};
 
-// Optimization algorithm implementation
-const calculateOptimalPackaging = (
-  quantidadeNecessaria: number,
-  opcoes: any[],
-  config: any
-) => {
-  const norm = (opcao: any) => {
-    const embalagem = Number(opcao.quantidade_embalagem ?? opcao.produto_base_quantidade_embalagem ?? 1);
-    const precoBase = config?.considerar_custo_compra
-      ? Number(opcao.preco_compra ?? opcao.preco ?? 0)
-      : Number(opcao.preco ?? opcao.preco_compra ?? 0);
-    const promocao = Boolean(opcao.promocao || opcao.em_promocao || opcao.em_promocao_sim_nao);
-    const apenasInteiro = Boolean(opcao.apenas_valor_inteiro || opcao.apenas_valor_inteiro_sim_nao || opcao.inteiro);
-    return { embalagem, precoBase, promocao, apenasInteiro };
-  };
-
-  const opcoesDisponiveis = opcoes
-    .map((op) => ({ ...op, __norm: norm(op) }))
-    .filter((op) => op.__norm.precoBase > 0 && op.__norm.embalagem > 0);
-
-  if (opcoesDisponiveis.length === 0) {
-    return [];
-  }
-
-  const opcoesOrdenadas = [...opcoesDisponiveis].sort((a, b) => {
-    if (config?.prioridade_promocao === 'alta') {
-      if (a.__norm.promocao && !b.__norm.promocao) return -1;
-      if (!a.__norm.promocao && b.__norm.promocao) return 1;
+// Função de otimização de embalagens
+function calculateOptimalPackaging(quantidadeNecessaria: number, opcoes: any[], config: any): any[] {
+  if (!opcoes.length) return [];
+  
+  console.log(`Otimizando ${quantidadeNecessaria} unidades com ${opcoes.length} opções`);
+  
+  // Ordenar por prioridade: promoção, depois menor preço por unidade
+  const opcoesSorted = opcoes.sort((a, b) => {
+    // Priorizar promoções se configurado
+    if (config.prioridade_promocao === 'alta') {
+      if (a.em_promocao && !b.em_promocao) return -1;
+      if (!a.em_promocao && b.em_promocao) return 1;
     }
-
-    const custoUnitarioA = a.__norm.precoBase / a.__norm.embalagem;
-    const custoUnitarioB = b.__norm.precoBase / b.__norm.embalagem;
-
-    if (custoUnitarioA !== custoUnitarioB) return custoUnitarioA - custoUnitarioB;
-    // desempate: embalagem maior para reduzir tipos
-    return b.__norm.embalagem - a.__norm.embalagem;
+    
+    // Calcular preço por unidade
+    const precoUnitarioA = a.preco / a.quantidade_embalagem;
+    const precoUnitarioB = b.preco / b.quantidade_embalagem;
+    
+    return precoUnitarioA - precoUnitarioB;
   });
-
-  const selecoes: any[] = [];
+  
+  const selecoes = [];
   let quantidadeRestante = quantidadeNecessaria;
-
-  for (const opcao of opcoesOrdenadas) {
+  
+  // Algoritmo guloso: usar a melhor opção até atingir a quantidade
+  for (const opcao of opcoesSorted) {
     if (quantidadeRestante <= 0) break;
-    if (selecoes.length >= (config?.maximo_tipos_embalagem_por_produto ?? 3)) break;
-
-    const { embalagem, precoBase, promocao, apenasInteiro } = opcao.__norm;
-
-    if (apenasInteiro) {
-      const pacotesNecessarios = Math.ceil(quantidadeRestante / embalagem);
-      const quantidadeTotal = pacotesNecessarios * embalagem;
-      const sobra = Math.max(0, quantidadeTotal - quantidadeRestante);
-      const sobraPercentual = (sobra / Math.max(1, quantidadeNecessaria)) * 100;
-
-      if (sobraPercentual <= (config?.tolerancia_sobra_percentual ?? 10)) {
-        selecoes.push({
-          produto_id: opcao.produto_id,
-          descricao: opcao.descricao,
-          quantidade_pacotes: pacotesNecessarios,
-          quantidade_unitaria: embalagem,
-          preco_unitario: precoBase,
-          custo_total: pacotesNecessarios * precoBase,
-          em_promocao: promocao,
-          motivo_selecao: `${promocao ? 'em promoção, ' : ''}R$ ${(precoBase / embalagem).toFixed(2)}/unidade${sobra > 0 ? `, sobra ${sobraPercentual.toFixed(1)}%` : ''}`,
-        });
-
-        quantidadeRestante = 0; // Produto integral resolve tudo de uma vez
-      }
+    
+    let quantidadePacotes = Math.ceil(quantidadeRestante / opcao.quantidade_embalagem);
+    
+    // Aplicar restrição de apenas valor inteiro se necessário
+    if (opcao.apenas_valor_inteiro) {
+      quantidadePacotes = Math.ceil(quantidadePacotes);
+    }
+    
+    // Limitar número de tipos de embalagem
+    if (selecoes.length >= config.maximo_tipos_embalagem_por_produto) {
+      // Usar apenas a última (melhor) opção para o restante
+      quantidadePacotes = Math.ceil(quantidadeRestante / opcao.quantidade_embalagem);
+      quantidadeRestante = 0;
     } else {
-      // Produto pode ser fracionado
-      const pacotesNecessarios = Math.ceil(quantidadeRestante / embalagem);
-
+      quantidadeRestante -= quantidadePacotes * opcao.quantidade_embalagem;
+    }
+    
+    if (quantidadePacotes > 0) {
       selecoes.push({
         produto_id: opcao.produto_id,
         descricao: opcao.descricao,
-        quantidade_pacotes: pacotesNecessarios,
-        quantidade_unitaria: embalagem,
-        preco_unitario: precoBase,
-        custo_total: pacotesNecessarios * precoBase,
-        em_promocao: promocao,
-        motivo_selecao: `${promocao ? 'em promoção, ' : ''}R$ ${(precoBase / embalagem).toFixed(2)}/unidade`,
+        quantidade_pacotes: quantidadePacotes,
+        quantidade_unitaria: opcao.quantidade_embalagem,
+        preco_unitario: opcao.preco,
+        custo_total: quantidadePacotes * opcao.preco,
+        em_promocao: opcao.em_promocao,
+        motivo_selecao: opcao.em_promocao ? 'Promoção' : 'Melhor preço'
       });
-
-      quantidadeRestante -= pacotesNecessarios * embalagem;
     }
+    
+    if (quantidadeRestante <= 0) break;
   }
-
+  
   return selecoes;
-};
+}
 
 serve(async (req) => {
+  // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders })
+    return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    console.log('Received request body:', JSON.stringify(await req.clone().json()))
-    
-    const { menuId, clientName, budgetPredicted, menuItems, optimizationConfig, servingsPerDay, totalServingsWeek, servingsByRecipe } = await req.json()
+    console.log('=== INICIANDO GERAÇÃO DE LISTA DE COMPRAS ===');
 
-    console.log('Parsed parameters:', { 
-      menuId, 
-      clientName, 
-      budgetPredicted: typeof budgetPredicted, 
-      menuItemsLength: menuItems?.length,
-      optimizationConfig: !!optimizationConfig,
-      servingsPerDay, totalServingsWeek,
-      hasServingsByRecipe: !!servingsByRecipe 
-    })
-
-    if (!menuId || !clientName || budgetPredicted === undefined || budgetPredicted === null) {
-      const error = `Missing required parameters: menuId=${menuId}, clientName=${clientName}, budgetPredicted=${budgetPredicted}`
-      console.error(error)
-      throw new Error(error)
-    }
-
-    const supabaseClient = createClient(
+    const supabase = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-    )
+    );
 
-    console.log(`Generating shopping list for menu: ${menuId}`)
-    console.log(`Optimization enabled: ${!!optimizationConfig}`)
+    // Parse request body
+    const { menuId, clientName, budgetPredicted, servingsPerDay = 100 } = await req.json();
 
-    // Get OpenAI API Key
-    const openAIApiKey = Deno.env.get('OPENAI_API_KEY');
-    if (!openAIApiKey && optimizationConfig) {
-      console.warn('OpenAI API key not found, falling back to basic optimization');
-    }
+    console.log('Gerando lista de compras para cardápio:', menuId);
+    console.log('Cliente:', clientName, 'Orçamento:', budgetPredicted, 'Porções/dia:', servingsPerDay);
 
-    // Get products from digital market
-    const { data: marketProducts } = await supabaseClient
-      .from('co_solicitacao_produto_listagem')
-      .select('*')
-      .order('categoria_descricao', { ascending: true });
-
-    // Group products by produto_base_id for optimization
-    const productsByBase = new Map();
-    marketProducts?.forEach(product => {
-      const baseId = product.produto_base_id || product.produto_id;
-      if (!productsByBase.has(baseId)) {
-        productsByBase.set(baseId, []);
-      }
-      productsByBase.get(baseId).push(product);
-    });
-
-    // Recipe mapping for dynamic IDs to real recipe IDs
-    const RECIPE_MAPPING: { [key: string]: string } = {
-      'arroz-Segunda': '580',
-      'arroz-Terça': '580', 
-      'arroz-Quarta': '580',
-      'arroz-Quinta': '580',
-      'arroz-Sexta': '580',
-      'feijao-Segunda': '581',
-      'feijao-Terça': '581',
-      'feijao-Quarta': '581', 
-      'feijao-Quinta': '581',
-      'feijao-Sexta': '581',
-      'suco-laranja-default': '1121',
-      'suco-uva-default': '1124',
-      'suco-limao-default': '1122', 
-      'suco-maracuja-default': '1123'
-    };
-
-    // Function to normalize recipe ID - if it's already a number/valid ID, use it directly
-    const normalizeRecipeId = (recipeId: string): string => {
-      // Check if it's in our mapping first
-      if (RECIPE_MAPPING[recipeId]) {
-        console.log(`Mapped ${recipeId} to ${RECIPE_MAPPING[recipeId]}`);
-        return RECIPE_MAPPING[recipeId];
-      }
-      
-      // If it's already a numeric ID, use it as-is
-      if (/^\d+$/.test(recipeId)) {
-        console.log(`Using numeric recipe ID as-is: ${recipeId}`);
-        return recipeId;
-      }
-      
-      // If it's not in mapping and not numeric, log and skip
-      console.log(`Warning: Recipe ID '${recipeId}' not found in mapping and not numeric`);
-      return recipeId; // Return as-is, let the query handle it
-    };
-
-    // Process recipes from the menu to extract ingredients from database
-    const ingredientMap = new Map();
-    
-    // First, get the actual menu with recipe IDs
-    const { data: menuData, error: menuError } = await supabaseClient
+    // Buscar informações do cardápio gerado
+    const { data: menuData, error: menuError } = await supabase
       .from('generated_menus')
-      .select('receitas_ids, receitas_adaptadas')
+      .select('*')
       .eq('id', menuId)
       .single();
 
     if (menuError || !menuData) {
-      console.error('Error fetching menu data:', menuError);
-      throw new Error('Menu not found');
+      console.error('Erro ao buscar cardápio:', menuError);
+      throw new Error(`Cardápio não encontrado: ${menuId}`);
     }
 
-    const receitasIds = menuData.receitas_ids || [];
-    console.log('Processing recipe IDs from menu:', receitasIds);
+    console.log('Cardápio encontrado:', {
+      id: menuData.id,
+      client_name: menuData.client_name,
+      receitas_count: menuData.receitas_adaptadas?.length || 0
+    });
 
-    if (receitasIds && receitasIds.length > 0) {
-      for (const recipeId of receitasIds) {
-        console.log(`Processing recipe ID: ${recipeId}`);
+    // Buscar produtos do mercado
+    const { data: marketProducts, error: marketError } = await supabase
+      .from('co_solicitacao_produto_listagem')
+      .select('*')
+      .eq('solicitacao_id', (await supabase
+        .from('co_solicitacao_produto_listagem')
+        .select('solicitacao_id')
+        .order('solicitacao_id', { ascending: false })
+        .limit(1)
+        .single()
+      ).data?.solicitacao_id);
+
+    if (marketError || !marketProducts) {
+      console.error('Erro ao buscar produtos do mercado:', marketError);
+      throw new Error('Produtos do mercado não encontrados');
+    }
+
+    console.log(`Produtos do mercado carregados: ${marketProducts.length}`);
+
+    // Processar receitas adaptadas do cardápio
+    const receitasAdaptadas = menuData.receitas_adaptadas || [];
+    if (!receitasAdaptadas.length) {
+      throw new Error('Nenhuma receita encontrada no cardápio');
+    }
+
+    // Extrair IDs das receitas
+    const recipeIds = receitasAdaptadas
+      .map((r: any) => r.receita_id_legado)
+      .filter(Boolean);
+
+    if (!recipeIds.length) {
+      throw new Error('Nenhum ID de receita válido encontrado');
+    }
+
+    console.log('IDs das receitas:', recipeIds);
+
+    // Buscar ingredientes das receitas
+    const { data: ingredients, error: ingredientsError } = await supabase
+      .from('receita_ingredientes')
+      .select('*, produto_base_descricao')
+      .in('receita_id_legado', recipeIds);
+
+    if (ingredientsError) {
+      console.error('Erro ao buscar ingredientes:', ingredientsError);
+      throw new Error('Erro ao buscar ingredientes das receitas');
+    }
+
+    console.log(`Ingredientes carregados: ${ingredients?.length || 0}`);
+
+    // Calcular multiplicador de porções
+    const servingsMultiplier = servingsPerDay;
+    console.log('Multiplicador de porções:', servingsMultiplier);
+
+    // Consolidar ingredientes por produto_base_id
+    const consolidatedIngredients = new Map();
+
+    // Processar receitas adaptadas primeiro (prioridade)
+    for (const receitaAdaptada of receitasAdaptadas) {
+      const ing = receitaAdaptada;
+      const adaptedIngredients = ing.ingredientes || [];
+      for (const adaptedIng of adaptedIngredients) {
+        const produtoBaseId = adaptedIng.produto_base_id;
+        if (!produtoBaseId) continue;
         
-        // Map dynamic IDs to real recipe IDs using the normalize function
-        const realRecipeId = normalizeRecipeId(recipeId);
+        const quantidadeNecessaria = Number(adaptedIng.quantidade || 0) * Number(servingsMultiplier);
+        if (quantidadeNecessaria <= 0) continue;
+        
+        console.log(`[RECEITAS ADAPTADAS] Processando ingrediente: ${adaptedIng.produto_base_descricao || adaptedIng.nome}, qtd necessária: ${quantidadeNecessaria}`);
 
-        try {
-          // First, verify the recipe exists and get its data
-          const { data: recipe, error: recipeError } = await supabaseClient
-            .from('receitas_legado')
-            .select('receita_id_legado, nome_receita, quantidade_refeicoes')
-            .eq('receita_id_legado', realRecipeId)
-            .single();
-
-          if (recipeError || !recipe) {
-            console.log(`Recipe ${realRecipeId} not found in receitas_legado, trying receitas_adaptadas fallback`);
-            const adaptedList = menuData.receitas_adaptadas || [];
-            const adapted = adaptedList.find((r: any) => String(r?.receita_id_legado) === String(realRecipeId) || String(r?.receita_id_legado) === String(recipeId));
-            if (adapted && Array.isArray(adapted.ingredientes) && adapted.ingredientes.length > 0) {
-              const recipeBaseServings = adapted.porcoes || 100;
-              const defaultNeededServings = typeof servingsPerDay === 'number' && servingsPerDay > 0 ? servingsPerDay : 100;
-              const recipeNeededServings = (servingsByRecipe && (servingsByRecipe[realRecipeId] || servingsByRecipe[recipeId])) || defaultNeededServings;
-              const multiplier = recipeBaseServings > 0 ? (recipeNeededServings / recipeBaseServings) : 1;
-              console.log(`Fallback adapted recipe multiplier: base=${recipeBaseServings}, need=${recipeNeededServings}, mult=${multiplier}`);
-
-              for (const ing of adapted.ingredientes) {
-                const baseId = ing.produto_base_id;
-                if (!baseId) continue;
-                const baseQuantity = parseFloat((ing.quantidade ?? ing.quantity ?? 0).toString()) || 0;
-                const adjustedQuantity = baseQuantity * multiplier;
-                if (adjustedQuantity <= 0) continue;
-
-                const firstProduct = productsByBase.get(baseId)?.[0];
-                const name = ing.nome || ing.name || firstProduct?.descricao || 'Ingrediente';
-                const unit = ing.unidade || ing.unit || firstProduct?.unidade || 'kg';
-                const category = firstProduct?.categoria_descricao || 'Outros';
-                if (ingredientMap.has(baseId)) {
-                  const existing = ingredientMap.get(baseId);
-                  existing.quantity += adjustedQuantity;
-                  existing.recipes.push(adapted.nome_receita || adapted.nome || `receita_${realRecipeId}`);
-                } else {
-                  ingredientMap.set(baseId, {
-                    produto_base_id: baseId,
-                    name,
-                    quantity: adjustedQuantity,
-                    unit,
-                    category,
-                    opcoes_embalagem: productsByBase.get(baseId) || [] ,
-                    recipes: [adapted.nome_receita || adapted.nome || `receita_${realRecipeId}`]
-                  });
-                }
-              }
-              // Done with fallback for this recipe id
-              continue;
-            } else {
-              // No fallback available for this recipe id
-              continue;
-            }
-          }
-
-          console.log(`Found recipe: ${recipe.nome_receita} (serves ${recipe.quantidade_refeicoes})`);
-
-          // Fetch ingredients for this recipe
-          const { data: ingredients, error: ingredientsError } = await supabaseClient
-            .from('receita_ingredientes')
-            .select('*')
-            .eq('receita_id_legado', realRecipeId);
-
-          if (ingredientsError) {
-            console.error(`Error fetching ingredients for recipe ${realRecipeId}:`, ingredientsError);
-            continue;
-          }
-
-          if (!ingredients || ingredients.length === 0) {
-            console.log(`No ingredients found for recipe ${realRecipeId}`);
-            // Try adapted fallback for missing ingredients
-            const adaptedList = menuData.receitas_adaptadas || [];
-            const adapted = adaptedList.find((r: any) => String(r?.receita_id_legado) === String(realRecipeId));
-            if (adapted && Array.isArray(adapted.ingredientes) && adapted.ingredientes.length > 0) {
-              const recipeBaseServings = adapted.porcoes || 100;
-              const defaultNeededServings = typeof servingsPerDay === 'number' && servingsPerDay > 0 ? servingsPerDay : 100;
-              const recipeNeededServings = (servingsByRecipe && (servingsByRecipe[realRecipeId] || servingsByRecipe[recipeId])) || defaultNeededServings;
-              const multiplier = recipeBaseServings > 0 ? (recipeNeededServings / recipeBaseServings) : 1;
-              for (const ing of adapted.ingredientes) {
-                const baseId = ing.produto_base_id;
-                if (!baseId) continue;
-                const baseQuantity = parseFloat((ing.quantidade ?? ing.quantity ?? 0).toString()) || 0;
-                const adjustedQuantity = baseQuantity * multiplier;
-                if (adjustedQuantity <= 0) continue;
-                const firstProduct = productsByBase.get(baseId)?.[0];
-                const name = ing.nome || ing.name || firstProduct?.descricao || 'Ingrediente';
-                const unit = ing.unidade || ing.unit || firstProduct?.unidade || 'kg';
-                const category = firstProduct?.categoria_descricao || 'Outros';
-                if (ingredientMap.has(baseId)) {
-                  const existing = ingredientMap.get(baseId);
-                  existing.quantity += adjustedQuantity;
-                  existing.recipes.push(adapted.nome_receita || adapted.nome || `receita_${realRecipeId}`);
-                } else {
-                  ingredientMap.set(baseId, {
-                    produto_base_id: baseId,
-                    name,
-                    quantity: adjustedQuantity,
-                    unit,
-                    category,
-                    opcoes_embalagem: productsByBase.get(baseId) || [] ,
-                    recipes: [adapted.nome_receita || adapted.nome || `receita_${realRecipeId}`]
-                  });
-                }
-              }
-              continue;
-            }
-            continue;
-          }
-
-          console.log(`Found ${ingredients.length} ingredients for recipe ${realRecipeId}`);
-          
-          // Calculate quantity multiplier based on servings needed vs recipe base
-          const recipeBaseServings = recipe.quantidade_refeicoes || 100;
-          const defaultNeededServings = typeof servingsPerDay === 'number' && servingsPerDay > 0 ? servingsPerDay : 100;
-          const recipeNeededServings = (servingsByRecipe && servingsByRecipe[realRecipeId]) || defaultNeededServings;
-          const multiplier = recipeBaseServings > 0 ? (recipeNeededServings / recipeBaseServings) : 1;
-          
-          console.log(`Recipe serves ${recipeBaseServings}, need ${recipeNeededServings}, multiplier: ${multiplier}`);
-          
-          // Process each ingredient
-          for (const ingredient of ingredients) {
-            const baseId = ingredient.produto_base_id;
-            if (!baseId) {
-              console.log(`Skipping ingredient without produto_base_id: ${ingredient.nome}`);
-              continue;
-            }
-            
-            // Calculate adjusted quantity
-            const baseQuantity = parseFloat(ingredient.quantidade?.toString()) || 0;
-            const adjustedQuantity = baseQuantity * multiplier;
-            
-            console.log(`Ingredient: ${ingredient.nome} - Base: ${baseQuantity} - Adjusted: ${adjustedQuantity} - Unit: ${ingredient.unidade}`);
-            
-            if (adjustedQuantity > 0) {
-              const key = baseId;
-              
-              if (ingredientMap.has(key)) {
-                const existing = ingredientMap.get(key);
-                existing.quantity += adjustedQuantity;
-                existing.recipes.push(recipe.nome_receita);
-                console.log(`Updated existing ingredient: ${existing.name} - New total: ${existing.quantity}`);
-              } else {
-                const firstProduct = productsByBase.get(baseId)?.[0];
-                if (firstProduct) {
-                  const newIngredient = {
-                    produto_base_id: baseId,
-                    name: ingredient.nome || firstProduct.descricao,
-                    quantity: adjustedQuantity,
-                    unit: ingredient.unidade || firstProduct.unidade || 'kg',
-                    category: firstProduct.categoria_descricao || 'Outros',
-                    opcoes_embalagem: productsByBase.get(baseId) || [],
-                    recipes: [recipe.nome_receita]
-                  };
-                  ingredientMap.set(key, newIngredient);
-                  console.log(`Added new ingredient: ${newIngredient.name} - Quantity: ${newIngredient.quantity}`);
-                } else {
-                  console.log(`No product found for base ID: ${baseId}`);
-                }
-              }
-            } else {
-              console.log(`Skipping ingredient with zero quantity: ${ingredient.nome}`);
-            }
-          }
-          
-        } catch (error) {
-          console.error(`Error processing recipe ${recipeId}:`, error);
-        }
-      }
-    } else {
-      console.log('No menu items provided, creating sample shopping list');
-      
-      // Fallback: create sample shopping list with meaningful quantities
-      const sampleProducts = marketProducts?.slice(0, 15) || [];
-      
-      for (const product of sampleProducts) {
-        if (product.preco > 0) {
-          // Calculate base quantity using per capita data or reasonable defaults
-          let baseQuantity = 0;
-          
-          if (product.per_capita > 0) {
-            baseQuantity = product.per_capita * 100; // Scale for 100 people
-          } else {
-            // Set reasonable default quantities based on category
-            const categoryDefaults = {
-              'CARNES': 5.0,
-              'ARROZ': 3.0,
-              'FEIJAO': 2.0,
-              'VERDURAS': 2.0,
-              'TEMPEROS': 0.5,
-              'OLEOS': 1.0
-            };
-            
-            const category = product.categoria_descricao?.toUpperCase() || '';
-            for (const [cat, qty] of Object.entries(categoryDefaults)) {
-              if (category.includes(cat)) {
-                baseQuantity = qty;
-                break;
-              }
-            }
-            
-            if (baseQuantity === 0) baseQuantity = 1.0; // Default fallback
-          }
-          
-          const baseId = product.produto_base_id || product.produto_id;
-          
-          console.log(`Sample product: ${product.descricao} - Quantity: ${baseQuantity} - Category: ${product.categoria_descricao}`);
-          
-          ingredientMap.set(baseId, {
-            produto_base_id: baseId,
-            name: product.descricao,
-            quantity: baseQuantity,
-            unit: product.unidade || 'kg',
-            category: product.categoria_descricao || 'Outros',
-            opcoes_embalagem: productsByBase.get(baseId) || [product]
+        // Add to consolidated ingredients map
+        if (!consolidatedIngredients.has(produtoBaseId)) {
+          consolidatedIngredients.set(produtoBaseId, {
+            produto_base_id: produtoBaseId,
+            nome: adaptedIng.produto_base_descricao || adaptedIng.nome || '',
+            quantidade_total: 0,
+            unidade: adaptedIng.unidade || 'GR',
+            receitas: []
           });
         }
+
+        const existingIngredient = consolidatedIngredients.get(produtoBaseId);
+        existingIngredient.quantidade_total += quantidadeNecessaria;
+        existingIngredient.receitas.push(ing.nome_receita || '');
       }
     }
 
-    let aggregatedIngredients = Array.from(ingredientMap.values());
-    
-    if (aggregatedIngredients.length === 0) {
-      console.log('Ingredient map is empty, using market products fallback to build basic list');
-      const sampleProducts = marketProducts?.slice(0, 10) || [];
-      for (const product of sampleProducts) {
-        if (product.preco > 0) {
-          const baseId = product.produto_base_id || product.produto_id;
-          const qty = product.per_capita > 0
-            ? product.per_capita * (typeof servingsPerDay === 'number' && servingsPerDay > 0 ? servingsPerDay : 100)
-            : 1.0;
-          ingredientMap.set(baseId, {
-            produto_base_id: baseId,
-            name: product.descricao,
-            quantity: qty,
-            unit: product.unidade || 'kg',
-            category: product.categoria_descricao || 'Outros',
-            opcoes_embalagem: productsByBase.get(baseId) || [product]
+    // Processar ingredientes das receitas legado (complementar)
+    if (ingredients && ingredients.length > 0) {
+      for (const ingredient of ingredients) {
+        const produtoBaseId = Number(ingredient.produto_base_id);
+        if (!produtoBaseId || produtoBaseId <= 0) {
+          console.log(`Saltando ingrediente sem produto_base_id válido: ${ingredient.produto_base_descricao || ingredient.nome}`);
+          continue;
+        }
+
+        // Calcular quantidade necessária
+        const baseServing = Number(ingredient.quantidade_refeicoes || 1);
+        const quantidadeNecessaria = Number(ingredient.quantidade || 0) * Number(servingsMultiplier / baseServing);
+        
+        if (quantidadeNecessaria <= 0) {
+          console.log(`Saltando ingrediente ${ingredient.produto_base_descricao || ingredient.nome}: quantidade inválida`);
+          continue;
+        }
+        
+        console.log(`Processando ingrediente: ${ingredient.produto_base_descricao || ingredient.nome}, qtd base: ${ingredient.quantidade}, multiplicador: ${servingsMultiplier}, qtd necessária: ${quantidadeNecessaria}`);
+
+        // Add to consolidated ingredients map
+        if (!consolidatedIngredients.has(produtoBaseId)) {
+          consolidatedIngredients.set(produtoBaseId, {
+            produto_base_id: produtoBaseId,
+            nome: ingredient.produto_base_descricao || '',
+            quantidade_total: 0,
+            unidade: ingredient.unidade || 'GR',
+            receitas: []
           });
         }
+
+        const existingIngredient = consolidatedIngredients.get(produtoBaseId);
+        existingIngredient.quantidade_total += quantidadeNecessaria;
+        existingIngredient.receitas.push(ingredient.nome || 'Receita não identificada');
       }
-      aggregatedIngredients = Array.from(ingredientMap.values());
-    }
-    
-    console.log('Total ingredients processed:', aggregatedIngredients.length);
-    if (aggregatedIngredients[0]) {
-      console.log('Sample processed ingredient:', aggregatedIngredients[0]);
     }
 
-    // Apply optimization if enabled
-    let totalCost = 0;
-    let totalSavings = 0;
+    console.log(`Ingredientes consolidados: ${consolidatedIngredients.size}`);
+
+    // Gerar itens da lista de compras
     const shoppingItems = [];
-    const optimizationResults = [];
+    let totalCost = 0;
 
-    const defaultConfig = {
-      prioridade_promocao: 'alta',
-      tolerancia_sobra_percentual: 10,
-      preferir_produtos_integrais: false,
-      maximo_tipos_embalagem_por_produto: 3,
-      considerar_custo_compra: false
-    };
+    for (const [produtoBaseId, consolidatedIngredient] of consolidatedIngredients) {
+      console.log(`\n--- Processando ingrediente: ${consolidatedIngredient.nome} ---`);
+      console.log(`Produto Base ID: ${produtoBaseId}`);
+      console.log(`Quantidade total necessária: ${consolidatedIngredient.quantidade_total} ${consolidatedIngredient.unidade}`);
 
-    const config = optimizationConfig || defaultConfig;
+      // Buscar produtos do mercado para este produto_base_id
+      const productOptions = marketProducts.filter(p => 
+        Number(p.produto_base_id) === Number(produtoBaseId)
+      );
 
-    for (const ingredient of aggregatedIngredients) {
-      if (optimizationConfig && ingredient.opcoes_embalagem.length > 1) {
-        let selections = [];
-        
-        // Try AI-powered optimization if available
-        if (openAIApiKey) {
-          try {
-            console.log(`Using AI optimization for ingredient: ${ingredient.name}`);
-            
-            const aiResponse = await fetch('https://api.openai.com/v1/chat/completions', {
-              method: 'POST',
-              headers: {
-                'Authorization': `Bearer ${openAIApiKey}`,
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({
-                model: 'gpt-4o',
-                messages: [
-                  {
-                    role: 'system',
-                    content: `Você é um especialista em otimização de compras que analisa embalagens e preços para encontrar a melhor combinação custo-benefício. 
-                    
-                    Considere:
-                    - Produtos em promoção têm prioridade
-                    - Minimize sobras excessivas
-                    - Prefira menos tipos de embalagem quando possível
-                    - Calcule o custo real por unidade
-                    
-                    Retorne a resposta em JSON com este formato:
-                    {
-                      "selections": [
-                        {
-                          "produto_id": number,
-                          "quantidade_pacotes": number,
-                          "motivo": "string explicando a escolha"
-                        }
-                      ],
-                      "total_cost": number,
-                      "waste_percentage": number
-                    }`
-                  },
-                  {
-                    role: 'user',
-                    content: `Otimize a compra para:
-                    Produto: ${ingredient.name}
-                    Quantidade necessária: ${ingredient.quantity} ${ingredient.unit}
-                    
-                    Opções disponíveis:
-                    ${ingredient.opcoes_embalagem.map(op => 
-                      `- ID: ${op.produto_id}, Embalagem: ${op.quantidade_embalagem} ${op.unidade}, Preço: R$ ${op.preco.toFixed(2)}${op.promocao || op.em_promocao ? ' (PROMOÇÃO)' : ''}, Desc: ${op.descricao}`
-                    ).join('\n')}
-                    
-                    Configuração:
-                    - Prioridade promoção: ${config.prioridade_promocao}
-                    - Tolerância sobra: ${config.tolerancia_sobra_percentual}%
-                    - Máximo tipos embalagem: ${config.maximo_tipos_embalagem_por_produto}`
-                  }
-                ]
-              }),
-            });
+      if (!productOptions.length) {
+        console.log(`Nenhum produto encontrado no mercado para produto_base_id: ${produtoBaseId}`);
+        continue;
+      }
 
-            if (aiResponse.ok) {
-              const aiData = await aiResponse.json();
-              const aiOptimization = JSON.parse(aiData.choices[0].message.content);
-              
-              // Convert AI response to internal format
-              selections = aiOptimization.selections.map((sel: any) => {
-                const option = ingredient.opcoes_embalagem.find(op => op.produto_id === sel.produto_id);
-                if (option) {
-                  return {
-                    produto_id: option.produto_id,
-                    descricao: option.descricao,
-                    quantidade_pacotes: sel.quantidade_pacotes,
-                    quantidade_unitaria: option.quantidade_embalagem,
-                    preco_unitario: option.preco,
-                    custo_total: sel.quantidade_pacotes * option.preco,
-                    em_promocao: option.promocao || option.em_promocao,
-                    motivo_selecao: sel.motivo
-                  };
-                }
-                return null;
-              }).filter(Boolean);
-              
-              console.log(`AI optimization successful for ${ingredient.name}: ${selections.length} selections`);
-            } else {
-              throw new Error('AI API call failed');
-            }
-          } catch (aiError) {
-            console.error('AI optimization failed, falling back to algorithm:', aiError);
-            selections = [];
-          }
-        }
-        
-        // Fallback to algorithm optimization if AI failed or unavailable
-        if (selections.length === 0) {
-          selections = calculateOptimalPackaging(
-            ingredient.quantity,
-            ingredient.opcoes_embalagem,
-            config
-          );
-        }
+      console.log(`Opções de produto encontradas: ${productOptions.length}`);
 
-        if (selections.length > 0) {
-          const optimizedCost = selections.reduce((sum, sel) => sum + sel.custo_total, 0);
-          const totalQuantity = selections.reduce((sum, sel) => sum + (sel.quantidade_pacotes * sel.quantidade_unitaria), 0);
-          const sobra = Math.max(0, totalQuantity - ingredient.quantity);
+      // Usar primeiro produto como referência
+      const firstProduct = productOptions[0];
 
-          // Calculate cost without optimization (using first available option)
-          const firstOption = ingredient.opcoes_embalagem[0];
-          const packagesNeeded = Math.ceil(ingredient.quantity / (firstOption.quantidade_embalagem || 1));
-          const costWithoutOptimization = packagesNeeded * firstOption.preco;
-          const savings = Math.max(0, costWithoutOptimization - optimizedCost);
+      try {
+        // Otimização usando a função de cálculo
+        const packageOptions = productOptions.map(prod => ({
+          produto_id: prod.produto_id,
+          produto_base_id: prod.produto_base_id,
+          descricao: prod.descricao,
+          quantidade_embalagem: prod.produto_base_quantidade_embalagem || 1000,
+          unidade: prod.unidade,
+          preco: prod.preco,
+          preco_compra: prod.preco_compra || prod.preco,
+          promocao: prod.em_promocao_sim_nao || false,
+          em_promocao: prod.em_promocao_sim_nao || false,
+          apenas_valor_inteiro: prod.apenas_valor_inteiro_sim_nao || false,
+          disponivel: true
+        }));
 
-          totalCost += optimizedCost;
-          totalSavings += savings;
+        const optimizationConfig = {
+          prioridade_promocao: 'media',
+          tolerancia_sobra_percentual: 15,
+          preferir_produtos_integrais: false,
+          maximo_tipos_embalagem_por_produto: 2,
+          considerar_custo_compra: false
+        };
 
-          // Create shopping items for each selection
-          for (const selection of selections) {
+        const optimizedPackaging = calculateOptimalPackaging(
+          consolidatedIngredient.quantidade_total,
+          packageOptions,
+          optimizationConfig
+        );
+
+        if (optimizedPackaging.length > 0) {
+          console.log(`Otimização realizada: ${optimizedPackaging.length} seleções`);
+          
+          for (const selection of optimizedPackaging) {
             shoppingItems.push({
-              product_id_legado: selection.produto_id.toString(),
-              product_name: selection.descricao,
-              category: ingredient.category,
+              product_id_legado: String(selection.produto_id),
+              product_name: consolidatedIngredient.nome,
+              category: consolidatedIngredient.unidade,
               quantity: selection.quantidade_pacotes,
-              unit: `pacote(s) de ${selection.quantidade_unitaria}${ingredient.unit}`,
+              unit: `${selection.quantidade_unitaria}${firstProduct.unidade}`,
               unit_price: selection.preco_unitario,
               total_price: selection.custo_total,
               available: true,
               promocao: selection.em_promocao,
               optimized: true
             });
+            
+            totalCost += selection.custo_total;
           }
-
-          optimizationResults.push({
-            produto_base_id: ingredient.produto_base_id,
-            produto_base_nome: ingredient.name,
-            quantidade_solicitada: ingredient.quantity,
-            quantidade_total_comprada: totalQuantity,
-            sobra: sobra,
-            custo_total: optimizedCost,
-            economia_obtida: savings,
-            pacotes_selecionados: selections,
-            justificativa: `Otimização aplicada: ${selections.length} tipo(s) de embalagem selecionado(s)${savings > 0 ? `, economia de R$ ${savings.toFixed(2)}` : ''}${sobra > 0 ? `, sobra de ${sobra.toFixed(2)}${ingredient.unit}` : ''}`
-          });
         } else {
-          // Fallback to first option if optimization fails
-          const firstOption = ingredient.opcoes_embalagem[0];
-          const unitPrice = firstOption.preco || 0;
-          const totalPrice = ingredient.quantity * unitPrice;
-          totalCost += totalPrice;
+          console.log('Falha na otimização, usando cálculo simples');
+          
+          // Calcular preço total corrigido com conversão de unidades
+          let finalUnitPrice = firstProduct.preco || 0;
+          let finalQuantity = consolidatedIngredient.quantidade_total;
+          
+          // Se o produto tem quantidade de embalagem diferente da unidade base, ajustar preço
+          const packageQuantity = firstProduct.produto_base_quantidade_embalagem || 1000;
+          const ingredientUnit = consolidatedIngredient.unidade?.toUpperCase() || 'GR';
+          const productUnit = firstProduct.unidade?.toUpperCase() || 'GR';
+          
+          console.log(`Calculando preço para ${consolidatedIngredient.nome}:`);
+          console.log(`- Quantidade necessária: ${consolidatedIngredient.quantidade_total} ${ingredientUnit}`);
+          console.log(`- Produto: ${firstProduct.descricao}`);
+          console.log(`- Preço da embalagem: R$ ${finalUnitPrice}`);
+          console.log(`- Quantidade da embalagem: ${packageQuantity} ${productUnit}`);
+          
+          // Converter quantidade necessária para a mesma unidade da embalagem
+          let quantidadeConvertida = finalQuantity;
+          if (ingredientUnit === 'GR' && productUnit === 'KG') {
+            quantidadeConvertida = finalQuantity / 1000; // converter gramas para kg
+          } else if (ingredientUnit === 'ML' && productUnit === 'L') {
+            quantidadeConvertida = finalQuantity / 1000; // converter ml para litros
+          } else if (ingredientUnit === 'KG' && productUnit === 'GR') {
+            quantidadeConvertida = finalQuantity * 1000; // converter kg para gramas
+          } else if (ingredientUnit === 'L' && productUnit === 'ML') {
+            quantidadeConvertida = finalQuantity * 1000; // converter litros para ml
+          }
+          
+          // Calcular quantas embalagens são necessárias
+          const embalagensNecessarias = quantidadeConvertida / packageQuantity;
+          const totalPrice = embalagensNecessarias * finalUnitPrice;
+          
+          console.log(`- Quantidade convertida: ${quantidadeConvertida} ${productUnit}`);
+          console.log(`- Embalagens necessárias: ${embalagensNecessarias.toFixed(4)}`);
+          console.log(`- Preço total: R$ ${totalPrice.toFixed(2)}`);
 
           shoppingItems.push({
-            product_id_legado: firstOption.produto_id.toString(),
-            product_name: ingredient.name,
-            category: ingredient.category,
-            quantity: ingredient.quantity,
-            unit: ingredient.unit,
-            unit_price: unitPrice,
+            product_id_legado: String(firstProduct.produto_id),
+            product_name: consolidatedIngredient.nome || firstProduct.descricao,
+            category: firstProduct.categoria_descricao || 'Sem categoria',
+            quantity: Math.ceil(embalagensNecessarias),
+            unit: firstProduct.unidade,
+            unit_price: finalUnitPrice,
             total_price: totalPrice,
             available: true,
-            promocao: firstOption.promocao || false,
+            promocao: firstProduct.em_promocao_sim_nao || false,
             optimized: false
           });
+          
+          totalCost += totalPrice;
         }
-      } else {
-        // No optimization - use simple calculation
-        const firstOption = ingredient.opcoes_embalagem[0];
-        const unitPrice = firstOption?.preco || 0;
-        const totalPrice = ingredient.quantity * unitPrice;
-        totalCost += totalPrice;
-
-        shoppingItems.push({
-          product_id_legado: (firstOption?.produto_id || ingredient.produto_base_id).toString(),
-          product_name: ingredient.name,
-          category: ingredient.category,
-          quantity: ingredient.quantity,
-          unit: ingredient.unit,
-          unit_price: unitPrice,
-          total_price: totalPrice,
-          available: true,
-          promocao: firstOption?.promocao || false,
-          optimized: false
-        });
+      } catch (error) {
+        console.error(`Erro ao processar ingrediente ${consolidatedIngredient.nome}:`, error);
+        continue;
       }
     }
 
-    const { data: shoppingList, error: listError } = await supabaseClient
+    console.log(`\n=== RESUMO ===`);
+    console.log(`Total de itens: ${shoppingItems.length}`);
+    console.log(`Custo total: R$ ${totalCost.toFixed(2)}`);
+
+    // Determinar status do orçamento
+    const budgetStatus = totalCost <= budgetPredicted ? 'within_budget' : 'over_budget';
+
+    // Criar lista de compras no banco
+    const { data: shoppingList, error: listError } = await supabase
       .from('shopping_lists')
       .insert({
         menu_id: menuId,
         client_name: clientName,
-        status: totalCost <= budgetPredicted ? 'budget_ok' : 'budget_exceeded',
         budget_predicted: budgetPredicted,
-        cost_actual: totalCost
+        cost_actual: totalCost,
+        status: budgetStatus
       })
-      .select()
-      .single()
+      .select('id')
+      .single();
 
     if (listError) {
-      throw new Error(`Error creating shopping list: ${listError.message}`)
+      console.error('Erro ao criar lista de compras:', listError);
+      throw new Error('Erro ao salvar lista de compras');
     }
 
-    // Create shopping list items
-    const itemsWithListId = shoppingItems.map(item => ({
-      ...item,
-      shopping_list_id: shoppingList.id
-    }))
+    // Inserir itens da lista
+    if (shoppingItems.length > 0) {
+      const itemsToInsert = shoppingItems.map(item => ({
+        ...item,
+        shopping_list_id: shoppingList.id
+      }));
 
-    const { error: itemsError } = await supabaseClient
-      .from('shopping_list_items')
-      .insert(itemsWithListId)
+      const { error: itemsError } = await supabase
+        .from('shopping_list_items')
+        .insert(itemsToInsert);
 
-    if (itemsError) {
-      throw new Error(`Error creating shopping list items: ${itemsError.message}`)
+      if (itemsError) {
+        console.error('Erro ao inserir itens:', itemsError);
+        throw new Error('Erro ao salvar itens da lista');
+      }
     }
 
-    console.log(`Shopping list created successfully. Total cost: R$ ${totalCost.toFixed(2)}`)
-    console.log(`Optimization results: ${optimizationResults.length} products optimized`)
-    console.log(`Total savings: R$ ${totalSavings.toFixed(2)}`)
-    console.log(`Promotions used: ${shoppingItems.filter(item => item.promocao).length}`)
+    const response = {
+      success: true,
+      shopping_list_id: shoppingList.id,
+      total_items: shoppingItems.length,
+      total_cost: totalCost,
+      budget_status: budgetStatus,
+      optimization_summary: {
+        ingredients_processed: consolidatedIngredients.size,
+        items_generated: shoppingItems.length,
+        optimized_items: shoppingItems.filter(item => item.optimized).length
+      }
+    };
 
-    return new Response(
-      JSON.stringify({
-        success: true,
-        shoppingList: {
-          ...shoppingList,
-          items: itemsWithListId
-        },
-        budgetStatus: {
-          predicted: budgetPredicted,
-          actual: totalCost,
-          withinBudget: totalCost <= budgetPredicted,
-          difference: totalCost - budgetPredicted
-        },
-        optimizationSummary: {
-          enabled: !!optimizationConfig,
-          products_optimized: optimizationResults.length,
-          total_savings: totalSavings,
-          promotions_used: shoppingItems.filter(item => item.promocao).length,
-          products_with_surplus: optimizationResults.filter(r => r.sobra > 0).length
-        },
-        optimizationResults: optimizationResults,
-        marketStats: {
-          total_products_used: shoppingItems.length,
-          optimized_products: shoppingItems.filter(item => item.optimized).length,
-          categories_covered: [...new Set(shoppingItems.map(item => item.category))].length
-        }
-      }),
-      {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 200,
-      },
-    )
+    console.log('=== LISTA DE COMPRAS GERADA COM SUCESSO ===');
+    
+    return new Response(JSON.stringify(response), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+    });
 
   } catch (error) {
-    console.error('Error generating shopping list:', error)
-    console.error('Error stack:', error.stack)
-    console.error('Error details:', {
-      name: error.name,
-      message: error.message,
-      cause: error.cause
-    })
-    return new Response(
-      JSON.stringify({
-        success: false,
-        error: error.message,
-        errorDetails: {
-          name: error.name,
-          stack: error.stack?.split('\n').slice(0, 5) // Only first 5 lines of stack
-        }
-      }),
-      {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 400,
-      },
-    )
+    console.error('Erro na geração da lista de compras:', error);
+    
+    return new Response(JSON.stringify({
+      success: false,
+      error: error.message,
+      details: 'Erro interno na geração da lista de compras'
+    }), {
+      status: 500,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+    });
   }
-})
+});

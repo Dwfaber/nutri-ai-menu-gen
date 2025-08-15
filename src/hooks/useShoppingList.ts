@@ -154,13 +154,9 @@ export const useShoppingList = () => {
   };
 
   const generateShoppingList = async (
-    cardapioId: string,
-    optimizationSettings: OptimizationSettings = {
-      prioritizePromotions: true,
-      allowFractionalUnits: false,
-      wasteThreshold: 0.1,
-      budgetLimit: null
-    }
+    menuId: string,
+    clientName: string = 'Cliente',
+    budgetPredicted: number = 1000
   ): Promise<ShoppingList | null> => {
     setIsLoading(true);
     
@@ -168,8 +164,10 @@ export const useShoppingList = () => {
       const result = await withRetry(async () => {
         const { data, error } = await supabase.functions.invoke('generate-shopping-list', {
           body: { 
-            cardapioId,
-            optimizationSettings
+            menuId,
+            clientName,
+            budgetPredicted,
+            servingsPerDay: 100
           }
         });
 
@@ -184,14 +182,14 @@ export const useShoppingList = () => {
       const newList: ShoppingList = {
         id: crypto.randomUUID(),
         nome: `Lista de Compras - ${new Date().toLocaleDateString()}`,
-        cardapio_id: cardapioId,
+        cardapio_id: menuId,
         itens: result.items || [],
         valor_total: result.total_cost || 0,
         data_criacao: new Date().toISOString(),
         status: 'draft',
         optimization_results: result.optimization_results,
-        client_name: result.client_name || 'Cliente',
-        budget_predicted: result.budget_predicted || 0,
+        client_name: result.client_name || clientName,
+        budget_predicted: result.budget_predicted || budgetPredicted,
         cost_actual: result.total_cost || 0,
         created_at: new Date().toISOString()
       };
@@ -358,7 +356,7 @@ export const useShoppingList = () => {
   };
 
   const createFromMenu = async (menuId: string, clientName: string, totalCost: number): Promise<void> => {
-    return generateShoppingList(menuId).then(() => {});
+    await generateShoppingList(menuId, clientName, totalCost);
   };
 
   return {
