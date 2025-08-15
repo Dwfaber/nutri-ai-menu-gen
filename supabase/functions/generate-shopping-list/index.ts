@@ -6,67 +6,149 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// Função de otimização de embalagens
-function calculateOptimalPackaging(quantidadeNecessaria: number, opcoes: any[], config: any): any[] {
-  if (!opcoes.length) return [];
+// Sistema otimizado de embalagens com validação rigorosa
+interface PackagingOption {
+  produto_id: any;
+  descricao: string;
+  quantidade_embalagem: number;
+  preco: number;
+  apenas_valor_inteiro: boolean;
+  em_promocao: boolean;
+  disponivel?: boolean;
+}
+
+interface OptimizationResult {
+  opcoes_selecionadas: Array<{
+    produto_id: any;
+    descricao: string;
+    quantidade_pacotes: number;
+    quantidade_total: number;
+    custo_total: number;
+    eficiencia: number;
+    motivo_selecao: string;
+  }>;
+  quantidade_final: number;
+  custo_total: number;
+  desperdicio: number;
+  desperdicio_percentual: number;
+}
+
+function validateIngredientData(ingredient: any): { valid: boolean; errors: string[] } {
+  const errors: string[] = [];
+  
+  if (!ingredient.produto_base_id || ingredient.produto_base_id <= 0) {
+    errors.push('produto_base_id inválido');
+  }
+  
+  if (!ingredient.quantidade_total || ingredient.quantidade_total <= 0) {
+    errors.push('quantidade_total inválida');
+  }
+  
+  if (!ingredient.unidade || ingredient.unidade.trim() === '') {
+    errors.push('unidade não especificada');
+  }
+  
+  return {
+    valid: errors.length === 0,
+    errors
+  };
+}
+
+function calculateOptimalPackaging(quantidadeNecessaria: number, opcoes: PackagingOption[]): OptimizationResult {
+  if (quantidadeNecessaria <= 0 || opcoes.length === 0) {
+    throw new Error('Quantidade inválida ou sem opções de embalagem');
+  }
   
   console.log(`Otimizando ${quantidadeNecessaria} unidades com ${opcoes.length} opções`);
   
-  // Ordenar por prioridade: promoção, depois menor preço por unidade
-  const opcoesSorted = opcoes.sort((a, b) => {
-    // Priorizar promoções se configurado
-    if (config.prioridade_promocao === 'alta') {
+  // Calcular eficiência (quantidade/preço) e ordenar
+  const opcoesComEficiencia = opcoes
+    .filter(opcao => opcao.preco > 0 && opcao.quantidade_embalagem > 0)
+    .map(opcao => ({
+      ...opcao,
+      eficiencia: opcao.quantidade_embalagem / opcao.preco,
+      preco_por_unidade: opcao.preco / opcao.quantidade_embalagem
+    }))
+    .sort((a, b) => {
+      // Priorizar promoções
       if (a.em_promocao && !b.em_promocao) return -1;
       if (!a.em_promocao && b.em_promocao) return 1;
-    }
-    
-    // Calcular preço por unidade
-    const precoUnitarioA = a.preco / a.quantidade_embalagem;
-    const precoUnitarioB = b.preco / b.quantidade_embalagem;
-    
-    return precoUnitarioA - precoUnitarioB;
-  });
+      // Depois menor preço por unidade
+      return a.preco_por_unidade - b.preco_por_unidade;
+    });
   
-  const selecoes = [];
   let quantidadeRestante = quantidadeNecessaria;
+  const opcoesSelecionadas = [];
+  let custoTotal = 0;
   
-  // Algoritmo guloso: usar a melhor opção até atingir a quantidade
-  for (const opcao of opcoesSorted) {
+  for (const opcao of opcoesComEficiencia) {
     if (quantidadeRestante <= 0) break;
     
-    let quantidadePacotes = Math.ceil(quantidadeRestante / opcao.quantidade_embalagem);
+    // Calcular quantos pacotes desta opção usar
+    let quantidadePacotes = Math.floor(quantidadeRestante / opcao.quantidade_embalagem);
     
-    // Aplicar restrição de apenas valor inteiro se necessário
-    if (opcao.apenas_valor_inteiro) {
-      quantidadePacotes = Math.ceil(quantidadePacotes);
-    }
-    
-    // Limitar número de tipos de embalagem
-    if (selecoes.length >= config.maximo_tipos_embalagem_por_produto) {
-      // Usar apenas a última (melhor) opção para o restante
-      quantidadePacotes = Math.ceil(quantidadeRestante / opcao.quantidade_embalagem);
-      quantidadeRestante = 0;
-    } else {
-      quantidadeRestante -= quantidadePacotes * opcao.quantidade_embalagem;
+    // Se apenas valor inteiro e ainda sobra quantidade
+    if (opcao.apenas_valor_inteiro && quantidadeRestante % opcao.quantidade_embalagem > 0) {
+      quantidadePacotes += 1;
     }
     
     if (quantidadePacotes > 0) {
-      selecoes.push({
+      const quantidadeTotal = quantidadePacotes * opcao.quantidade_embalagem;
+      const custoOpcao = quantidadePacotes * opcao.preco;
+      
+      opcoesSelecionadas.push({
         produto_id: opcao.produto_id,
         descricao: opcao.descricao,
         quantidade_pacotes: quantidadePacotes,
-        quantidade_unitaria: opcao.quantidade_embalagem,
-        preco_unitario: opcao.preco,
-        custo_total: quantidadePacotes * opcao.preco,
-        em_promocao: opcao.em_promocao,
+        quantidade_total: quantidadeTotal,
+        custo_total: custoOpcao,
+        eficiencia: opcao.eficiencia,
         motivo_selecao: opcao.em_promocao ? 'Promoção' : 'Melhor preço'
+      });
+      
+      quantidadeRestante -= quantidadeTotal;
+      custoTotal += custoOpcao;
+    }
+  }
+  
+  // Se ainda sobra quantidade, usar a opção mais eficiente
+  if (quantidadeRestante > 0 && opcoesComEficiencia.length > 0) {
+    const melhorOpcao = opcoesComEficiencia[0];
+    const pacotesAdicionais = Math.ceil(quantidadeRestante / melhorOpcao.quantidade_embalagem);
+    
+    const opcaoExistente = opcoesSelecionadas.find(o => o.produto_id === melhorOpcao.produto_id);
+    if (opcaoExistente) {
+      opcaoExistente.quantidade_pacotes += pacotesAdicionais;
+      opcaoExistente.quantidade_total += pacotesAdicionais * melhorOpcao.quantidade_embalagem;
+      opcaoExistente.custo_total += pacotesAdicionais * melhorOpcao.preco;
+    } else {
+      opcoesSelecionadas.push({
+        produto_id: melhorOpcao.produto_id,
+        descricao: melhorOpcao.descricao,
+        quantidade_pacotes: pacotesAdicionais,
+        quantidade_total: pacotesAdicionais * melhorOpcao.quantidade_embalagem,
+        custo_total: pacotesAdicionais * melhorOpcao.preco,
+        eficiencia: melhorOpcao.eficiencia,
+        motivo_selecao: 'Completar quantidade necessária'
       });
     }
     
-    if (quantidadeRestante <= 0) break;
+    custoTotal += pacotesAdicionais * melhorOpcao.preco;
   }
   
-  return selecoes;
+  const quantidadeFinal = opcoesSelecionadas.reduce((sum, o) => sum + o.quantidade_total, 0);
+  const desperdicio = Math.max(0, quantidadeFinal - quantidadeNecessaria);
+  const desperdicioPercentual = (desperdicio / quantidadeNecessaria) * 100;
+  
+  console.log(`Otimização concluída: ${opcoesSelecionadas.length} opções, desperdício: ${desperdicioPercentual.toFixed(1)}%`);
+  
+  return {
+    opcoes_selecionadas: opcoesSelecionadas,
+    quantidade_final: quantidadeFinal,
+    custo_total: custoTotal,
+    desperdicio,
+    desperdicio_percentual: Math.round(desperdicioPercentual * 100) / 100
+  };
 }
 
 serve(async (req) => {
@@ -199,25 +281,36 @@ serve(async (req) => {
       }
     }
 
-    // Processar ingredientes das receitas legado (complementar)
+    // Processar ingredientes das receitas legado com validação rigorosa
+    const warnings = [];
+    
     if (ingredients && ingredients.length > 0) {
       for (const ingredient of ingredients) {
-        const produtoBaseId = Number(ingredient.produto_base_id);
-        if (!produtoBaseId || produtoBaseId <= 0) {
-          console.log(`Saltando ingrediente sem produto_base_id válido: ${ingredient.produto_base_descricao || ingredient.nome}`);
-          continue;
+        // Validação rigorosa de ingredientes
+        const validation = validateIngredientData({
+          produto_base_id: ingredient.produto_base_id,
+          quantidade_total: ingredient.quantidade,
+          unidade: ingredient.unidade
+        });
+        
+        if (!validation.valid) {
+          console.error(`Ingrediente inválido ${ingredient.produto_base_descricao}:`, validation.errors);
+          warnings.push(`Ingrediente ${ingredient.produto_base_descricao}: ${validation.errors.join(', ')}`);
+          continue; // Pular ingrediente inválido mas continuar processamento
         }
 
-        // Calcular quantidade necessária
-        const baseServing = Number(ingredient.quantidade_refeicoes || 1);
+        const produtoBaseId = Number(ingredient.produto_base_id);
+
+        // Calcular quantidade necessária usando quantidade_refeicoes real
+        const baseServing = Number(ingredient.quantidade_refeicoes || 100); // fallback para 100
         const quantidadeNecessaria = Number(ingredient.quantidade || 0) * Number(servingsMultiplier / baseServing);
         
-        if (quantidadeNecessaria <= 0) {
-          console.log(`Saltando ingrediente ${ingredient.produto_base_descricao || ingredient.nome}: quantidade inválida`);
-          continue;
-        }
-        
-        console.log(`Processando ingrediente: ${ingredient.produto_base_descricao || ingredient.nome}, qtd base: ${ingredient.quantidade}, multiplicador: ${servingsMultiplier}, qtd necessária: ${quantidadeNecessaria}`);
+        console.log(`Processando ingrediente: ${ingredient.produto_base_descricao || ingredient.nome}`);
+        console.log(`- Qtd base: ${ingredient.quantidade} ${ingredient.unidade}`);
+        console.log(`- Base serving: ${baseServing} refeições`);
+        console.log(`- Target serving: ${servingsMultiplier} refeições`);
+        console.log(`- Fator: ${(servingsMultiplier / baseServing).toFixed(3)}`);
+        console.log(`- Qtd necessária: ${quantidadeNecessaria} ${ingredient.unidade}`);
 
         // Add to consolidated ingredients map
         if (!consolidatedIngredients.has(produtoBaseId)) {
@@ -234,6 +327,11 @@ serve(async (req) => {
         existingIngredient.quantidade_total += quantidadeNecessaria;
         existingIngredient.receitas.push(ingredient.nome || 'Receita não identificada');
       }
+    }
+    
+    // Log warnings para monitoramento
+    if (warnings.length > 0) {
+      console.warn('⚠️ Avisos durante processamento de ingredientes:', warnings);
     }
 
     console.log(`Ingredientes consolidados: ${consolidatedIngredients.size}`);
@@ -288,24 +386,24 @@ serve(async (req) => {
 
         const optimizedPackaging = calculateOptimalPackaging(
           consolidatedIngredient.quantidade_total,
-          packageOptions,
-          optimizationConfig
+          packageOptions
         );
 
-        if (optimizedPackaging.length > 0) {
-          console.log(`Otimização realizada: ${optimizedPackaging.length} seleções`);
+        if (optimizedPackaging.opcoes_selecionadas && optimizedPackaging.opcoes_selecionadas.length > 0) {
+          console.log(`Otimização realizada: ${optimizedPackaging.opcoes_selecionadas.length} seleções`);
+          console.log(`Desperdício: ${optimizedPackaging.desperdicio_percentual}%`);
           
-          for (const selection of optimizedPackaging) {
+          for (const selection of optimizedPackaging.opcoes_selecionadas) {
             shoppingItems.push({
               product_id_legado: String(selection.produto_id),
               product_name: consolidatedIngredient.nome,
               category: consolidatedIngredient.unidade,
               quantity: selection.quantidade_pacotes,
-              unit: `${selection.quantidade_unitaria}${firstProduct.unidade}`,
-              unit_price: selection.preco_unitario,
+              unit: firstProduct.unidade,
+              unit_price: selection.custo_total / selection.quantidade_pacotes,
               total_price: selection.custo_total,
               available: true,
-              promocao: selection.em_promocao,
+              promocao: packageOptions.find(p => p.produto_id === selection.produto_id)?.em_promocao || false,
               optimized: true
             });
             

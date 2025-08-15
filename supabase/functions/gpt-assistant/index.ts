@@ -25,7 +25,7 @@ const REQUIRED_SLOTS = [
 ] as const;
 
 const WEEK: DiaLabel[] = ['SEGUNDA','TERÇA','QUARTA','QUINTA','SEXTA','SÁBADO','DOMINGO'];
-const RECIPE_BASE = 100; // receitas padrão são para 100 refeições
+// REMOVIDO: RECIPE_BASE fixo - agora usa quantidade_refeicoes real da receita
 
 const DEFAULT_JUICES = [
   { id: 599, nome: 'SUCO EM PÓ DE LARANJA' },
@@ -318,24 +318,67 @@ serve(async (req) => {
       }));
     }
 
-    // Conversor de unidades robusto
+    // Sistema robusto de conversão de unidades
+    const UNIT_CONVERSIONS = {
+      // Peso
+      'G': { base: 'G', factor: 1 },
+      'GRAMAS': { base: 'G', factor: 1 },
+      'GRAMA': { base: 'G', factor: 1 },
+      'KG': { base: 'G', factor: 1000 },
+      'QUILOGRAMA': { base: 'G', factor: 1000 },
+      'QUILOGRAMAS': { base: 'G', factor: 1000 },
+      'QUILO': { base: 'G', factor: 1000 },
+      'QUILOS': { base: 'G', factor: 1000 },
+      
+      // Volume
+      'ML': { base: 'ML', factor: 1 },
+      'MILILITRO': { base: 'ML', factor: 1 },
+      'MILILITROS': { base: 'ML', factor: 1 },
+      'L': { base: 'ML', factor: 1000 },
+      'LITRO': { base: 'ML', factor: 1000 },
+      'LITROS': { base: 'ML', factor: 1000 },
+      'LT': { base: 'ML', factor: 1000 },
+      
+      // Unidades
+      'UN': { base: 'UN', factor: 1 },
+      'UNIDADE': { base: 'UN', factor: 1 },
+      'UNIDADES': { base: 'UN', factor: 1 },
+      'PC': { base: 'UN', factor: 1 },
+      'PEÇA': { base: 'UN', factor: 1 },
+      'PEÇAS': { base: 'UN', factor: 1 }
+    };
+
     const toMercadoBase = (qtd: number, unidadeIngrediente: string, unidadeMercado: string) => {
-      const uIng = (unidadeIngrediente || '').toUpperCase();
-      const uMerc = (unidadeMercado || '').toUpperCase();
-      let base = Number(qtd) || 0;
+      const origem = (unidadeIngrediente || '').trim().toUpperCase();
+      const destino = (unidadeMercado || '').trim().toUpperCase();
       
-      if (uIng === 'G' && uMerc === 'KG') base = base / 1000;
-      if (uIng === 'KG' && uMerc === 'G') base = base * 1000;
-      if (uIng === 'ML' && uMerc === 'LT') base = base / 1000;
-      if (uIng === 'LT' && uMerc === 'ML') base = base * 1000;
-      
-      // Verificar se unidades são compatíveis
-      const validUnits = ['KG', 'G', 'LT', 'ML', 'UN'];
-      if (!validUnits.includes(uMerc)) {
-        return { ok: false, valor: 0 };
+      // Mesma unidade
+      if (origem === destino) {
+        return { ok: true, valor: qtd, conversao: `${origem} → ${destino} (sem conversão)` };
       }
       
-      return { ok: true, valor: base };
+      const configOrigem = UNIT_CONVERSIONS[origem];
+      const configDestino = UNIT_CONVERSIONS[destino];
+      
+      // Unidades não reconhecidas
+      if (!configOrigem || !configDestino) {
+        console.warn(`Unidade não reconhecida: ${origem} ou ${destino}`);
+        return { ok: false, valor: qtd, erro: `Unidade não reconhecida: ${origem} ou ${destino}` };
+      }
+      
+      // Bases incompatíveis (peso vs volume)
+      if (configOrigem.base !== configDestino.base) {
+        console.warn(`Conversão impossível: ${configOrigem.base} ≠ ${configDestino.base}`);
+        return { ok: false, valor: qtd, erro: `Conversão impossível: ${configOrigem.base} ≠ ${configDestino.base}` };
+      }
+      
+      // Conversão
+      const valorBase = qtd * configOrigem.factor;
+      const valorFinal = valorBase / configDestino.factor;
+      const conversao = `${qtd} ${origem} → ${valorFinal} ${destino}`;
+      
+      console.log(`Conversão realizada: ${conversao}`);
+      return { ok: true, valor: valorFinal, conversao };
     };
 
     type MarketRow = {
@@ -392,30 +435,100 @@ serve(async (req) => {
       }
     };
 
+    // Sistema corrigido de escalonamento de receitas
+    function calculateScalingFactor(targetServings: number, recipeIngredients: any[]): number {
+      // Usar quantidade_refeicoes real da receita, não valor fixo
+      const recipeBaseServings = recipeIngredients[0]?.quantidade_refeicoes || 100;
+      const fator = targetServings / recipeBaseServings;
+      
+      console.log(`Escalonamento: ${recipeBaseServings} → ${targetServings} (fator: ${fator.toFixed(3)})`);
+      return fator;
+    }
+
+    function validateIngredient(ingredient: any): { valido: boolean; erros: string[]; avisos: string[] } {
+      const erros: string[] = [];
+      const avisos: string[] = [];
+      
+      // Validações obrigatórias
+      if (!ingredient.produto_base_descricao && !ingredient.nome) {
+        erros.push('Nome do ingrediente ausente');
+      }
+      
+      if (!ingredient.unidade) {
+        erros.push('Unidade não especificada');
+      }
+      
+      // Validação de quantidade
+      const quantidade = Number(ingredient.quantidade || 0);
+      if (isNaN(quantidade)) {
+        erros.push('Quantidade não é um número válido');
+      } else if (quantidade <= 0) {
+        erros.push('Quantidade deve ser maior que zero');
+      } else if (quantidade > 10000) {
+        avisos.push(`Quantidade muito alta: ${quantidade} ${ingredient.unidade}`);
+      }
+      
+      return { valido: erros.length === 0, erros, avisos };
+    }
+
     function costOfRecipe(receitaId: string, servings: number): number | null {
       try {
         const ings = ingByReceita.get(String(receitaId)) ?? [];
-        if (!ings.length) return null;
+        if (!ings.length) {
+          warnings.push(`Receita ${receitaId}: nenhum ingrediente encontrado`);
+          return null;
+        }
 
-        const fator = servings / RECIPE_BASE;
+        // Validar ingredientes
+        const ingredientesValidos = [];
+        for (const ing of ings) {
+          const validacao = validateIngredient(ing);
+          if (!validacao.valido) {
+            console.warn(`Ingrediente inválido ${ing.produto_base_descricao}:`, validacao.erros);
+            warnings.push(`Ingrediente ${ing.produto_base_descricao}: ${validacao.erros.join(', ')}`);
+            continue; // Pular ingrediente inválido
+          }
+          if (validacao.avisos.length > 0) {
+            console.warn(`Aviso ingrediente ${ing.produto_base_descricao}:`, validacao.avisos);
+          }
+          ingredientesValidos.push(ing);
+        }
+
+        if (!ingredientesValidos.length) {
+          warnings.push(`Receita ${receitaId}: todos os ingredientes são inválidos`);
+          return null;
+        }
+
+        // Calcular fator de escalonamento usando dados reais
+        const fator = calculateScalingFactor(servings, ingredientesValidos);
         let total = 0;
 
-    // Escalar ingredientes
-        const ingredientesEscalados = ings.map((ing) => ({
+        // Escalar ingredientes com dados de auditoria
+        const ingredientesEscalados = ingredientesValidos.map((ing) => ({
           produto_base_id: ing.produto_base_id,
           nome: ing.produto_base_descricao || '',
           quantidade: Number(ing.quantidade ?? 0) * fator,
+          quantidade_original: Number(ing.quantidade ?? 0),
+          fator_escalonamento: fator,
+          receita_base_servings: ingredientesValidos[0]?.quantidade_refeicoes || 100,
           unidade: ing.unidade
         }));
 
         // Calcular custo de cada ingrediente com proteção
         for (const ing of ingredientesEscalados) {
-          total += calcularCustoIngrediente(ing);
+          const custo = calcularCustoIngrediente(ing);
+          total += custo;
+          
+          // Log para auditoria
+          if (custo > 0) {
+            console.log(`Ingrediente ${ing.nome}: ${ing.quantidade_original} * ${ing.fator_escalonamento} = ${ing.quantidade} ${ing.unidade} = R$ ${custo.toFixed(2)}`);
+          }
         }
 
         return total;
       } catch (e) {
         console.error('[menu] erro costOfRecipe', receitaId, e);
+        warnings.push(`Erro no cálculo da receita ${receitaId}: ${e.message}`);
         return null;
       }
     }
@@ -819,8 +932,12 @@ serve(async (req) => {
           const prodId = Number(ing.produto_base_id);
           if (!prodId) continue;
           
+          // Usar escalonamento corrigido baseado em quantidade_refeicoes real
+          const baseServings = ings[0]?.quantidade_refeicoes || 100;
+          const fatorCorreto = refeicoesPorDia / baseServings;
+          
           const { qty: qtyBase } = toBaseQty(Number(ing.quantidade ?? 0), String(ing.unidade ?? ""));
-          const necessidade = qtyBase * fator;
+          const necessidade = qtyBase * fatorCorreto;
           
           if (produtosUsados.has(prodId)) {
             produtosUsados.get(prodId)!.quantidade += necessidade;
