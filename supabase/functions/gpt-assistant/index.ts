@@ -926,7 +926,7 @@ serve(async (req) => {
         if (item.placeholder || !item.receita_id) continue;
         
         const ings = ingByReceita.get(item.receita_id) ?? [];
-        const fator = refeicoesPorDia / RECIPE_BASE;
+        const fator = refeicoesPorDia / (ings[0]?.quantidade_refeicoes || 100);
         
         for (const ing of ings) {
           const prodId = Number(ing.produto_base_id);
