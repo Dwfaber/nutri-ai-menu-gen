@@ -597,7 +597,133 @@ serve(async (req) => {
               unidade: String(ing.unidade ?? ''),
               custo_unitario: 0,
               custo_total: 0,
-              observacao: 'Ingrediente básico - custo zero'
+              observacao: 'Ingrediente básico - custo zero',
+              status: 'zero_cost'
+            } 
+          };
+        }
+        
+        // Busca no mercado - primeiro por produto_base_id, depois por nome
+        let produtoMercado = null;
+        
+        // 1. Busca direta por produto_base_id
+        if (ing.produto_base_id && marketByProduto.has(Number(ing.produto_base_id))) {
+          const produtos = marketByProduto.get(Number(ing.produto_base_id));
+          produtoMercado = produtos[0]; // Usar primeiro resultado
+          console.log(`[custo] ✓ Encontrado por ID ${ing.produto_base_id}: ${produtoMercado.descricao}`);
+        }
+        
+        // 2. Se não encontrou por ID, busca por nome
+        if (!produtoMercado) {
+          const nomeIngrediente = ing.produto_base_descricao || ing.nome || '';
+          produtoMercado = findProductByName(nomeIngrediente, mercado);
+          
+          if (produtoMercado) {
+            console.log(`[custo] ✓ Encontrado por nome: "${nomeIngrediente}" → "${produtoMercado.descricao}"`);
+          }
+        }
+        
+        // Se não encontrou, retornar violação
+        if (!produtoMercado) {
+          console.error(`[VIOLAÇÃO] Ingrediente não encontrado: ${ing.produto_base_descricao || ing.nome} (ID: ${ing.produto_base_id})`);
+          console.log(`[SISTEMA] Retornando custo ZERO - frontend processará violação`);
+          
+          return { 
+            custo: 0, 
+            violacao: {
+              tipo: 'ingrediente_nao_encontrado',
+              ingrediente: ing.produto_base_descricao || ing.nome,
+              produto_base_id: ing.produto_base_id
+            },
+            detalhes: {
+              nome: ing.produto_base_descricao || ing.nome,
+              quantidade_necessaria: Number(ing.quantidade ?? 0),
+              unidade: String(ing.unidade ?? ''),
+              custo_unitario: 0,
+              custo_total: 0,
+              observacao: 'Ingrediente não encontrado no mercado',
+              status: 'not_found'
+            }
+          };
+        }
+        
+        // Calcular custo usando dados do mercado
+        const quantidadeNecessaria = Number(ing.quantidade ?? 0);
+        const unidadeIngrediente = String(ing.unidade ?? '').trim().toUpperCase();
+        const unidadeMercado = String(produtoMercado.unidade ?? '').trim().toUpperCase();
+        const precoMercado = Number(produtoMercado.preco ?? 0);
+        const embalagem = Number(produtoMercado.produto_base_quantidade_embalagem ?? 1);
+        
+        // Converter unidades se necessário
+        const conversao = toMercadoBase(quantidadeNecessaria, unidadeIngrediente, unidadeMercado);
+        
+        if (!conversao.ok) {
+          console.error(`[custo] Conversão falhou: ${quantidadeNecessaria} ${unidadeIngrediente} → ${unidadeMercado}`);
+          console.error(conversao.erro);
+          
+          return { 
+            custo: 0, 
+            violacao: {
+              tipo: 'conversao_falhou',
+              erro: conversao.erro,
+              ingrediente: ing.produto_base_descricao || ing.nome
+            },
+            detalhes: {
+              nome: ing.produto_base_descricao || ing.nome,
+              quantidade_necessaria: quantidadeNecessaria,
+              unidade: unidadeIngrediente,
+              custo_unitario: 0,
+              custo_total: 0,
+              observacao: `Erro de conversão: ${conversao.erro}`,
+              status: 'conversion_error'
+            }
+          };
+        }
+        
+        const quantidadeConvertida = conversao.valor;
+        const fatorEmbalagem = Math.ceil(quantidadeConvertida / embalagem);
+        const custoTotal = fatorEmbalagem * precoMercado;
+        
+        console.log(`[custo] ${produtoMercado.descricao}: ${quantidadeNecessaria} ${unidadeIngrediente} → ${embalagem} ${unidadeMercado} × ${fatorEmbalagem.toFixed(2)} = R$ ${custoTotal.toFixed(2)}`);
+        
+        return { 
+          custo: custoTotal, 
+          detalhes: {
+            nome: produtoMercado.descricao,
+            quantidade_necessaria: quantidadeNecessaria,
+            quantidade_convertida: quantidadeConvertida,
+            unidade: unidadeIngrediente,
+            unidade_mercado: unidadeMercado,
+            embalagem_mercado: embalagem,
+            fator_embalagem: fatorEmbalagem,
+            preco_unitario: precoMercado,
+            custo_total: custoTotal,
+            conversao: conversao.conversao,
+            status: 'encontrado'
+          }
+        };
+        
+      } catch (error) {
+        console.error(`[custo] Erro ao calcular ingrediente ${ing.produto_base_descricao}:`, error);
+        return { 
+          custo: 0, 
+          violacao: {
+            tipo: 'erro_calculo',
+            erro: error.message,
+            ingrediente: ing.produto_base_descricao || ing.nome
+          },
+          detalhes: {
+            nome: ing.produto_base_descricao || ing.nome,
+            quantidade_necessaria: Number(ing.quantidade ?? 0),
+            unidade: String(ing.unidade ?? ''),
+            custo_unitario: 0,
+            custo_total: 0,
+            observacao: `Erro no cálculo: ${error.message}`,
+            status: 'error'
+          }
+        };
+      }
+    };
             }
           };
         }
@@ -1276,6 +1402,8 @@ serve(async (req) => {
       return itens;
     }
 
+    // Sistema para garantir variedade global entre todos os dias
+    const globalUsedRecipes = new Set<string>();
     const days: any[] = [];
     let totalGeral = 0;
 
