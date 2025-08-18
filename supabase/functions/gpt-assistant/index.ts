@@ -525,6 +525,11 @@ serve(async (req) => {
 
     // Sistema inteligente de cálculo de custo com embalagens reais
     const calcularCustoIngrediente = (ing: any) => {
+      const resultado = calcularCustoIngredienteDetalhado(ing);
+      return resultado.custo;
+    };
+
+    const calcularCustoIngredienteDetalhado = (ing: any) => {
       try {
         // 1. Tentar encontrar por produto_base_id primeiro
         let produtos = marketByProduto.get(Number(ing.produto_base_id)) ?? [];
@@ -538,9 +543,25 @@ serve(async (req) => {
           }
         }
         
+        const detalhesBase = {
+          nome: ing.produto_base_descricao || ing.nome || 'Ingrediente desconhecido',
+          quantidade_necessaria: Number(ing.quantidade ?? 0),
+          unidade: String(ing.unidade ?? ''),
+          preco_embalagem: 0,
+          tamanho_embalagem: 0,
+          custo_unitario: 0,
+          custo_total: 0,
+          custo_por_refeicao: 0,
+          pode_fracionado: true,
+          eficiencia_uso: 0,
+          produto_encontrado: produtos.length > 0,
+          descricao_produto: '',
+          promocao: false
+        };
+        
         if (!produtos.length) {
           console.warn(`[custo] Ingrediente não encontrado: ${ing.produto_base_descricao} (ID: ${ing.produto_base_id})`);
-          return 0;
+          return { custo: 0, detalhes: detalhesBase };
         }
 
         const quantidadeNecessaria = Number(ing.quantidade ?? 0);
@@ -548,11 +569,12 @@ serve(async (req) => {
         
         if (quantidadeNecessaria <= 0) {
           console.warn(`[custo] Quantidade inválida: ${quantidadeNecessaria} ${unidadeNecessaria}`);
-          return 0;
+          return { custo: 0, detalhes: detalhesBase };
         }
 
         // Encontrar melhor oferta baseada em embalagem real
         let melhorCusto = Infinity;
+        let melhorProduto = null;
         let melhorDetalhes = null;
         
         for (const produto of produtos) {
@@ -592,11 +614,14 @@ serve(async (req) => {
               embalagens_necessarias: embalagensNecessarias,
               preco_embalagem: produto.preco_reais,
               custo_total: custoTotal,
-              promocao: produto.em_promocao_sim_nao
+              promocao: produto.em_promocao_sim_nao,
+              pode_fracionado: !produto.apenas_valor_inteiro_sim_nao,
+              eficiencia_uso: necessidadeNaUnidadeProduto / tamanhoEmbalagem,
             };
             
             if (custoEfetivo < melhorCusto) {
               melhorCusto = custoEfetivo;
+              melhorProduto = produto;
               melhorDetalhes = detalhes;
             }
             
@@ -605,17 +630,34 @@ serve(async (req) => {
           }
         }
         
-        if (melhorDetalhes && Number.isFinite(melhorCusto)) {
+        if (melhorDetalhes && Number.isFinite(melhorCusto) && melhorProduto) {
           // Log detalhado para auditoria
           console.log(`[custo] ${ing.produto_base_descricao}: ${melhorDetalhes.necessidade} → ${melhorDetalhes.embalagem} × ${melhorDetalhes.embalagens_necessarias.toFixed(2)} = R$ ${melhorCusto.toFixed(2)}${melhorDetalhes.promocao ? ' (PROMOÇÃO)' : ''}`);
-          return melhorCusto;
+          
+          const detalhesCompletos = {
+            nome: ing.produto_base_descricao || ing.nome || 'Ingrediente desconhecido',
+            quantidade_necessaria: quantidadeNecessaria,
+            unidade: ing.unidade || '',
+            preco_embalagem: melhorProduto.preco_reais,
+            tamanho_embalagem: melhorProduto.embalagem_tamanho,
+            custo_unitario: melhorProduto.preco_reais / melhorProduto.embalagem_tamanho,
+            custo_total: melhorCusto,
+            custo_por_refeicao: melhorCusto,
+            pode_fracionado: !melhorProduto.apenas_valor_inteiro_sim_nao,
+            eficiencia_uso: melhorDetalhes.eficiencia_uso,
+            produto_encontrado: true,
+            descricao_produto: melhorProduto.descricao,
+            promocao: melhorProduto.em_promocao_sim_nao
+          };
+          
+          return { custo: melhorCusto, detalhes: detalhesCompletos };
         }
         
-        return 0;
+        return { custo: 0, detalhes: detalhesBase };
       } catch (e) {
-        console.error('[custo] erro calcularCustoIngrediente', ing, e);
+        console.error('[custo] erro calcularCustoIngredienteDetalhado', ing, e);
         warnings.push(`Falha no cálculo de custo para ${ing.produto_base_descricao || ing.produto_base_id}`);
-        return 0;
+        return { custo: 0, detalhes: detalhesBase };
       }
     };
 
@@ -699,17 +741,19 @@ serve(async (req) => {
         }));
 
         // Calcular custo de cada ingrediente com proteção
+        const ingredientesDetalhados = [];
         for (const ing of ingredientesEscalados) {
-          const custo = calcularCustoIngrediente(ing);
-          total += custo;
+          const resultado = calcularCustoIngredienteDetalhado(ing);
+          total += resultado.custo;
+          ingredientesDetalhados.push(resultado.detalhes);
           
           // Log para auditoria
-          if (custo > 0) {
-            console.log(`Ingrediente ${ing.nome}: ${ing.quantidade_original} * ${ing.fator_escalonamento} = ${ing.quantidade} ${ing.unidade} = R$ ${custo.toFixed(2)}`);
+          if (resultado.custo > 0) {
+            console.log(`Ingrediente ${ing.nome}: ${ing.quantidade_original} * ${ing.fator_escalonamento} = ${ing.quantidade} ${ing.unidade} = R$ ${resultado.custo.toFixed(2)}`);
           }
         }
 
-        return total;
+        return { total, ingredientesDetalhados };
       } catch (e) {
         console.error('[menu] erro costOfRecipe', receitaId, e);
         warnings.push(`Erro no cálculo da receita ${receitaId}: ${e.message}`);
@@ -755,19 +799,30 @@ serve(async (req) => {
     const poolSucos: any[] = [];
 
     // Preencher pools com custos calculados
-    for (const cat of ["PRATO PRINCIPAL 1", "PRATO PRINCIPAL 2"]) {
+      for (const cat of ["PRATO PRINCIPAL 1", "PRATO PRINCIPAL 2"]) {
       const candidates = candidatesByCat[cat] ?? [];
       const pool = cat === "PRATO PRINCIPAL 1" ? poolPP1 : poolPP2;
       
       for (const r of candidates) {
-        const cost = costOfRecipe(String(r.receita_id_legado), refeicoesPorDia);
-        if (cost !== null) {
+        const resultado = costOfRecipe(String(r.receita_id_legado), refeicoesPorDia);
+        if (resultado !== null && typeof resultado === 'object') {
           pool.push({
             id: String(r.receita_id_legado),
             receita_id_legado: r.receita_id_legado,
             nome: r.nome_receita,
-            _cost: cost,
-            custo_por_refeicao: cost / refeicoesPorDia
+            _cost: resultado.total,
+            custo_por_refeicao: resultado.total / refeicoesPorDia,
+            ingredientes_detalhados: resultado.ingredientesDetalhados
+          });
+        } else if (typeof resultado === 'number') {
+          // Backward compatibility
+          pool.push({
+            id: String(r.receita_id_legado),
+            receita_id_legado: r.receita_id_legado,
+            nome: r.nome_receita,
+            _cost: resultado,
+            custo_por_refeicao: resultado / refeicoesPorDia,
+            ingredientes_detalhados: []
           });
         }
       }
@@ -778,14 +833,16 @@ serve(async (req) => {
     for (const cat of ["SALADA 1 (VERDURAS)", "SALADA 2 (LEGUMES)"]) {
       const candidates = candidatesByCat[cat] ?? [];
       for (const r of candidates) {
-        const cost = costOfRecipe(String(r.receita_id_legado), refeicoesPorDia);
-        if (cost !== null) {
+        const resultado = costOfRecipe(String(r.receita_id_legado), refeicoesPorDia);
+        if (resultado !== null) {
+          const cost = typeof resultado === 'object' ? resultado.total : resultado;
           poolSaladas.push({
             id: String(r.receita_id_legado),
             receita_id_legado: r.receita_id_legado,
             nome: r.nome_receita,
             _cost: cost,
-            custo_por_refeicao: cost / refeicoesPorDia
+            custo_por_refeicao: cost / refeicoesPorDia,
+            ingredientes_detalhados: typeof resultado === 'object' ? resultado.ingredientesDetalhados : []
           });
         }
       }
@@ -796,14 +853,16 @@ serve(async (req) => {
     for (const cat of ["SUCO 1", "SUCO 2"]) {
       const candidates = candidatesByCat[cat] ?? [];
       for (const r of candidates) {
-        const cost = costOfRecipe(String(r.receita_id_legado), refeicoesPorDia);
-        if (cost !== null) {
+        const resultado = costOfRecipe(String(r.receita_id_legado), refeicoesPorDia);
+        if (resultado !== null) {
+          const cost = typeof resultado === 'object' ? resultado.total : resultado;
           poolSucos.push({
             id: String(r.receita_id_legado),
             receita_id_legado: r.receita_id_legado,
             nome: r.nome_receita,
             _cost: cost,
-            custo_por_refeicao: cost / refeicoesPorDia
+            custo_por_refeicao: cost / refeicoesPorDia,
+            ingredientes_detalhados: typeof resultado === 'object' ? resultado.ingredientesDetalhados : []
           });
         }
       }
@@ -813,9 +872,15 @@ serve(async (req) => {
     // ARROZ obrigatório (usar baseRecipes.arroz se fornecido)
     let arroz;
     if (arrozReceita) {
-      const cost = costOfRecipe(String(arrozReceita.receita_id_legado), refeicoesPorDia);
-      if (cost !== null) {
-        arroz = { ...arrozReceita, _cost: cost, id: String(arrozReceita.receita_id_legado) };
+      const resultado = costOfRecipe(String(arrozReceita.receita_id_legado), refeicoesPorDia);
+      if (resultado !== null) {
+        const cost = typeof resultado === 'object' ? resultado.total : resultado;
+        arroz = { 
+          ...arrozReceita, 
+          _cost: cost, 
+          id: String(arrozReceita.receita_id_legado),
+          ingredientes_detalhados: typeof resultado === 'object' ? resultado.ingredientesDetalhados : []
+        };
       }
     }
     if (!arroz) {
@@ -829,9 +894,15 @@ serve(async (req) => {
     // FEIJÃO obrigatório (usar baseRecipes.feijao se fornecido)
     let feijao;
     if (feijaoReceita) {
-      const cost = costOfRecipe(String(feijaoReceita.receita_id_legado), refeicoesPorDia);
-      if (cost !== null) {
-        feijao = { ...feijaoReceita, _cost: cost, id: String(feijaoReceita.receita_id_legado) };
+      const resultado = costOfRecipe(String(feijaoReceita.receita_id_legado), refeicoesPorDia);
+      if (resultado !== null) {
+        const cost = typeof resultado === 'object' ? resultado.total : resultado;
+        feijao = { 
+          ...feijaoReceita, 
+          _cost: cost, 
+          id: String(feijaoReceita.receita_id_legado),
+          ingredientes_detalhados: typeof resultado === 'object' ? resultado.ingredientesDetalhados : []
+        };
       }
     }
     if (!feijao) {
@@ -869,6 +940,7 @@ serve(async (req) => {
           nome: arrozReceita?.nome_receita || 'ARROZ BRANCO',
           custo_total: round2(arroz._cost),
           custo_por_refeicao: round2(arroz._cost / refeicoesPorDia),
+          ingredientes: arroz.ingredientes_detalhados || []
         });
         markUsed('ARROZ BRANCO', arroz.id);
       } else {
@@ -888,7 +960,8 @@ serve(async (req) => {
           receita_id: feijao.id, 
           nome: feijaoReceita?.nome_receita || 'FEIJÃO MIX - CARIOCA + BANDINHA 50%',
           custo_total: round2(feijao._cost),
-          custo_por_refeicao: round2(feijao._cost / refeicoesPorDia)
+          custo_por_refeicao: round2(feijao._cost / refeicoesPorDia),
+          ingredientes: feijao.ingredientes_detalhados || []
         });
         markUsed('FEIJÃO', feijao.id);
       } else {
@@ -909,7 +982,8 @@ serve(async (req) => {
           receita_id: pp1.id,
           nome: pp1.nome,
           custo_total: round2(pp1._cost),
-          custo_por_refeicao: round2(pp1.custo_por_refeicao)
+          custo_por_refeicao: round2(pp1.custo_por_refeicao),
+          ingredientes: pp1.ingredientes_detalhados || []
         });
         markUsed('PRATO PRINCIPAL 1', pp1.id);
       } else {
@@ -930,7 +1004,8 @@ serve(async (req) => {
           receita_id: pp2.id,
           nome: pp2.nome,
           custo_total: round2(pp2._cost),
-          custo_por_refeicao: round2(pp2.custo_por_refeicao)
+          custo_por_refeicao: round2(pp2.custo_por_refeicao),
+          ingredientes: pp2.ingredientes_detalhados || []
         });
         markUsed('PRATO PRINCIPAL 2', pp2.id);
       } else {
@@ -951,7 +1026,8 @@ serve(async (req) => {
           receita_id: s1.id,
           nome: s1.nome,
           custo_total: round2(s1._cost),
-          custo_por_refeicao: round2(s1.custo_por_refeicao)
+          custo_por_refeicao: round2(s1.custo_por_refeicao),
+          ingredientes: s1.ingredientes_detalhados || []
         });
         markUsed('SALADA 1 (VERDURAS)', s1.id);
       } else {
@@ -971,7 +1047,8 @@ serve(async (req) => {
           receita_id: s2.id,
           nome: s2.nome,
           custo_total: round2(s2._cost),
-          custo_por_refeicao: round2(s2.custo_por_refeicao)
+          custo_por_refeicao: round2(s2.custo_por_refeicao),
+          ingredientes: s2.ingredientes_detalhados || []
         });
         markUsed('SALADA 2 (LEGUMES)', s2.id);
       } else {
