@@ -13,10 +13,14 @@ export interface MenuBusinessRules {
 }
 
 export interface MenuViolation {
-  type: 'protein_consecutive' | 'red_meat_limit' | 'monday_processing' | 'structure_incomplete';
+  type: 'protein_consecutive' | 'red_meat_limit' | 'monday_processing' | 'structure_incomplete' | 'ingredient_missing' | 'ingredient_substituted' | 'ingredient_zero_cost';
   message: string;
   day?: string;
   recipes?: string[];
+  ingredientId?: number;
+  ingredientName?: string;
+  substituteName?: string;
+  cost?: number;
 }
 
 export const useMenuBusinessRules = () => {

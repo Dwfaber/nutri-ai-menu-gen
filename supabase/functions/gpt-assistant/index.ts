@@ -278,7 +278,10 @@ serve(async (req) => {
     // CORREÇÃO: Garantir que todas as chaves do mapa sejam strings
     for (const ing of ingredientes ?? []) {
       const key = String(ing.receita_id_legado);
-      console.log(`[ingredientes] Indexando receita ${key} com ${(ingByReceita.get(key) || []).length} ingredientes existentes`);
+      // Reduzir logs excessivos - apenas para receitas problemáticas
+      if ((ingByReceita.get(key) || []).length === 0) {
+        console.log(`[ingredientes] Primeira indexação da receita ${key}`);
+      }
       (ingByReceita.get(key) ?? ingByReceita.set(key, []).get(key))!.push(ing);
     }
 
@@ -778,21 +781,25 @@ serve(async (req) => {
 
         // Calcular custo de cada ingrediente com proteção
         const ingredientesDetalhados = [];
+        const violacoesReceita = [];
+        
         for (const ing of ingredientesEscalados) {
           const resultado = calcularCustoIngredienteDetalhado(ing);
           total += resultado.custo;
           ingredientesDetalhados.push(resultado.detalhes);
           
-          // Log detalhado para auditoria
-          console.log(`Ingrediente ${ing.nome}: ${ing.quantidade_original} * ${ing.fator_escalonamento} = ${ing.quantidade} ${ing.unidade} = R$ ${resultado.custo.toFixed(2)}`);
+          // Coletar violações para rastreabilidade
+          if (resultado.violacao) {
+            violacoesReceita.push(resultado.violacao);
+          }
           
-          // Log adicional dos detalhes se disponível
-          if (resultado.detalhes && typeof resultado.detalhes === 'object') {
-            console.log(`[detalhes] ${JSON.stringify(resultado.detalhes)}`);
+          // Log apenas para ingredientes com problemas
+          if (resultado.detalhes.status !== 'encontrado') {
+            console.log(`[${resultado.detalhes.status}] ${ing.nome}: R$ ${resultado.custo.toFixed(2)} - ${resultado.detalhes.motivo || 'Processado'}`);
           }
         }
 
-        return { total, ingredientesDetalhados };
+        return { total, ingredientesDetalhados, violacoes: violacoesReceita };
       } catch (e) {
         console.error('[menu] erro costOfRecipe', receitaId, e);
         warnings.push(`Erro no cálculo da receita ${receitaId}: ${e.message}`);
@@ -801,21 +808,41 @@ serve(async (req) => {
     }
 
     const usedBySlot: UsedTracker = {};
+    const usedThisWeek: Set<string> = new Set(); // Rotação semanal
 
     function markUsed(slot: string, id: string) {
       if (!usedBySlot[slot]) usedBySlot[slot] = new Set();
       usedBySlot[slot].add(id);
+      usedThisWeek.add(id); // Adicionar à rotação semanal
     }
+    
     function isUsed(slot: string, id: string) {
       return !!usedBySlot[slot]?.has(id);
     }
+    
     function pickUnique(pool: any[], slot: string) {
-      // CORREÇÃO: Garantir que a comparação seja string para string
-      let r = pool?.find(x => !isUsed(slot, String(x.receita_id_legado)));
-      if (!r && pool?.length) {           // se esgotou, zera para recomeçar o ciclo
-        usedBySlot[slot] = new Set();
-        r = pool[0];
+      // Priorizar receitas 100% válidas que não foram usadas esta semana
+      let r = pool?.find(x => 
+        x.classificacao === '100_valid' && 
+        !isUsed(slot, String(x.receita_id_legado)) && 
+        !usedThisWeek.has(String(x.receita_id_legado))
+      );
+      
+      // Se não encontrou 100% válida não usada, tentar "quase válida"
+      if (!r) {
+        r = pool?.find(x => 
+          x.classificacao === 'almost_valid' && 
+          !isUsed(slot, String(x.receita_id_legado)) && 
+          !usedThisWeek.has(String(x.receita_id_legado))
+        );
       }
+      
+      // Se não encontrou nenhuma, permitir reutilização (resetar ciclo)
+      if (!r && pool?.length) {
+        usedBySlot[slot] = new Set();
+        r = pool.find(x => x.classificacao === '100_valid') || pool[0];
+      }
+      
       return r ?? null;
     }
 
@@ -847,27 +874,51 @@ serve(async (req) => {
       for (const r of candidates) {
         const resultado = costOfRecipe(String(r.receita_id_legado), refeicoesPorDia);
         if (resultado !== null && typeof resultado === 'object') {
-          pool.push({
-            id: String(r.receita_id_legado),
-            receita_id_legado: r.receita_id_legado,
-            nome: r.nome_receita,
-            _cost: resultado.total,
-            custo_por_refeicao: resultado.total / refeicoesPorDia,
-            ingredientes_detalhados: resultado.ingredientesDetalhados
-          });
+          // Classificar receita por número de violações
+          const numViolacoes = resultado.violacoes?.length || 0;
+          let classificacao: '100_valid' | 'almost_valid' | 'invalid';
+          
+          if (numViolacoes === 0) {
+            classificacao = '100_valid';
+          } else if (numViolacoes <= 2) {
+            classificacao = 'almost_valid';
+          } else {
+            classificacao = 'invalid';
+          }
+          
+          // Só incluir receitas válidas ou "quase válidas"
+          if (classificacao !== 'invalid') {
+            pool.push({
+              id: String(r.receita_id_legado),
+              receita_id_legado: r.receita_id_legado,
+              nome: r.nome_receita,
+              _cost: resultado.total,
+              custo_por_refeicao: resultado.total / refeicoesPorDia,
+              ingredientes_detalhados: resultado.ingredientesDetalhados,
+              violacoes: resultado.violacoes || [],
+              classificacao
+            });
+          }
         } else if (typeof resultado === 'number') {
-          // Backward compatibility
+          // Backward compatibility - assumir válida se tem custo
           pool.push({
             id: String(r.receita_id_legado),
             receita_id_legado: r.receita_id_legado,
             nome: r.nome_receita,
             _cost: resultado,
             custo_por_refeicao: resultado / refeicoesPorDia,
-            ingredientes_detalhados: []
+            ingredientes_detalhados: [],
+            violacoes: [],
+            classificacao: '100_valid'
           });
         }
       }
-      pool.sort((a, b) => a._cost - b._cost); // mais baratos primeiro
+      // Ordenar por classificação primeiro (100% válidas primeiro), depois por custo
+      pool.sort((a, b) => {
+        if (a.classificacao === '100_valid' && b.classificacao !== '100_valid') return -1;
+        if (b.classificacao === '100_valid' && a.classificacao !== '100_valid') return 1;
+        return a._cost - b._cost; // mais baratos primeiro dentro da mesma classificação
+      });
     }
 
     // Saladas
