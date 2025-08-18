@@ -237,8 +237,14 @@ serve(async (req) => {
     const arrozBaseId = getArrozBaseId(baseRecipes) || 580;
     const feijaoBaseId = getFeijaoBaseId(baseRecipes) || 1603;
     
-    let arrozReceita = (receitas ?? []).find(r => r.receita_id_legado === arrozBaseId);
-    let feijaoReceita = (receitas ?? []).find(r => r.receita_id_legado === feijaoBaseId);
+    console.log(`[receitas-base] Procurando arroz ID: ${arrozBaseId}, feijão ID: ${feijaoBaseId}`);
+    
+    // CORREÇÃO: Converter IDs para string na comparação
+    let arrozReceita = (receitas ?? []).find(r => r.receita_id_legado === String(arrozBaseId));
+    let feijaoReceita = (receitas ?? []).find(r => r.receita_id_legado === String(feijaoBaseId));
+    
+    console.log(`[receitas-base] Arroz encontrado: ${arrozReceita ? 'SIM' : 'NÃO'} (${arrozReceita?.nome || 'N/A'})`);
+    console.log(`[receitas-base] Feijão encontrado: ${feijaoReceita ? 'SIM' : 'NÃO'} (${feijaoReceita?.nome || 'N/A'})`);
     
     const warnings = [];
     if (!arrozReceita) {
