@@ -270,9 +270,20 @@ serve(async (req) => {
       return bad(400, "Nenhuma receita candidata encontrada");
     }
 
+    // MELHORADO: Incluir LEFT JOIN com produtos_base para fallback de nomes
     const { data: ingredientes, error: iErr } = await supabase
       .from("receita_ingredientes")
-      .select("receita_id_legado, produto_base_id, produto_base_descricao, quantidade, unidade, quantidade_refeicoes")
+      .select(`
+        receita_id_legado, 
+        produto_base_id, 
+        produto_base_descricao, 
+        quantidade, 
+        unidade, 
+        quantidade_refeicoes,
+        produtos_base:produto_base_id (
+          descricao
+        )
+      `)
       .in("receita_id_legado", candidateIds);
 
     if (iErr) {
@@ -281,9 +292,16 @@ serve(async (req) => {
     }
 
     const ingByReceita = new Map<string, any[]>();
-    // CORREÇÃO: Garantir que todas as chaves do mapa sejam strings
+    // CORREÇÃO: Garantir que todas as chaves do mapa sejam strings e melhorar nomes
     for (const ing of ingredientes ?? []) {
       const key = String(ing.receita_id_legado);
+      
+      // MELHORADO: Usar produtos_base.descricao como fallback
+      if (!ing.produto_base_descricao && ing.produtos_base?.descricao) {
+        ing.produto_base_descricao = ing.produtos_base.descricao;
+        console.log(`[ingredientes] Fallback aplicado para produto_base_id ${ing.produto_base_id}: ${ing.produtos_base.descricao}`);
+      }
+      
       (ingByReceita.get(key) ?? ingByReceita.set(key, []).get(key))!.push(ing);
     }
 
@@ -359,6 +377,7 @@ serve(async (req) => {
 
     /**
      * Normaliza texto para busca inteligente (remove acentos, especificações de peso)
+     * MELHORADO: Remove pesos mais eficientemente (ex: "ARROZ 5KG" → "ARROZ")
      */
     function normalizeSearchTerm(text: string): string {
       if (!text) return '';
@@ -368,7 +387,10 @@ serve(async (req) => {
         .replace(/[\u0300-\u036f]/g, '')
         .toUpperCase()
         .replace(/\s*-\s*/g, ' ') // Remove hífens
-        .replace(/\b\d+\s*(GR?S?|KGS?|G|GRAMAS?|QUILOS?)\b/gi, '') // Remove especificações de peso
+        // MELHORADO: Remove especificações de peso mais abrangentes
+        .replace(/\b\d+\s*(KGS?|GR?S?|G|GRAMAS?|QUILOS?|L|LITROS?|ML|MILILITROS?|UND?|UNIDADES?|PCT?|PACOTES?|CX|CAIXAS?)\b/gi, '')
+        .replace(/\b\d+\s*X\s*\d+\b/gi, '') // Remove "90GR X 36"
+        .replace(/\(\s*\d+.*?\)/gi, '') // Remove conteúdo entre parênteses com números
         .replace(/\s+/g, ' ') // Normaliza espaços
         .trim();
     }
@@ -744,10 +766,25 @@ serve(async (req) => {
           console.log(`[custo] ✓ Encontrado por ID ${ing.produto_base_id}: ${produtoMercado.descricao}`);
         }
         
-        // 2. Se não encontrou por ID, busca por nome com sistema inteligente
-        if (!produtoMercado) {
-          const nomeIngrediente = ing.produto_base_descricao || ing.nome || '';
-          const searchResult = findProductByName(nomeIngrediente, mercado);
+    // 2. Se não encontrou por ID, busca por nome com sistema inteligente
+    if (!produtoMercado) {
+      // CORRIGIDO: Usar apenas produto_base_descricao, nunca ing.nome (nome da receita)
+      const nomeIngrediente = ing.produto_base_descricao || '';
+      
+      if (!nomeIngrediente) {
+        console.log(`[custo] ❌ Ingrediente sem nome: produto_base_id=${ing.produto_base_id}`);
+        return { 
+          custo: 0, 
+          violacao: {
+            tipo: 'ingrediente_sem_nome',
+            produto_base_id: ing.produto_base_id,
+            descricao: 'Ingrediente sem descrição na base de dados',
+            necessaria_atualizacao: true
+          }
+        };
+      }
+      
+      const searchResult = findProductByName(nomeIngrediente, mercado);
           
           if (searchResult.found) {
             produtoMercado = searchResult.product;
@@ -768,10 +805,17 @@ serve(async (req) => {
               }
             };
           } else {
-            // Ingrediente não encontrado - retornar com sugestões
-            console.log(`[custo] ❌ Ingrediente não encontrado: ${nomeIngrediente}`);
+            // MELHORADO: Log mais detalhado para ingredientes não encontrados
+            console.log(`[custo] ❌ Ingrediente não encontrado: "${nomeIngrediente}"`);
+            console.log(`[custo]    produto_base_id: ${ing.produto_base_id || 'N/A'}`);
+            console.log(`[custo]    receita_id: ${ing.receita_id_legado}`);
             if (searchResult.suggestions && searchResult.suggestions.length > 0) {
-              console.log(`[custo] 💡 ${searchResult.suggestions.length} sugestões disponíveis`);
+              console.log(`[custo] 💡 ${searchResult.suggestions.length} sugestões disponíveis:`);
+              searchResult.suggestions.forEach((sug: any, i: number) => {
+                console.log(`[custo]    ${i+1}. ${sug.descricao} (score: ${sug.score})`);
+              });
+            } else {
+              console.log(`[custo] 💡 Nenhuma sugestão encontrada - possível problema de normalização`);
             }
             
             return { 
