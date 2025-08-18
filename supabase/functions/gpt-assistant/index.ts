@@ -590,13 +590,19 @@ serve(async (req) => {
         };
         
         if (!produtos.length) {
-          console.error(`[custo] Ingrediente não encontrado: ${ing.produto_base_descricao} (ID: ${ing.produto_base_id})`);
-          console.log(`[custo] Aplicando fallback - custo zero para ingrediente ausente`);
+          console.warn(`[custo] Ingrediente não encontrado: ${ing.produto_base_descricao} (ID: ${ing.produto_base_id})`);
+          
+          // CORREÇÃO: Em vez de zerar, aplicar custo padrão conservador
+          const custoEstimado = 2.0; // R$ 2,00 por porção como estimativa conservadora
+          console.log(`[custo] Aplicando custo estimado: R$ ${custoEstimado.toFixed(2)}`);
+          
           return { 
-            custo: 0, 
+            custo: custoEstimado, 
             detalhes: {
               ...detalhesBase,
-              observacao: 'Produto não encontrado no mercado - custo estimado como zero'
+              custo_total: custoEstimado,
+              custo_por_refeicao: custoEstimado,
+              observacao: `Produto não encontrado - custo estimado: R$ ${custoEstimado.toFixed(2)}`
             }
           };
         }

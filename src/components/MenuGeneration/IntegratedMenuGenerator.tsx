@@ -43,19 +43,14 @@ const IntegratedMenuGenerator = () => {
       return null;
     }
     return validateMenu(generatedMenu.recipes);
-  }, [generatedMenu?.recipes, validateMenu]);
+  }, [generatedMenu?.recipes]);
 
-  // Memoize validation function to prevent infinite loops
-  const memoizedValidateMenuAndSetViolations = useCallback((recipes: any[]) => {
-    validateMenuAndSetViolations(recipes);
-  }, [validateMenuAndSetViolations]);
-
-  // Update violations when menu changes
+  // Update violations only when menu changes (remove validateMenuAndSetViolations dependency)
   useEffect(() => {
     if (generatedMenu?.recipes && generatedMenu.recipes.length > 0) {
-      memoizedValidateMenuAndSetViolations(generatedMenu.recipes);
+      validateMenuAndSetViolations(generatedMenu.recipes);
     }
-  }, [generatedMenu?.recipes, memoizedValidateMenuAndSetViolations]);
+  }, [generatedMenu?.recipes]); // CORREÇÃO: Remover dependência que causa loop
 
 
   const handleGenerateMenu = async (formData: ContractFormData) => {
@@ -236,7 +231,7 @@ const IntegratedMenuGenerator = () => {
                 onViolationsChanged={() => {
                   // Re-validate menu when violations are approved/suggestions are made
                   if (generatedMenu?.recipes && generatedMenu.recipes.length > 0) {
-                    memoizedValidateMenuAndSetViolations(generatedMenu.recipes);
+                    validateMenuAndSetViolations(generatedMenu.recipes);
                   }
                 }}
               />
