@@ -1,5 +1,44 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+
+// Função para normalizar texto para busca inteligente
+const normalizeSearchTerm = (text: string): string => {
+  if (!text) return '';
+  
+  return text
+    .normalize('NFD') // Remove acentos
+    .replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase()
+    .replace(/\s*-\s*/g, ' ') // Remove hífens
+    .replace(/\b\d+\s*(GR?S?|KGS?|G|GRAMAS?|QUILOS?)\b/gi, '') // Remove especificações de peso
+    .replace(/\s+/g, ' ') // Normaliza espaços
+    .trim();
+};
+
+// Função para calcular score de similaridade
+const calculateSimilarityScore = (searchTerm: string, productName: string): number => {
+  const normalizedSearch = normalizeSearchTerm(searchTerm);
+  const normalizedProduct = normalizeSearchTerm(productName);
+  
+  // Match exato = 100
+  if (normalizedProduct === normalizedSearch) return 100;
+  
+  // Contém termo completo = 80
+  if (normalizedProduct.includes(normalizedSearch)) return 80;
+  
+  // Palavras-chave em comum
+  const searchWords = normalizedSearch.split(' ').filter(w => w.length > 2);
+  const productWords = normalizedProduct.split(' ').filter(w => w.length > 2);
+  
+  const commonWords = searchWords.filter(word => 
+    productWords.some(pWord => pWord.includes(word) || word.includes(pWord))
+  );
+  
+  if (commonWords.length === 0) return 0;
+  
+  // Score baseado na proporção de palavras em comum
+  return Math.floor((commonWords.length / searchWords.length) * 60);
+};
 import { useToast } from '@/hooks/use-toast';
 
 export interface MarketProduct {
@@ -129,12 +168,25 @@ export const useMarketProducts = () => {
     }
 
     if (filters.search) {
-      const searchLower = filters.search.toLowerCase();
-      filtered = filtered.filter(p => 
-        p.descricao?.toLowerCase().includes(searchLower) ||
-        p.categoria_descricao?.toLowerCase().includes(searchLower) ||
-        p.grupo?.toLowerCase().includes(searchLower)
-      );
+      // Busca inteligente com normalização
+      const normalizedSearch = normalizeSearchTerm(filters.search);
+      
+      filtered = filtered
+        .map(p => ({
+          ...p,
+          _score: Math.max(
+            calculateSimilarityScore(filters.search!, p.descricao || ''),
+            calculateSimilarityScore(filters.search!, p.categoria_descricao || ''),
+            calculateSimilarityScore(filters.search!, p.grupo || '')
+          )
+        }))
+        .filter(p => p._score > 0) // Só mostra produtos com alguma similaridade
+        .sort((a, b) => b._score - a._score) // Ordena por relevância
+        .map(p => {
+          // Remove o score temporário
+          const { _score, ...product } = p;
+          return product;
+        });
     }
 
     setFilteredProducts(filtered);

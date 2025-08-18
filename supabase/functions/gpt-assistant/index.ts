@@ -355,41 +355,87 @@ serve(async (req) => {
       return { tamanho: null, unidade: null, nome: texto };
     }
 
-    // Sistema de matching inteligente por nome
+    /**
+     * Normaliza texto para busca inteligente (remove acentos, especificações de peso)
+     */
+    function normalizeSearchTerm(text: string): string {
+      if (!text) return '';
+      
+      return text
+        .normalize('NFD') // Remove acentos
+        .replace(/[\u0300-\u036f]/g, '')
+        .toUpperCase()
+        .replace(/\s*-\s*/g, ' ') // Remove hífens
+        .replace(/\b\d+\s*(GR?S?|KGS?|G|GRAMAS?|QUILOS?)\b/gi, '') // Remove especificações de peso
+        .replace(/\s+/g, ' ') // Normaliza espaços
+        .trim();
+    }
+
+    /**
+     * Calcula score de similaridade entre dois textos normalizados
+     */
+    function calculateSimilarityScore(searchTerm: string, productName: string): number {
+      const normalizedSearch = normalizeSearchTerm(searchTerm);
+      const normalizedProduct = normalizeSearchTerm(productName);
+      
+      // Match exato = 100
+      if (normalizedProduct === normalizedSearch) return 100;
+      
+      // Contém termo completo = 80
+      if (normalizedProduct.includes(normalizedSearch)) return 80;
+      
+      // Palavras-chave em comum
+      const searchWords = normalizedSearch.split(' ').filter(w => w.length > 2);
+      const productWords = normalizedProduct.split(' ').filter(w => w.length > 2);
+      
+      const commonWords = searchWords.filter(word => 
+        productWords.some(pWord => pWord.includes(word) || word.includes(pWord))
+      );
+      
+      if (commonWords.length === 0) return 0;
+      
+      // Score baseado na proporção de palavras em comum
+      return Math.floor((commonWords.length / searchWords.length) * 60);
+    }
+
+    // Sistema de matching inteligente por nome com normalização
     function findProductByName(ingredientName: string, allProducts: any[]): any | null {
-      const nome = (ingredientName || '').toUpperCase().trim();
+      const nome = (ingredientName || '').trim();
       if (!nome) return null;
       
-      // Palavras-chave do ingrediente
-      const palavras = nome.split(/\s+/).filter(p => p.length > 2);
+      console.log(`[busca-inteligente] Procurando: "${nome}"`);
       
-      let melhorMatch: { produto: any; score: number } | null = null;
+      // Calcula scores para todos os produtos
+      const scoredProducts = allProducts
+        .map(produto => ({
+          produto,
+          score: calculateSimilarityScore(nome, produto.descricao || '')
+        }))
+        .filter(p => p.score > 30) // Só considera produtos com score mínimo
+        .sort((a, b) => b.score - a.score);
       
-      for (const produto of allProducts) {
-        const descProduto = (produto.descricao || '').toUpperCase();
-        let score = 0;
+      if (scoredProducts.length > 0) {
+        const melhorMatch = scoredProducts[0];
+        console.log(`[busca-inteligente] Melhor match (score ${melhorMatch.score}): "${melhorMatch.produto.descricao}"`);
         
-        // Contar quantas palavras do ingrediente aparecem na descrição
-        for (const palavra of palavras) {
-          if (descProduto.includes(palavra)) {
-            score += palavra.length; // Palavras maiores valem mais
-          }
+        // Se score é alto (>= 60), considera um match válido
+        if (melhorMatch.score >= 60) {
+          console.log(`[busca-inteligente] ✅ Auto-aprovado por score alto`);
+          return melhorMatch.produto;
         }
         
-        // Bonus para match exato de palavras-chave importantes
-        const keyWords = ['VINAGRE', 'ÓLEO', 'SAL', 'AÇÚCAR', 'FARINHA', 'LEITE'];
-        for (const key of keyWords) {
-          if (nome.includes(key) && descProduto.includes(key)) {
-            score += 20;
-          }
-        }
-        
-        if (score > 0 && (!melhorMatch || score > melhorMatch.score)) {
-          melhorMatch = { produto, score };
-        }
+        // Se score é moderado (30-59), marca como sugestão
+        console.log(`[busca-inteligente] ⚠️ Sugestão requer aprovação manual`);
+        return {
+          ...melhorMatch.produto,
+          is_suggestion: true,
+          original_search: nome,
+          similarity_score: melhorMatch.score
+        };
       }
       
-      return melhorMatch ? melhorMatch.produto : null;
+      console.log(`[busca-inteligente] ❌ Nenhuma sugestão encontrada`);
+      return null;
     }
 
     // Processar produtos do mercado com parsing inteligente
