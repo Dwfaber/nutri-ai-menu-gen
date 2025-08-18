@@ -275,8 +275,10 @@ serve(async (req) => {
     }
 
     const ingByReceita = new Map<string, any[]>();
+    // CORREÇÃO: Garantir que todas as chaves do mapa sejam strings
     for (const ing of ingredientes ?? []) {
       const key = String(ing.receita_id_legado);
+      console.log(`[ingredientes] Indexando receita ${key} com ${(ingByReceita.get(key) || []).length} ingredientes existentes`);
       (ingByReceita.get(key) ?? ingByReceita.set(key, []).get(key))!.push(ing);
     }
 
@@ -731,11 +733,13 @@ serve(async (req) => {
 
     function costOfRecipe(receitaId: string, servings: number): number | null {
       try {
-        const ings = ingByReceita.get(String(receitaId)) ?? [];
-        if (!ings.length) {
-          warnings.push(`Receita ${receitaId}: nenhum ingrediente encontrado`);
-          return null;
-        }
+      // CORREÇÃO: Garantir conversão para string na busca de ingredientes
+      const ings = ingByReceita.get(String(receitaId)) ?? [];
+      if (!ings.length) {
+        console.warn(`[costOfRecipe] Receita ${receitaId}: nenhum ingrediente encontrado`);
+        warnings.push(`Receita ${receitaId}: nenhum ingrediente encontrado`);
+        return null;
+      }
 
         // Validar ingredientes
         const ingredientesValidos = [];
@@ -806,6 +810,7 @@ serve(async (req) => {
       return !!usedBySlot[slot]?.has(id);
     }
     function pickUnique(pool: any[], slot: string) {
+      // CORREÇÃO: Garantir que a comparação seja string para string
       let r = pool?.find(x => !isUsed(slot, String(x.receita_id_legado)));
       if (!r && pool?.length) {           // se esgotou, zera para recomeçar o ciclo
         usedBySlot[slot] = new Set();
@@ -818,6 +823,7 @@ serve(async (req) => {
       const list = candidatesByCat[cat] ?? [];
       let best: { r: any; cost: number } | null = null;
       for (const r of list) {
+        // CORREÇÃO: Garantir conversão para string na comparação
         const id = String(r.receita_id_legado);
         if (excludeIds.has(id)) continue;
         const c = costOfRecipe(id, servings);
