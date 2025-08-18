@@ -6,7 +6,7 @@ import { Separator } from '@/components/ui/separator';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { ChefHat, Calendar, CheckCircle, XCircle, ShoppingCart, DollarSign, Users, Plus } from 'lucide-react';
+import { ChefHat, Calendar, CheckCircle, XCircle, ShoppingCart, DollarSign, Users, Plus, Wifi, WifiOff } from 'lucide-react';
 import { useIntegratedMenuGeneration } from '@/hooks/useIntegratedMenuGeneration';
 import { useSelectedClient } from '@/contexts/SelectedClientContext';
 import WeeklyMenuView from '@/components/MenuGeneration/WeeklyMenuView';
@@ -14,12 +14,17 @@ import { SimpleMenuForm } from '@/components/MenuGeneration/SimpleMenuForm';
 import { ContractFormData } from '@/hooks/useClientContracts';
 import MenuValidationPanel from '@/components/MenuGeneration/MenuValidationPanel';
 import { MenuCostBreakdown } from '@/components/MenuGeneration/MenuCostBreakdown';
+import { testEdgeFunctionConnectivity, testMenuGeneration } from '@/utils/edgeFunctionTest';
+import { useToast } from '@/hooks/use-toast';
 
 const IntegratedMenuGenerator = () => {
   const [showForm, setShowForm] = useState(false);
   const [approverName, setApproverName] = useState('');
   const [rejectionReason, setRejectionReason] = useState('');
+  const [isTesting, setIsTesting] = useState(false);
+  const [connectionStatus, setConnectionStatus] = useState<'unknown' | 'healthy' | 'error'>('unknown');
   
+  const { toast } = useToast();
   const { selectedClient } = useSelectedClient();
   const {
     isGenerating,
@@ -82,6 +87,74 @@ const IntegratedMenuGenerator = () => {
   const handleGenerateShoppingList = async () => {
     if (generatedMenu) {
       await generateShoppingListFromMenu(generatedMenu);
+    }
+  };
+
+  // Test connectivity function
+  const handleTestConnectivity = async () => {
+    setIsTesting(true);
+    setConnectionStatus('unknown');
+    
+    try {
+      console.log('[UI] Iniciando teste de conectividade...');
+      
+      const connectivityResult = await testEdgeFunctionConnectivity();
+      console.log('[UI] Resultado do teste:', connectivityResult);
+      
+      if (connectivityResult.isConnected) {
+        setConnectionStatus('healthy');
+        toast({
+          title: "✅ Conectividade OK",
+          description: `Edge Function está funcionando (${connectivityResult.timestamp})`,
+          variant: "default"
+        });
+        
+        // Se conectividade OK, testar geração rápida
+        if (selectedClient) {
+          console.log('[UI] Testando geração de cardápio rápida...');
+          const testResult = await testMenuGeneration({
+            action: 'generate_menu',
+            filialIdLegado: selectedClient.filial_id || 8,
+            numDays: 1,
+            refeicoesPorDia: 10, // Teste pequeno
+            useDiaEspecial: false,
+            baseRecipes: { arroz: 580, feijao: 1600 }
+          });
+          
+          if (testResult.success) {
+            toast({
+              title: "🎯 Teste de Geração OK",
+              description: "Sistema funcionando end-to-end!",
+              variant: "default"
+            });
+          } else {
+            toast({
+              title: "⚠️ Conectividade OK, mas geração falhou",
+              description: testResult.error || "Erro na geração",
+              variant: "destructive"
+            });
+          }
+        }
+        
+      } else {
+        setConnectionStatus('error');
+        toast({
+          title: "❌ Problema de Conectividade",
+          description: connectivityResult.error || "Edge Function não respondeu",
+          variant: "destructive"
+        });
+      }
+      
+    } catch (error) {
+      console.error('[UI] Erro no teste:', error);
+      setConnectionStatus('error');
+      toast({
+        title: "❌ Erro no Teste",
+        description: error instanceof Error ? error.message : "Erro desconhecido",
+        variant: "destructive"
+      });
+    } finally {
+      setIsTesting(false);
     }
   };
 
@@ -150,15 +223,35 @@ const IntegratedMenuGenerator = () => {
               Estrutura: PP1, PP2, Arroz Branco, Feijão, Salada 1 (Verduras), Salada 2 (Legumes), Suco 1, Suco 2.
               Garante variedade de proteínas, evita processos e controla custos para qualquer período.
             </p>
-            <Button 
-              onClick={handleShowForm}
-              disabled={isGenerating}
-              className="w-full"
-              size="lg"
-            >
-              <Plus className="w-4 h-4 mr-2" />
-              Gerar Cardápio
-            </Button>
+            <div className="flex gap-3">
+              <Button 
+                onClick={handleShowForm}
+                disabled={isGenerating}
+                className="flex-1"
+                size="lg"
+              >
+                <Plus className="w-4 h-4 mr-2" />
+                Gerar Cardápio
+              </Button>
+              <Button 
+                onClick={handleTestConnectivity}
+                disabled={isTesting}
+                variant="outline"
+                size="lg"
+                className="flex items-center gap-2"
+              >
+                {isTesting ? (
+                  <div className="w-4 h-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                ) : connectionStatus === 'healthy' ? (
+                  <Wifi className="w-4 h-4 text-green-600" />
+                ) : connectionStatus === 'error' ? (
+                  <WifiOff className="w-4 h-4 text-red-600" />
+                ) : (
+                  <Wifi className="w-4 h-4" />
+                )}
+                {isTesting ? 'Testando...' : 'Testar Conectividade'}
+              </Button>
+            </div>
           </CardContent>
         </Card>
       )}
