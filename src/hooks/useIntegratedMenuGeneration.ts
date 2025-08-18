@@ -78,6 +78,8 @@ export const useIntegratedMenuGeneration = () => {
   const { viableRecipes, marketIngredients, fetchMarketIngredients, checkRecipeViability, calculateRecipeRealCost } = useMarketAvailability();
   const { validateMenu, validateMenuAndSetViolations, filterRecipesForDay, violations } = useMenuBusinessRules();
 
+
+
   // Helper function to categorize salads by ingredient type
   const categorizeSalad = (recipeName: string, index: number): string => {
     const name = recipeName.toLowerCase();
@@ -377,7 +379,8 @@ export const useIntegratedMenuGeneration = () => {
 
       console.log('[Frontend] Enviando payload padronizado:', payload);
 
-      // Use GPT Assistant para gerar cardápio com custos reais e proporções corretas
+      // Use GPT Assistant para gerar cardápio (função limpa)
+      console.log('[Conectividade] Testando Edge Function limpa...');
       const { data, error: functionError } = await supabase.functions.invoke('gpt-assistant', {
         body: payload
       });
@@ -390,6 +393,7 @@ export const useIntegratedMenuGeneration = () => {
         // Tratamento detalhado de erros da Edge Function
         let errorDetails = functionError.message || 'Erro ao gerar cardápio com IA';
         let errorStatus = 'Erro da função';
+        let shouldFallbackToLocal = false;
         
         // Extrair contexto detalhado quando possível
         try {
@@ -417,16 +421,24 @@ export const useIntegratedMenuGeneration = () => {
           } else if (functionError.name === 'FunctionsRelayError') {
             errorStatus = 'Erro de comunicação';
             errorDetails = 'Falha na comunicação com o servidor. Tente novamente.';
+            shouldFallbackToLocal = true;
           } else if (functionError.name === 'FunctionsFetchError') {
             errorStatus = 'Erro de rede';
-            errorDetails = 'Problema de conectividade. Verifique sua conexão.';
+            errorDetails = 'Problema de conectividade. Usando geração local.';
+            shouldFallbackToLocal = true;
           }
         } catch (processingError) {
           console.warn('[Frontend] Erro ao processar detalhes do erro:', processingError);
           errorDetails = functionError.message || String(functionError);
+          shouldFallbackToLocal = true;
         }
         
         console.error(`[Frontend] ${errorStatus}: ${errorDetails}`);
+        
+        // Se é erro de conectividade, mostrar erro detalhado
+        if (shouldFallbackToLocal) {
+          console.log('[Frontend] Problema de conectividade detectado.');
+        }
         
         toast({
           title: `Erro na geração (${errorStatus})`,

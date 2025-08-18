@@ -876,35 +876,6 @@ serve(async (req) => {
       }
     };
 
-            const custoTotal = embalagensNecessarias * produto.preco_reais;
-            
-            // Bonus para produtos em promoção (reduzir custo efetivo)
-            const custoEfetivo = produto.em_promocao_sim_nao ? custoTotal * 0.9 : custoTotal;
-            
-            const detalhes = {
-              produto: produto.descricao,
-              necessidade: `${quantidadeNecessaria} ${unidadeNecessaria}`,
-              conversao: conversao.conversao,
-              embalagem: `${tamanhoEmbalagem} ${produto.embalagem_unidade}`,
-              embalagens_necessarias: embalagensNecessarias,
-              preco_embalagem: produto.preco_reais,
-              custo_total: custoTotal,
-              promocao: produto.em_promocao_sim_nao,
-              pode_fracionado: !produto.apenas_valor_inteiro_sim_nao,
-              eficiencia_uso: necessidadeNaUnidadeProduto / tamanhoEmbalagem,
-            };
-            
-            if (custoEfetivo < melhorCusto) {
-              melhorCusto = custoEfetivo;
-              melhorProduto = produto;
-              melhorDetalhes = detalhes;
-            }
-            
-          } catch (e) {
-            console.error(`[custo] Erro processando produto ${produto.descricao}:`, e);
-          }
-        }
-
     // Sistema corrigido de escalonamento de receitas
     function calculateScalingFactor(targetServings: number, recipeIngredients: any[]): number {
       // Usar quantidade_refeicoes real da receita, não valor fixo
