@@ -590,19 +590,20 @@ serve(async (req) => {
         };
         
         if (!produtos.length) {
-          console.warn(`[custo] Ingrediente não encontrado: ${ing.produto_base_descricao} (ID: ${ing.produto_base_id})`);
+          console.warn(`[VIOLAÇÃO] Ingrediente não encontrado: ${ing.produto_base_descricao} (ID: ${ing.produto_base_id})`);
+          console.log(`[SISTEMA] Retornando custo ZERO - frontend processará violação`);
           
-          // CORREÇÃO: Em vez de zerar, aplicar custo padrão conservador
-          const custoEstimado = 2.0; // R$ 2,00 por porção como estimativa conservadora
-          console.log(`[custo] Aplicando custo estimado: R$ ${custoEstimado.toFixed(2)}`);
-          
+          // CORREÇÃO DEFINITIVA: Retornar custo ZERO e registrar violação
+          // O useIngredientManagement processará esta violação no frontend
           return { 
-            custo: custoEstimado, 
+            custo: 0, 
             detalhes: {
               ...detalhesBase,
-              custo_total: custoEstimado,
-              custo_por_refeicao: custoEstimado,
-              observacao: `Produto não encontrado - custo estimado: R$ ${custoEstimado.toFixed(2)}`
+              custo_total: 0,
+              custo_por_refeicao: 0,
+              observacao: 'VIOLAÇÃO: Produto não encontrado no mercado - será processado pelo sistema de violações',
+              violacao: true,
+              tipo_violacao: 'ingrediente_faltante'
             }
           };
         }
