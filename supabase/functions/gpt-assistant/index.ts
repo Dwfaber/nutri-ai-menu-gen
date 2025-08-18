@@ -365,22 +365,66 @@ serve(async (req) => {
     }
 
     /**
-     * Calcula score de similaridade entre dois textos normalizados
+     * Dicionário de mapeamentos automáticos para ingredientes comuns
+     */
+    const INGREDIENT_MAPPINGS = new Map([
+      // Caldos e temperos
+      ['CALDO DE CARNE', ['TEMPERO PRONTO', 'KNORR CARNE', 'CALDO CARNE', 'TEMPERO CALDO']],
+      ['CALDO DE GALINHA', ['TEMPERO PRONTO', 'KNORR GALINHA', 'CALDO GALINHA']],
+      ['CALDO DE LEGUMES', ['TEMPERO PRONTO', 'KNORR LEGUMES', 'CALDO LEGUMES']],
+      
+      // Especiarias e temperos
+      ['AÇAFRÃO', ['CÚRCUMA', 'AÇAFRÃO DA TERRA', 'AÇAFRÃO EM PÓ']],
+      ['CÚRCUMA', ['AÇAFRÃO', 'AÇAFRÃO DA TERRA']],
+      
+      // Líquidos básicos (custo zero automático)
+      ['AGUA NATURAL', []],
+      ['AGUA FILTRADA', []],
+      ['AGUA', []],
+      
+      // Outros mapeamentos comuns
+      ['SAL', ['SAL REFINADO', 'SAL MARINHO']],
+      ['AZEITE', ['AZEITE DE OLIVA', 'OLEO DE OLIVA']],
+      ['OLEO', ['OLEO DE SOJA', 'OLEO VEGETAL']],
+    ]);
+
+    /**
+     * Calcula score de similaridade INTELIGENTE por palavra-chave
      */
     function calculateSimilarityScore(searchTerm: string, productName: string): number {
       const normalizedSearch = normalizeSearchTerm(searchTerm);
       const normalizedProduct = normalizeSearchTerm(productName);
       
-      // Match exato = 100
+      // 1. Match exato = 100
       if (normalizedProduct === normalizedSearch) return 100;
       
-      // Contém termo completo = 80
+      // 2. PALAVRA-CHAVE ESPECÍFICA: Se o termo pesquisado aparece como palavra completa
+      const searchWords = normalizedSearch.split(' ').filter(w => w.length > 1);
+      const productWords = normalizedProduct.split(' ').filter(w => w.length > 1);
+      
+      for (const searchWord of searchWords) {
+        if (searchWord.length >= 3) { // Palavras relevantes
+          // Palavra exata encontrada = score muito alto
+          if (productWords.includes(searchWord)) {
+            return 95;
+          }
+          
+          // Produto começa com a palavra = score alto
+          if (normalizedProduct.startsWith(searchWord)) {
+            return 90;
+          }
+          
+          // Contém a palavra = score médio-alto
+          if (normalizedProduct.includes(searchWord)) {
+            return 85;
+          }
+        }
+      }
+      
+      // 3. Contém termo completo = 80
       if (normalizedProduct.includes(normalizedSearch)) return 80;
       
-      // Palavras-chave em comum
-      const searchWords = normalizedSearch.split(' ').filter(w => w.length > 2);
-      const productWords = normalizedProduct.split(' ').filter(w => w.length > 2);
-      
+      // 4. Palavras-chave em comum (lógica anterior para casos complexos)
       const commonWords = searchWords.filter(word => 
         productWords.some(pWord => pWord.includes(word) || word.includes(pWord))
       );
@@ -388,19 +432,47 @@ serve(async (req) => {
       if (commonWords.length === 0) return 0;
       
       // Score baseado na proporção de palavras em comum
-      return Math.floor((commonWords.length / searchWords.length) * 60);
+      return Math.floor((commonWords.length / searchWords.length) * 70);
     }
 
-    // Sistema de busca inteligente otimizado com cache
+    // Cache de busca e sugestões aprovadas
     const searchCache = new Map<string, any>();
+    const approvedSuggestions = new Map<string, any>();
     
-    function findProductByName(ingredientName: string, allProducts: any[]): any | null {
-      const nome = (ingredientName || '').trim();
-      if (!nome) return null;
+    /**
+     * Sistema de busca inteligente com sugestões múltiplas
+     */
+    function findProductByName(ingredientName: string, allProducts: any[]): any {
+      const nome = normalizeSearchTerm(ingredientName || '').trim();
+      if (!nome) return { found: false, suggestions: [], isZeroCost: false };
       
-      // Cache de busca para evitar recálculos
-      if (searchCache.has(nome)) return searchCache.get(nome);
+      console.log(`🔍 Buscando ingrediente: "${ingredientName}" → normalizado: "${nome}"`);
       
+      // 1. Verificar cache de sugestões aprovadas
+      if (approvedSuggestions.has(nome)) {
+        const approved = approvedSuggestions.get(nome);
+        console.log(`✅ Usando sugestão aprovada: ${approved.descricao}`);
+        return { found: true, product: approved, fromCache: true };
+      }
+      
+      // 2. Verificar se é ingrediente de custo zero automático
+      if (INGREDIENT_MAPPINGS.has(nome.toUpperCase()) && 
+          INGREDIENT_MAPPINGS.get(nome.toUpperCase())?.length === 0) {
+        console.log(`💧 Ingrediente custo zero: ${ingredientName}`);
+        return { 
+          found: false, 
+          suggestions: [], 
+          isZeroCost: true,
+          alert: `${ingredientName} é ingrediente básico (custo zero)` 
+        };
+      }
+      
+      // 3. Cache de busca para evitar recálculos
+      if (searchCache.has(nome)) {
+        return searchCache.get(nome);
+      }
+      
+      // 4. Buscar produtos por similaridade
       const scoredProducts = allProducts
         .map(produto => ({
           produto,
@@ -409,28 +481,78 @@ serve(async (req) => {
         .filter(p => p.score > 30)
         .sort((a, b) => b.score - a.score);
       
-      let result = null;
-      if (scoredProducts.length > 0) {
-        const melhorMatch = scoredProducts[0];
+      // 5. Buscar também nos mapeamentos automáticos
+      const mappedTerms = INGREDIENT_MAPPINGS.get(nome.toUpperCase()) || [];
+      for (const mappedTerm of mappedTerms) {
+        const mappedResults = allProducts
+          .map(produto => ({
+            produto,
+            score: calculateSimilarityScore(mappedTerm, produto.descricao || '')
+          }))
+          .filter(p => p.score > 30);
+        
+        scoredProducts.push(...mappedResults);
+      }
+      
+      // Remover duplicatas e re-ordernar
+      const uniqueProducts = Array.from(
+        new Map(scoredProducts.map(p => [p.produto.descricao, p])).values()
+      ).sort((a, b) => b.score - a.score);
+      
+      let result;
+      
+      if (uniqueProducts.length === 0) {
+        console.log(`❌ Nenhum produto encontrado para: ${ingredientName}`);
+        result = {
+          found: false,
+          suggestions: [],
+          alert: `Ingrediente "${ingredientName}" não encontrado no mercado`,
+          searchTerm: nome
+        };
+      } else {
+        const topSuggestions = uniqueProducts.slice(0, 5); // Top 5 sugestões
+        const melhorMatch = topSuggestions[0];
+        
+        console.log(`📋 ${topSuggestions.length} sugestões para "${ingredientName}":`);
+        topSuggestions.forEach((s, i) => {
+          console.log(`  ${i + 1}. ${s.produto.descricao} (score: ${s.score})`);
+        });
         
         if (melhorMatch.score >= 95) {
           // Auto-aprovar matches perfeitos
-          result = melhorMatch.produto;
-        } else if (melhorMatch.score >= 60) {
-          result = melhorMatch.produto;
+          console.log(`✅ Auto-aprovando match perfeito: ${melhorMatch.produto.descricao}`);
+          result = { found: true, product: melhorMatch.produto, autoApproved: true };
+        } else if (melhorMatch.score >= 85 && topSuggestions.length === 1) {
+          // Auto-aprovar se só tem 1 opção com score alto
+          console.log(`✅ Auto-aprovando única opção com score alto: ${melhorMatch.produto.descricao}`);
+          result = { found: true, product: melhorMatch.produto, autoApproved: true };
         } else {
-          // Scores baixos requerem aprovação
+          // Múltiplas sugestões - requer aprovação
           result = {
-            ...melhorMatch.produto,
-            is_suggestion: true,
-            original_search: nome,
-            similarity_score: melhorMatch.score
+            found: false,
+            suggestions: topSuggestions.map(s => ({
+              ...s.produto,
+              similarity_score: s.score,
+              is_suggestion: true
+            })),
+            alert: `"${ingredientName}" requer aprovação - ${topSuggestions.length} opções encontradas`,
+            bestMatch: melhorMatch.produto,
+            searchTerm: nome
           };
         }
       }
       
       searchCache.set(nome, result);
       return result;
+    }
+    
+    /**
+     * Aprova uma sugestão para uso futuro
+     */
+    function approveSuggestion(originalName: string, approvedProduct: any) {
+      const normalizedName = normalizeSearchTerm(originalName);
+      approvedSuggestions.set(normalizedName, approvedProduct);
+      console.log(`✅ Sugestão aprovada: "${originalName}" → "${approvedProduct.descricao}"`);
     }
 
     // Processar produtos do mercado com parsing inteligente
@@ -613,38 +735,58 @@ serve(async (req) => {
           console.log(`[custo] ✓ Encontrado por ID ${ing.produto_base_id}: ${produtoMercado.descricao}`);
         }
         
-        // 2. Se não encontrou por ID, busca por nome
+        // 2. Se não encontrou por ID, busca por nome com sistema inteligente
         if (!produtoMercado) {
           const nomeIngrediente = ing.produto_base_descricao || ing.nome || '';
-          produtoMercado = findProductByName(nomeIngrediente, mercado);
+          const searchResult = findProductByName(nomeIngrediente, mercado);
           
-          if (produtoMercado) {
+          if (searchResult.found) {
+            produtoMercado = searchResult.product;
             console.log(`[custo] ✓ Encontrado por nome: "${nomeIngrediente}" → "${produtoMercado.descricao}"`);
-          }
-        }
-        
-        // Se não encontrou, retornar violação
-        if (!produtoMercado) {
-          console.error(`[VIOLAÇÃO] Ingrediente não encontrado: ${ing.produto_base_descricao || ing.nome} (ID: ${ing.produto_base_id})`);
-          console.log(`[SISTEMA] Retornando custo ZERO - frontend processará violação`);
-          
-          return { 
-            custo: 0, 
-            violacao: {
-              tipo: 'ingrediente_nao_encontrado',
-              ingrediente: ing.produto_base_descricao || ing.nome,
-              produto_base_id: ing.produto_base_id
-            },
-            detalhes: {
-              nome: ing.produto_base_descricao || ing.nome,
-              quantidade_necessaria: Number(ing.quantidade ?? 0),
-              unidade: String(ing.unidade ?? ''),
-              custo_unitario: 0,
-              custo_total: 0,
-              observacao: 'Ingrediente não encontrado no mercado',
-              status: 'not_found'
+          } else if (searchResult.isZeroCost) {
+            // Ingrediente de custo zero automático (água, etc.)
+            console.log(`[custo] 💧 Custo zero automático: ${nomeIngrediente}`);
+            return { 
+              custo: 0, 
+              detalhes: {
+                nome: nomeIngrediente,
+                quantidade_necessaria: Number(ing.quantidade ?? 0),
+                unidade: String(ing.unidade ?? ''),
+                custo_unitario: 0,
+                custo_total: 0,
+                observacao: searchResult.alert || 'Ingrediente básico - custo zero',
+                status: 'zero_cost_automatic'
+              }
+            };
+          } else {
+            // Ingrediente não encontrado - retornar com sugestões
+            console.log(`[custo] ❌ Ingrediente não encontrado: ${nomeIngrediente}`);
+            if (searchResult.suggestions && searchResult.suggestions.length > 0) {
+              console.log(`[custo] 💡 ${searchResult.suggestions.length} sugestões disponíveis`);
             }
-          };
+            
+            return { 
+              custo: 0, 
+              violacao: {
+                tipo: 'ingrediente_nao_encontrado',
+                ingrediente: nomeIngrediente,
+                produto_base_id: ing.produto_base_id,
+                sugestoes: searchResult.suggestions || [],
+                alert: searchResult.alert || `Ingrediente "${nomeIngrediente}" não encontrado`,
+                search_term: searchResult.searchTerm
+              },
+              detalhes: {
+                nome: nomeIngrediente,
+                quantidade_necessaria: Number(ing.quantidade ?? 0),
+                unidade: String(ing.unidade ?? ''),
+                custo_unitario: 0,
+                custo_total: 0,
+                observacao: searchResult.alert || 'Ingrediente não encontrado no mercado',
+                status: 'not_found_with_suggestions',
+                sugestoes_count: searchResult.suggestions?.length || 0
+              }
+            };
+          }
         }
         
         // Calcular custo usando dados do mercado
@@ -979,7 +1121,31 @@ serve(async (req) => {
           }
         }
 
-        return { total, ingredientesDetalhados, violacoes: violacoesReceita };
+        // Contabilizar estatísticas para relatório
+        const totalIngredientes = ingredientesDetalhados.length;
+        const ingredientesEncontrados = ingredientesDetalhados.filter(d => d.status === 'encontrado' || d.produto_encontrado).length;
+        const ingredientesZeroCost = ingredientesDetalhados.filter(d => d.status === 'zero_cost_automatic').length;
+        const ingredientesComSugestoes = ingredientesDetalhados.filter(d => d.status === 'not_found_with_suggestions').length;
+        const ingredientesSemSolucao = ingredientesDetalhados.filter(d => d.status === 'not_found' && d.sugestoes_count === 0).length;
+        
+        console.log(`📊 Estatísticas da receita ${receitaId}:`);
+        console.log(`   Total: ${totalIngredientes} | Encontrados: ${ingredientesEncontrados} | Zero Cost: ${ingredientesZeroCost}`);
+        console.log(`   Com Sugestões: ${ingredientesComSugestoes} | Sem Solução: ${ingredientesSemSolucao}`);
+        console.log(`   Custo Total: R$ ${total.toFixed(2)} | Violações: ${violacoesReceita.length}`);
+
+        return { 
+          total, 
+          ingredientesDetalhados, 
+          violacoes: violacoesReceita,
+          estatisticas: {
+            total_ingredientes: totalIngredientes,
+            ingredientes_encontrados: ingredientesEncontrados,
+            ingredientes_zero_cost: ingredientesZeroCost,
+            ingredientes_com_sugestoes: ingredientesComSugestoes,
+            ingredientes_sem_solucao: ingredientesSemSolucao,
+            taxa_sucesso: Math.round((ingredientesEncontrados / totalIngredientes) * 100)
+          }
+        };
       } catch (e) {
         console.error('[menu] erro costOfRecipe', receitaId, e);
         warnings.push(`Erro no cálculo da receita ${receitaId}: ${e.message}`);
