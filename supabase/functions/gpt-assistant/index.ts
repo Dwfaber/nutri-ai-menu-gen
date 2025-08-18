@@ -152,8 +152,8 @@ serve(async (req) => {
     }
 
     // Validate numDays
-    if (numDays === null || numDays < 5 || numDays > 15) {
-      return bad(400, "numDays deve estar entre 5 e 15");
+    if (numDays === null || numDays < 1 || numDays > 15) {
+      return bad(400, "numDays deve estar entre 1 e 15");
     }
 
     // Validate refeicoesPorDia
@@ -233,9 +233,9 @@ serve(async (req) => {
       candidatesByCat[cat] = (receitas ?? []).filter((r) => f?.(r));
     }
 
-    // Garantir arroz e feijão base (IDs fixos: 580 e 1600)
+    // Garantir arroz e feijão base (IDs fixos: 580 e 1603)
     const arrozBaseId = getArrozBaseId(baseRecipes) || 580;
-    const feijaoBaseId = getFeijaoBaseId(baseRecipes) || 1600;
+    const feijaoBaseId = getFeijaoBaseId(baseRecipes) || 1603;
     
     let arrozReceita = (receitas ?? []).find(r => r.receita_id_legado === arrozBaseId);
     let feijaoReceita = (receitas ?? []).find(r => r.receita_id_legado === feijaoBaseId);
