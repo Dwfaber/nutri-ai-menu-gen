@@ -9,7 +9,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { ChefHat, Calendar, CheckCircle, XCircle, ShoppingCart, DollarSign, Users, Plus } from 'lucide-react';
 import { useIntegratedMenuGeneration } from '@/hooks/useIntegratedMenuGeneration';
 import { useSelectedClient } from '@/contexts/SelectedClientContext';
-import MenuTable from '@/components/MenuTable/MenuTable';
+import WeeklyMenuView from '@/components/MenuGeneration/WeeklyMenuView';
 import { SimpleMenuForm } from '@/components/MenuGeneration/SimpleMenuForm';
 import { ContractFormData } from '@/hooks/useClientContracts';
 import MenuValidationPanel from '@/components/MenuGeneration/MenuValidationPanel';
@@ -237,20 +237,19 @@ const IntegratedMenuGenerator = () => {
               />
             )}
 
-            {/* Menu Table */}
+            {/* Weekly Menu View */}
             {generatedMenu.recipes && generatedMenu.recipes.length > 0 ? (
               <>
-                <MenuTable
+                <WeeklyMenuView
                   title="CARDÁPIO"
-                  weekPeriod={generatedMenu.weekPeriod}
-                  totalCost={generatedMenu.totalCost}
                   recipes={generatedMenu.recipes.map((recipe: any, index) => ({
                     id: recipe.id || `recipe-${index}`,
                     name: recipe.name || 'Receita sem nome',
                     category: recipe.category || 'PP1',
                     day: recipe.day || '',
                     cost: recipe.cost || 0,
-                    servings: recipe.servings || 50
+                    servings: recipe.servings || 50,
+                    ingredients: recipe.ingredients || []
                   }))}
                   onEdit={(recipeId) => console.log('Edit recipe:', recipeId)}
                   onExport={() => console.log('Export menu')}
