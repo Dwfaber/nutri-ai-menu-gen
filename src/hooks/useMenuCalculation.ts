@@ -2,10 +2,15 @@
  * Hook for local menu calculation logic
  */
 
-import { useState, useCallback } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+import { useState } from 'react';
+import { createClient } from '@supabase/supabase-js';
 import { calculateRecipeCost, findProductByName, type IngredientCostDetails } from '@/utils/menuCalculations';
 import { useToast } from '@/hooks/use-toast';
+
+const SUPABASE_URL = "https://wzbhhioegxdpegirglbq.supabase.co";
+const SUPABASE_PUBLISHABLE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind6YmhoaW9lZ3hkcGVnaXJnbGJxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTI1MDA0MDUsImV4cCI6MjA2ODA3NjQwNX0.ufwv_XD8LZ2SGMPYUy7Z-CkK2GRNx8mailJb6ZRZHXQ";
+
+const localSupabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
 
 export interface MenuCalculationProgress {
   stage: 'fetching_products' | 'calculating_costs' | 'processing_recipes' | 'finalizing';
@@ -32,10 +37,10 @@ export function useMenuCalculation() {
     setProgress({ stage, current, total, message });
   };
 
-  const fetchMarketProducts = async () => {
+  const fetchMarketProducts = async (): Promise<any[]> => {
     updateProgress('fetching_products', 0, 1, 'Carregando produtos do mercado...');
     
-    const { data: produtos, error } = await supabase
+    const { data, error } = await localSupabase
       .from('co_solicitacao_produto_listagem')
       .select('*')
       .eq('disponivel_sim_nao', true)
@@ -45,7 +50,7 @@ export function useMenuCalculation() {
       throw new Error(`Erro ao carregar produtos: ${error.message}`);
     }
 
-    return produtos || [];
+    return data || [];
   };
 
   const calculateMenuCosts = async (
@@ -134,7 +139,7 @@ export function useMenuCalculation() {
     }
   };
 
-  const findIngredientProducts = async (ingredientName: string) => {
+  const findIngredientProducts = async (ingredientName: string): Promise<any[]> => {
     try {
       const produtos = await fetchMarketProducts();
       return findProductByName(ingredientName, produtos);
