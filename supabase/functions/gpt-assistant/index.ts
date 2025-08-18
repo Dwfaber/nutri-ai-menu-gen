@@ -724,9 +724,15 @@ serve(async (req) => {
         };
       }
     };
-            }
-          };
-        }
+
+    // Sistema inteligente de cálculo de custo com embalagens reais
+    const calcularCustoIngrediente = (ing: any) => {
+      const resultado = calcularCustoIngredienteDetalhado(ing);
+      return resultado.custo;
+    };
+
+    const calcularCustoIngredienteDetalhado = (ing: any) => {
+      try {
         
         // 1. Tentar encontrar por produto_base_id primeiro
         let produtos = marketByProduto.get(Number(ing.produto_base_id)) ?? [];
