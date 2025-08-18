@@ -34,6 +34,26 @@ export interface GeneratedMenu {
   approvedAt?: string;
   approvedBy?: string;
   rejectedReason?: string;
+  menu?: {
+    days: Array<{
+      dia: string;
+      budget_per_meal: number;
+      custo_por_refeicao: number;
+      custo_total_dia: number;
+      dentro_orcamento: boolean;
+      itens: Array<{
+        slot: string;
+        nome: string;
+        custo_total: number;
+        custo_por_refeicao: number;
+        placeholder?: boolean;
+      }>;
+    }>;
+    total_cost: number;
+    average_cost_per_meal: number;
+    portions_total: number;
+  };
+  warnings?: string[];
 }
 
 export interface MenuRecipe {
@@ -626,7 +646,9 @@ export const useIntegratedMenuGeneration = () => {
         costPerMeal,
         totalRecipes: receitasCardapio.length,
         recipes: receitasCardapio,
-        createdAt: new Date().toISOString()
+        createdAt: new Date().toISOString(),
+        menu: aiMenu, // Incluir dados detalhados do menu da Edge Function
+        warnings: data.warnings || []
       };
 
       // Save to database

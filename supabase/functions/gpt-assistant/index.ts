@@ -274,7 +274,7 @@ serve(async (req) => {
       (ingByReceita.get(key) ?? ingByReceita.set(key, []).get(key))!.push(ing);
     }
 
-    // 4) Preços do mercado (com pacote & inteiro) - NORMALIZAÇÃO ROBUSTA
+    // 4) Sistema inteligente de precificação com embalagens reais
     const produtoIds = Array.from(
       new Set(
         (ingredientes ?? [])
@@ -283,39 +283,148 @@ serve(async (req) => {
       )
     );
     
-    console.log("[menu] produtoIds:", JSON.stringify(produtoIds));
+    console.log("[menu] produtoIds identificados:", produtoIds.length, "únicos");
 
-    let mercado: any[] = [];
-    if (produtoIds.length) {
-      const { data: mercadoRows, error: mercadoErr } = await supabase
-        .from("co_solicitacao_produto_listagem")
-        .select(`
-          produto_base_id,
-          descricao,
-          preco,
-          unidade,
-          apenas_valor_inteiro_sim_nao,
-          produto_base_quantidade_embalagem,
-          em_promocao_sim_nao
-        `)
-        .in("produto_base_id", produtoIds)
-        .gt("preco", 0);
-        
-      if (mercadoErr) {
-        console.error("[menu] erro mercado .in()", mercadoErr);
-        return bad(500, "Erro ao consultar co_solicitacao_produto_listagem", { produtoIds });
+    // Buscar TODOS os produtos, incluindo os sem produto_base_id
+    const { data: mercadoRows, error: mercadoErr } = await supabase
+      .from("co_solicitacao_produto_listagem")
+      .select(`
+        produto_base_id,
+        descricao,
+        preco,
+        unidade,
+        apenas_valor_inteiro_sim_nao,
+        produto_base_quantidade_embalagem,
+        em_promocao_sim_nao
+      `)
+      .gt("preco", 0);
+      
+    if (mercadoErr) {
+      console.error("[menu] erro mercado completo", mercadoErr);
+      return bad(500, "Erro ao consultar co_solicitacao_produto_listagem");
+    }
+
+    // Sistema de parsing de descrição para extrair embalagem
+    function parseProductDescription(desc: string): { tamanho: number | null; unidade: string | null; nome: string } {
+      const texto = (desc || '').toUpperCase().trim();
+      
+      // Padrões para identificar peso/volume
+      const patterns = [
+        /(\d+(?:\.\d+)?)\s*(ML|MILILITRO|MILILITROS)/,
+        /(\d+(?:\.\d+)?)\s*(LT|L|LITRO|LITROS)/,
+        /(\d+(?:\.\d+)?)\s*(GR|G|GRAMAS|GRAMA)/,
+        /(\d+(?:\.\d+)?)\s*(KG|QUILO|QUILOGRAMA)/,
+        /(\d+(?:\.\d+)?)\s*(UN|UNIDADE|UNIDADES)/,
+        /(\d+)\s*X\s*(\d+(?:\.\d+)?)\s*(ML|GR|G)/,  // Ex: 184 X 4ML
+      ];
+      
+      for (const pattern of patterns) {
+        const match = texto.match(pattern);
+        if (match) {
+          if (match[3] && match[2]) {
+            // Padrão X: 184 X 4ML = 736ML total
+            const quantidade = Number(match[1]);
+            const tamanhoUnitario = Number(match[2]);
+            const unidade = match[3];
+            return {
+              tamanho: quantidade * tamanhoUnitario,
+              unidade,
+              nome: texto
+            };
+          } else {
+            return {
+              tamanho: Number(match[1]),
+              unidade: match[2],
+              nome: texto
+            };
+          }
+        }
       }
+      
+      return { tamanho: null, unidade: null, nome: texto };
+    }
 
-      // Sanitiza números e evita NaN
-      mercado = (mercadoRows ?? []).map((r) => ({
-        produto_base_id: Number(r.produto_base_id) || 0,
+    // Sistema de matching inteligente por nome
+    function findProductByName(ingredientName: string, allProducts: any[]): any | null {
+      const nome = (ingredientName || '').toUpperCase().trim();
+      if (!nome) return null;
+      
+      // Palavras-chave do ingrediente
+      const palavras = nome.split(/\s+/).filter(p => p.length > 2);
+      
+      let melhorMatch: { produto: any; score: number } | null = null;
+      
+      for (const produto of allProducts) {
+        const descProduto = (produto.descricao || '').toUpperCase();
+        let score = 0;
+        
+        // Contar quantas palavras do ingrediente aparecem na descrição
+        for (const palavra of palavras) {
+          if (descProduto.includes(palavra)) {
+            score += palavra.length; // Palavras maiores valem mais
+          }
+        }
+        
+        // Bonus para match exato de palavras-chave importantes
+        const keyWords = ['VINAGRE', 'ÓLEO', 'SAL', 'AÇÚCAR', 'FARINHA', 'LEITE'];
+        for (const key of keyWords) {
+          if (nome.includes(key) && descProduto.includes(key)) {
+            score += 20;
+          }
+        }
+        
+        if (score > 0 && (!melhorMatch || score > melhorMatch.score)) {
+          melhorMatch = { produto, score };
+        }
+      }
+      
+      return melhorMatch ? melhorMatch.produto : null;
+    }
+
+    // Processar produtos do mercado com parsing inteligente
+    const mercado: any[] = [];
+    const produtosPorNome = new Map<string, any[]>(); // para fallback por nome
+    
+    for (const r of (mercadoRows ?? [])) {
+      const parsedDesc = parseProductDescription(r.descricao || '');
+      const produtoProcessado = {
+        produto_base_id: Number(r.produto_base_id) || null,
         descricao: r.descricao || '',
-        preco: Number(r.preco) || 0,
+        nome_produto: parsedDesc.nome,
+        preco_centavos: Number(r.preco) || 0,
+        preco_reais: (Number(r.preco) || 0) / 100, // CORREÇÃO: dividir por 100
         unidade: (r.unidade || '').toUpperCase(),
+        embalagem_tamanho: parsedDesc.tamanho || Number(r.produto_base_quantidade_embalagem) || 1,
+        embalagem_unidade: parsedDesc.unidade || r.unidade || 'UN',
         apenas_valor_inteiro_sim_nao: !!r.apenas_valor_inteiro_sim_nao,
-        produto_base_quantidade_embalagem: Number(r.produto_base_quantidade_embalagem) || 1, // fallback 1
         em_promocao_sim_nao: !!r.em_promocao_sim_nao,
-      }));
+      };
+      
+      mercado.push(produtoProcessado);
+      
+      // Indexar por palavras-chave para busca por nome
+      const palavras = parsedDesc.nome.split(/\s+/).filter(p => p.length > 2);
+      for (const palavra of palavras) {
+        if (!produtosPorNome.has(palavra)) {
+          produtosPorNome.set(palavra, []);
+        }
+        produtosPorNome.get(palavra)!.push(produtoProcessado);
+      }
+    }
+
+    console.log(`[menu] Processados ${mercado.length} produtos do mercado`);
+    
+    // Validação básica de preços
+    let precosInvalidos = 0;
+    for (const produto of mercado) {
+      if (produto.preco_reais > 1000) { // R$ 1000 por unidade é suspeito
+        console.warn(`Preço suspeito: ${produto.descricao} = R$ ${produto.preco_reais}`);
+        precosInvalidos++;
+      }
+    }
+    
+    if (precosInvalidos > 0) {
+      warnings.push(`${precosInvalidos} produtos com preços possivelmente incorretos encontrados`);
     }
 
     // Sistema robusto de conversão de unidades
@@ -391,45 +500,120 @@ serve(async (req) => {
       em_promocao_sim_nao: boolean;
     };
 
-    const marketByProduto = new Map<number, MarketRow[]>();
-    for (const row of (mercado ?? []) as MarketRow[]) {
-      const id = Number(row.produto_base_id);
-      if (!marketByProduto.has(id)) marketByProduto.set(id, []);
-      marketByProduto.get(id)!.push(row);
+    // Indexar produtos processados por produto_base_id E por nome
+    const marketByProduto = new Map<number, any[]>();
+    const marketByNome = new Map<string, any[]>();
+    
+    for (const produto of mercado) {
+      // Indexar por produto_base_id quando disponível
+      if (produto.produto_base_id && produto.produto_base_id > 0) {
+        if (!marketByProduto.has(produto.produto_base_id)) {
+          marketByProduto.set(produto.produto_base_id, []);
+        }
+        marketByProduto.get(produto.produto_base_id)!.push(produto);
+      }
+      
+      // Indexar por palavras-chave do nome
+      const palavras = produto.nome_produto.split(/\s+/).filter(p => p.length > 2);
+      for (const palavra of palavras) {
+        if (!marketByNome.has(palavra)) {
+          marketByNome.set(palavra, []);
+        }
+        marketByNome.get(palavra)!.push(produto);
+      }
     }
 
-    // Cálculo do custo por ingrediente com proteção contra erros
+    // Sistema inteligente de cálculo de custo com embalagens reais
     const calcularCustoIngrediente = (ing: any) => {
       try {
-        const ofertas = marketByProduto.get(Number(ing.produto_base_id)) ?? [];
-        if (!ofertas.length) {
-          warnings.push(`Sem preço no mercado para produto_base_id=${ing.produto_base_id} (${ing.produto_base_descricao || 'N/A'})`);
+        // 1. Tentar encontrar por produto_base_id primeiro
+        let produtos = marketByProduto.get(Number(ing.produto_base_id)) ?? [];
+        
+        // 2. Se não encontrar, tentar fallback por nome
+        if (!produtos.length && ing.produto_base_descricao) {
+          const produtoEncontrado = findProductByName(ing.produto_base_descricao, mercado);
+          if (produtoEncontrado) {
+            produtos = [produtoEncontrado];
+            console.log(`[fallback] Ingrediente "${ing.produto_base_descricao}" encontrado como "${produtoEncontrado.descricao}"`);
+          }
+        }
+        
+        if (!produtos.length) {
+          console.warn(`[custo] Ingrediente não encontrado: ${ing.produto_base_descricao} (ID: ${ing.produto_base_id})`);
           return 0;
         }
 
-        const { qty: qtyBase, base: baseIng } = toBaseQty(
-          Number(ing.quantidade ?? 0),
-          String(ing.unidade ?? "")
-        );
-        const necessidade = qtyBase; // Já escalado no ingrediente
-
-        let melhor = Infinity;
-        for (const ofe of ofertas) {
-          const conv = toMercadoBase(necessidade, baseIng, ofe.unidade);
-          if (!conv.ok) continue;
-
-          const emb = ofe.produto_base_quantidade_embalagem > 0 ? ofe.produto_base_quantidade_embalagem : 1;
-          const quantidadeCompra = ofe.apenas_valor_inteiro_sim_nao
-            ? Math.ceil(conv.valor / emb) * emb
-            : conv.valor;
-
-          const custo = quantidadeCompra * ofe.preco;
-          if (custo < melhor) melhor = custo;
+        const quantidadeNecessaria = Number(ing.quantidade ?? 0);
+        const unidadeNecessaria = String(ing.unidade ?? "").toUpperCase();
+        
+        if (quantidadeNecessaria <= 0) {
+          console.warn(`[custo] Quantidade inválida: ${quantidadeNecessaria} ${unidadeNecessaria}`);
+          return 0;
         }
 
-        return Number.isFinite(melhor) ? melhor : 0;
+        // Encontrar melhor oferta baseada em embalagem real
+        let melhorCusto = Infinity;
+        let melhorDetalhes = null;
+        
+        for (const produto of produtos) {
+          try {
+            // Converter quantidade necessária para a unidade da embalagem
+            const conversao = toMercadoBase(quantidadeNecessaria, unidadeNecessaria, produto.embalagem_unidade);
+            if (!conversao.ok) {
+              console.warn(`[custo] Conversão falhou: ${quantidadeNecessaria} ${unidadeNecessaria} → ${produto.embalagem_unidade}`);
+              continue;
+            }
+            
+            const necessidadeNaUnidadeProduto = conversao.valor;
+            const tamanhoEmbalagem = produto.embalagem_tamanho;
+            
+            // Calcular quantas embalagens precisamos comprar
+            let embalagensNecessarias: number;
+            
+            if (produto.apenas_valor_inteiro_sim_nao) {
+              // Só pode comprar embalagens inteiras
+              embalagensNecessarias = Math.ceil(necessidadeNaUnidadeProduto / tamanhoEmbalagem);
+            } else {
+              // Pode comprar frações (ex: comprar 1.5kg de um produto vendido por kg)
+              embalagensNecessarias = necessidadeNaUnidadeProduto / tamanhoEmbalagem;
+            }
+            
+            // Custo total = número de embalagens × preço por embalagem
+            const custoTotal = embalagensNecessarias * produto.preco_reais;
+            
+            // Bonus para produtos em promoção (reduzir custo efetivo)
+            const custoEfetivo = produto.em_promocao_sim_nao ? custoTotal * 0.9 : custoTotal;
+            
+            const detalhes = {
+              produto: produto.descricao,
+              necessidade: `${quantidadeNecessaria} ${unidadeNecessaria}`,
+              conversao: conversao.conversao,
+              embalagem: `${tamanhoEmbalagem} ${produto.embalagem_unidade}`,
+              embalagens_necessarias: embalagensNecessarias,
+              preco_embalagem: produto.preco_reais,
+              custo_total: custoTotal,
+              promocao: produto.em_promocao_sim_nao
+            };
+            
+            if (custoEfetivo < melhorCusto) {
+              melhorCusto = custoEfetivo;
+              melhorDetalhes = detalhes;
+            }
+            
+          } catch (e) {
+            console.error(`[custo] Erro processando produto ${produto.descricao}:`, e);
+          }
+        }
+        
+        if (melhorDetalhes && Number.isFinite(melhorCusto)) {
+          // Log detalhado para auditoria
+          console.log(`[custo] ${ing.produto_base_descricao}: ${melhorDetalhes.necessidade} → ${melhorDetalhes.embalagem} × ${melhorDetalhes.embalagens_necessarias.toFixed(2)} = R$ ${melhorCusto.toFixed(2)}${melhorDetalhes.promocao ? ' (PROMOÇÃO)' : ''}`);
+          return melhorCusto;
+        }
+        
+        return 0;
       } catch (e) {
-        console.error('[menu] erro calcularCustoIngrediente', ing, e);
+        console.error('[custo] erro calcularCustoIngrediente', ing, e);
         warnings.push(`Falha no cálculo de custo para ${ing.produto_base_descricao || ing.produto_base_id}`);
         return 0;
       }
