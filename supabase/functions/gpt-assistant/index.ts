@@ -139,10 +139,9 @@ serve(async (req) => {
     const useDiaEspecial = body?.useDiaEspecial === true;
     const baseRecipes = body?.baseRecipes || {};
 
-    console.log("[menu] payload", { action, filialIdLegado, numDays, refeicoesPorDia, useDiaEspecial });
-
     // Validate action
     if (!action || !["generate_menu", "generate-menu", "generateMenu"].includes(action)) {
+      console.error("[ERRO] Ação inválida:", action);
       return bad(400, "action deve ser 'generate_menu', 'generate-menu' ou 'generateMenu'");
     }
 
@@ -170,11 +169,12 @@ serve(async (req) => {
       .limit(1);
 
     if (custosErr) {
-      console.error("[custos_filiais]", custosErr);
+      console.error("[ERRO] Custos não encontrados para filial", filialIdLegado, custosErr.message);
       return bad(500, "Erro ao consultar custos_filiais");
     }
 
     if (!custos?.length) {
+      console.error("[ERRO] Nenhum custo configurado para filial", filialIdLegado);
       return bad(400, `Nenhum custo encontrado para filial_id ${filialIdLegado}`);
     }
 
@@ -237,20 +237,17 @@ serve(async (req) => {
     const arrozBaseId = getArrozBaseId(baseRecipes) || 580;
     const feijaoBaseId = getFeijaoBaseId(baseRecipes) || 1603;
     
-    console.log(`[receitas-base] Procurando arroz ID: ${arrozBaseId}, feijão ID: ${feijaoBaseId}`);
-    
     // CORREÇÃO: Converter IDs para string na comparação
     let arrozReceita = (receitas ?? []).find(r => r.receita_id_legado === String(arrozBaseId));
     let feijaoReceita = (receitas ?? []).find(r => r.receita_id_legado === String(feijaoBaseId));
     
-    console.log(`[receitas-base] Arroz encontrado: ${arrozReceita ? 'SIM' : 'NÃO'} (${arrozReceita?.nome || 'N/A'})`);
-    console.log(`[receitas-base] Feijão encontrado: ${feijaoReceita ? 'SIM' : 'NÃO'} (${feijaoReceita?.nome || 'N/A'})`);
-    
     const warnings = [];
     if (!arrozReceita) {
+      console.warn("[AVISO] Receita de arroz base não encontrada, ID:", arrozBaseId);
       warnings.push(`Receita de arroz ID ${arrozBaseId} não encontrada`);
     }
     if (!feijaoReceita) {
+      console.warn("[AVISO] Receita de feijão base não encontrada, ID:", feijaoBaseId);
       warnings.push(`Receita de feijão ID ${feijaoBaseId} não encontrada`);
     }
 
@@ -278,10 +275,6 @@ serve(async (req) => {
     // CORREÇÃO: Garantir que todas as chaves do mapa sejam strings
     for (const ing of ingredientes ?? []) {
       const key = String(ing.receita_id_legado);
-      // Reduzir logs excessivos - apenas para receitas problemáticas
-      if ((ingByReceita.get(key) || []).length === 0) {
-        console.log(`[ingredientes] Primeira indexação da receita ${key}`);
-      }
       (ingByReceita.get(key) ?? ingByReceita.set(key, []).get(key))!.push(ing);
     }
 
@@ -294,7 +287,7 @@ serve(async (req) => {
       )
     );
     
-    console.log("[menu] produtoIds identificados:", produtoIds.length, "únicos");
+    // Carregamento completo do mercado para busca inteligente
 
     // Buscar TODOS os produtos, incluindo os sem produto_base_id
     const { data: mercadoRows, error: mercadoErr } = await supabase
@@ -310,8 +303,8 @@ serve(async (req) => {
       `)
       .gt("preco", 0);
       
-    if (mercadoErr) {
-      console.error("[menu] erro mercado completo", mercadoErr);
+      if (mercadoErr) {
+      console.error("[ERRO] Falha ao carregar produtos do mercado:", mercadoErr.message);
       return bad(500, "Erro ao consultar co_solicitacao_produto_listagem");
     }
 
@@ -398,44 +391,46 @@ serve(async (req) => {
       return Math.floor((commonWords.length / searchWords.length) * 60);
     }
 
-    // Sistema de matching inteligente por nome com normalização
+    // Sistema de busca inteligente otimizado com cache
+    const searchCache = new Map<string, any>();
+    
     function findProductByName(ingredientName: string, allProducts: any[]): any | null {
       const nome = (ingredientName || '').trim();
       if (!nome) return null;
       
-      console.log(`[busca-inteligente] Procurando: "${nome}"`);
+      // Cache de busca para evitar recálculos
+      if (searchCache.has(nome)) return searchCache.get(nome);
       
-      // Calcula scores para todos os produtos
       const scoredProducts = allProducts
         .map(produto => ({
           produto,
           score: calculateSimilarityScore(nome, produto.descricao || '')
         }))
-        .filter(p => p.score > 30) // Só considera produtos com score mínimo
+        .filter(p => p.score > 30)
         .sort((a, b) => b.score - a.score);
       
+      let result = null;
       if (scoredProducts.length > 0) {
         const melhorMatch = scoredProducts[0];
-        console.log(`[busca-inteligente] Melhor match (score ${melhorMatch.score}): "${melhorMatch.produto.descricao}"`);
         
-        // Se score é alto (>= 60), considera um match válido
-        if (melhorMatch.score >= 60) {
-          console.log(`[busca-inteligente] ✅ Auto-aprovado por score alto`);
-          return melhorMatch.produto;
+        if (melhorMatch.score >= 95) {
+          // Auto-aprovar matches perfeitos
+          result = melhorMatch.produto;
+        } else if (melhorMatch.score >= 60) {
+          result = melhorMatch.produto;
+        } else {
+          // Scores baixos requerem aprovação
+          result = {
+            ...melhorMatch.produto,
+            is_suggestion: true,
+            original_search: nome,
+            similarity_score: melhorMatch.score
+          };
         }
-        
-        // Se score é moderado (30-59), marca como sugestão
-        console.log(`[busca-inteligente] ⚠️ Sugestão requer aprovação manual`);
-        return {
-          ...melhorMatch.produto,
-          is_suggestion: true,
-          original_search: nome,
-          similarity_score: melhorMatch.score
-        };
       }
       
-      console.log(`[busca-inteligente] ❌ Nenhuma sugestão encontrada`);
-      return null;
+      searchCache.set(nome, result);
+      return result;
     }
 
     // Processar produtos do mercado com parsing inteligente

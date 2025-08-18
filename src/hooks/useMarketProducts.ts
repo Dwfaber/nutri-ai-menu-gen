@@ -138,13 +138,14 @@ export const useMarketProducts = () => {
       )].sort();
       setCategories(uniqueCategories);
 
-      console.log(`Loaded ${productsData.length} market products`);
+      // Sistema carregado com sucesso
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Erro ao carregar produtos do mercado';
+      console.error('[ERRO] Falha no carregamento de produtos:', errorMessage);
       setError(errorMessage);
       toast({
-        title: "Erro ao Carregar Produtos",
-        description: errorMessage,
+        title: "Erro Crítico",
+        description: "Falha ao carregar dados do mercado",
         variant: "destructive"
       });
     } finally {

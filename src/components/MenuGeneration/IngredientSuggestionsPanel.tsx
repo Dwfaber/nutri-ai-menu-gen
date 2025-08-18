@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { CheckCircle, AlertTriangle, ArrowRight, X } from 'lucide-react';
+import { CheckCircle, AlertTriangle, ArrowRight, X, TrendingUp } from 'lucide-react';
 import { isProductSuggestion, type ProductSuggestionViolation } from '@/utils/ingredientSuggestions';
+import { cacheApprovedSuggestion, recordRejectedSuggestion, getSuggestionStats } from '@/utils/systemOptimization';
 
 interface IngredientSuggestionsPanelProps {
   violations: any[];
@@ -23,22 +24,29 @@ export const IngredientSuggestionsPanel: React.FC<IngredientSuggestionsPanelProp
 }) => {
   const [processingItems, setProcessingItems] = useState<Set<string>>(new Set());
 
-  // Filtra apenas violações que são sugestões de produtos
-  const productSuggestions = violations.filter(isProductSuggestion) as ProductSuggestionViolation[];
+  // Filtra e otimiza sugestões
+  const productSuggestions = useMemo(() => {
+    return violations.filter(isProductSuggestion) as ProductSuggestionViolation[];
+  }, [violations]);
+  
+  const suggestionStats = useMemo(() => getSuggestionStats(), [productSuggestions]);
 
   const handleApprove = async (suggestion: ProductSuggestionViolation) => {
     const key = suggestion.originalIngredient;
     setProcessingItems(prev => new Set([...prev, key]));
     
     try {
-      await onApproveSuggestion(suggestion.originalIngredient, {
+      const approvedProduct = {
         descricao: suggestion.suggestedProduct,
         preco: suggestion.price,
         unidade: suggestion.unit,
         similarity_score: suggestion.score
-      });
+      };
+      
+      await onApproveSuggestion(suggestion.originalIngredient, approvedProduct);
+      cacheApprovedSuggestion(suggestion.originalIngredient, approvedProduct);
     } catch (error) {
-      console.error('Erro ao aprovar sugestão:', error);
+      console.error('[ERRO] Falha na aprovação:', error);
     } finally {
       setProcessingItems(prev => {
         const next = new Set(prev);
@@ -54,8 +62,9 @@ export const IngredientSuggestionsPanel: React.FC<IngredientSuggestionsPanelProp
     
     try {
       await onRejectSuggestion(suggestion.originalIngredient);
+      recordRejectedSuggestion(suggestion.originalIngredient);
     } catch (error) {
-      console.error('Erro ao rejeitar sugestão:', error);
+      console.error('[ERRO] Falha na rejeição:', error);
     } finally {
       setProcessingItems(prev => {
         const next = new Set(prev);
@@ -83,15 +92,24 @@ export const IngredientSuggestionsPanel: React.FC<IngredientSuggestionsPanelProp
   return (
     <Card className="border-accent/20">
       <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <AlertTriangle className="h-5 w-5 text-amber-500" />
-          Sugestões de Produtos ({productSuggestions.length})
+        <CardTitle className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="h-5 w-5 text-amber-500" />
+            Sugestões Inteligentes ({productSuggestions.length})
+          </div>
+          {suggestionStats.totalSuggestions > 0 && (
+            <Badge variant="outline" className="flex items-center gap-1">
+              <TrendingUp className="h-3 w-3" />
+              {suggestionStats.approvalRate.toFixed(0)}% aprovação
+            </Badge>
+          )}
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
         <Alert>
           <AlertDescription>
-            Alguns ingredientes não foram encontrados exatamente. Revise as sugestões abaixo e aprove as que considera adequadas.
+            Sistema de busca inteligente encontrou {productSuggestions.length} sugestão(ões). 
+            Produtos com score ≥80% são recomendados para aprovação automática.
           </AlertDescription>
         </Alert>
 
@@ -169,7 +187,12 @@ export const IngredientSuggestionsPanel: React.FC<IngredientSuggestionsPanelProp
                 </div>
               </div>
 
-              {suggestion.score >= 80 && !isApproved && (
+              {suggestion.score >= 95 && !isApproved && (
+                <div className="text-xs text-green-600 font-medium">
+                  🎯 Match perfeito - aprovação recomendada
+                </div>
+              )}
+              {suggestion.score >= 80 && suggestion.score < 95 && !isApproved && (
                 <div className="text-xs text-green-600 font-medium">
                   💡 Alta similaridade - recomendado aprovar
                 </div>
@@ -179,11 +202,15 @@ export const IngredientSuggestionsPanel: React.FC<IngredientSuggestionsPanelProp
         })}
 
         {Object.keys(approvedSuggestions).length > 0 && (
-          <div className="pt-2 border-t">
+          <div className="pt-2 border-t space-y-2">
             <div className="text-sm text-muted-foreground">
-              {Object.keys(approvedSuggestions).length} sugestão(ões) aprovada(s). 
-              A lista de compras será gerada com os produtos aprovados.
+              ✅ {Object.keys(approvedSuggestions).length} sugestão(ões) aprovada(s)
             </div>
+            {suggestionStats.totalSuggestions > 5 && (
+              <div className="text-xs text-muted-foreground">
+                Eficácia do sistema: {suggestionStats.approvalRate.toFixed(1)}% de aprovação
+              </div>
+            )}
           </div>
         )}
       </CardContent>

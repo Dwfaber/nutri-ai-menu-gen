@@ -36,30 +36,36 @@ export const useIngredientManagement = () => {
     { id: 191, name: 'LEITE EM PÓ SEM AÇÚCAR', type: 'substitution', substituteName: 'LEITE EM PÓ', substituteId: 502 }
   ];
 
-  // Buscar substituição por similaridade
+  // Sistema de busca inteligente otimizado
   const findIngredientSubstitute = async (ingredientName: string, marketIngredients: any[]): Promise<any | null> => {
-    const name = ingredientName.toLowerCase();
+    const name = ingredientName.toLowerCase().trim();
+    if (!name) return null;
     
-    // Primeiro: busca exata por palavras-chave
-    const exactMatches = marketIngredients.filter(ing => {
-      const marketName = ing.descricao.toLowerCase();
-      return name.includes(marketName.split(' ')[0]) || marketName.includes(name.split(' ')[0]);
-    });
+    // Normalização para busca mais eficaz
+    const normalizedName = name
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/\b\d+\s*(gr?s?|kgs?|ml|l)\b/gi, '');
     
-    if (exactMatches.length > 0) {
-      return exactMatches[0]; // Retorna o primeiro match
-    }
+    // Busca otimizada com scores
+    const candidates = marketIngredients.map(ing => {
+      const ingName = (ing.descricao || '').toLowerCase();
+      const normalizedIng = ingName.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+      
+      let score = 0;
+      if (normalizedIng.includes(normalizedName)) score += 80;
+      
+      const nameWords = normalizedName.split(' ').filter(w => w.length > 2);
+      const ingWords = normalizedIng.split(' ').filter(w => w.length > 2);
+      const commonWords = nameWords.filter(w => ingWords.some(iw => iw.includes(w)));
+      
+      score += (commonWords.length / nameWords.length) * 50;
+      
+      return { ingredient: ing, score };
+    }).filter(c => c.score > 30)
+      .sort((a, b) => b.score - a.score);
     
-    // Segundo: busca por categoria similar
-    const categoryMatches = marketIngredients.filter(ing => {
-      const category = ing.categoria_descricao?.toLowerCase() || '';
-      if (name.includes('carne')) return category.includes('carne') || category.includes('proteína');
-      if (name.includes('verdura')) return category.includes('verdura') || category.includes('vegetal');
-      if (name.includes('tempero')) return category.includes('tempero') || category.includes('condimento');
-      return false;
-    });
-    
-    return categoryMatches.length > 0 ? categoryMatches[0] : null;
+    return candidates.length > 0 ? candidates[0].ingredient : null;
   };
 
   // Calcular custo com sistema de substituições
