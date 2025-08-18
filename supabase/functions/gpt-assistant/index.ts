@@ -697,7 +697,7 @@ serve(async (req) => {
       }
       
       // Indexar por palavras-chave do nome
-      const palavras = produto.nome_produto.split(/\s+/).filter(p => p.length > 2);
+      const palavras = (produto.descricao || '').split(/\s+/).filter(p => p.length > 2);
       for (const palavra of palavras) {
         if (!marketByNome.has(palavra)) {
           marketByNome.set(palavra, []);
