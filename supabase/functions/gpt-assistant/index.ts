@@ -876,38 +876,6 @@ serve(async (req) => {
       }
     };
 
-    // [REMOVIDO] Declaração duplicada - função já declarada na linha 701
-            produtos = [produtoEncontrado];
-            console.log(`[fallback] Ingrediente "${ing.produto_base_descricao}" encontrado como "${produtoEncontrado.descricao}"`);
-          }
-        }
-        
-        const detalhesBase = {
-          nome: ing.produto_base_descricao || ing.nome || 'Ingrediente desconhecido',
-          quantidade_necessaria: Number(ing.quantidade ?? 0),
-          unidade: String(ing.unidade ?? ''),
-          preco_embalagem: 0,
-          tamanho_embalagem: 0,
-          custo_unitario: 0,
-          custo_total: 0,
-          custo_por_refeicao: 0,
-            }
-            
-            const necessidadeNaUnidadeProduto = conversao.valor;
-            const tamanhoEmbalagem = produto.embalagem_tamanho;
-            
-            // Calcular quantas embalagens precisamos comprar
-            let embalagensNecessarias: number;
-            
-            if (produto.apenas_valor_inteiro_sim_nao) {
-              // Só pode comprar embalagens inteiras
-              embalagensNecessarias = Math.ceil(necessidadeNaUnidadeProduto / tamanhoEmbalagem);
-            } else {
-              // Pode comprar frações (ex: comprar 1.5kg de um produto vendido por kg)
-              embalagensNecessarias = necessidadeNaUnidadeProduto / tamanhoEmbalagem;
-            }
-            
-            // Custo total = número de embalagens × preço por embalagem
             const custoTotal = embalagensNecessarias * produto.preco_reais;
             
             // Bonus para produtos em promoção (reduzir custo efetivo)
