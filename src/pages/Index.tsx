@@ -1,12 +1,14 @@
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { ChefHat, ShoppingCart, BarChart3, Settings } from 'lucide-react';
+import { ChefHat, ShoppingCart, BarChart3, Settings, TestTube } from 'lucide-react';
+import { TestMenuGenerator } from '@/components/MenuGeneration/TestMenuGenerator';
 
 const Index = () => {
   const navigate = useNavigate();
+  const [showTestGenerator, setShowTestGenerator] = useState(false);
 
   // Redirect to dashboard after a brief moment to show the landing page
   useEffect(() => {
@@ -78,11 +80,28 @@ const Index = () => {
           </Card>
         </div>
 
-        <div className="text-center">
-          <Button onClick={() => navigate('/')} size="lg" className="px-8">
-            Acessar Sistema
-          </Button>
+        <div className="text-center space-y-4">
+          <div className="flex gap-4 justify-center">
+            <Button onClick={() => navigate('/')} size="lg" className="px-8">
+              Acessar Sistema
+            </Button>
+            <Button 
+              onClick={() => setShowTestGenerator(!showTestGenerator)} 
+              variant="outline" 
+              size="lg" 
+              className="px-8 flex items-center gap-2"
+            >
+              <TestTube className="w-4 h-4" />
+              {showTestGenerator ? 'Ocultar' : 'Testar'} Geração de Cardápio
+            </Button>
+          </div>
         </div>
+        
+        {showTestGenerator && (
+          <div className="mt-8">
+            <TestMenuGenerator />
+          </div>
+        )}
       </div>
     </div>
   );
