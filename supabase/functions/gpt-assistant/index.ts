@@ -128,6 +128,15 @@ function packSizeToBase(qty: number | null | undefined, base: "KG" | "LT" | "UN"
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
+  // Health check endpoint
+  if (req.method === "GET") {
+    return json({ 
+      status: "healthy", 
+      timestamp: new Date().toISOString(),
+      version: "2.0"
+    });
+  }
+
   try {
     const supabase = createClient(SUPABASE_URL, SERVICE_ROLE);
 
@@ -867,22 +876,7 @@ serve(async (req) => {
       }
     };
 
-    // Sistema inteligente de cálculo de custo com embalagens reais
-    const calcularCustoIngrediente = (ing: any) => {
-      const resultado = calcularCustoIngredienteDetalhado(ing);
-      return resultado.custo;
-    };
-
-    const calcularCustoIngredienteDetalhado = (ing: any) => {
-      try {
-        
-        // 1. Tentar encontrar por produto_base_id primeiro
-        let produtos = marketByProduto.get(Number(ing.produto_base_id)) ?? [];
-        
-        // 2. Se não encontrar, tentar fallback por nome
-        if (!produtos.length && ing.produto_base_descricao) {
-          const produtoEncontrado = findProductByName(ing.produto_base_descricao, mercado);
-          if (produtoEncontrado) {
+    // [REMOVIDO] Declaração duplicada - função já declarada na linha 701
             produtos = [produtoEncontrado];
             console.log(`[fallback] Ingrediente "${ing.produto_base_descricao}" encontrado como "${produtoEncontrado.descricao}"`);
           }
@@ -897,52 +891,6 @@ serve(async (req) => {
           custo_unitario: 0,
           custo_total: 0,
           custo_por_refeicao: 0,
-          pode_fracionado: true,
-          eficiencia_uso: 0,
-          produto_encontrado: produtos.length > 0,
-          descricao_produto: '',
-          promocao: false
-        };
-        
-        if (!produtos.length) {
-          console.warn(`[VIOLAÇÃO] Ingrediente não encontrado: ${ing.produto_base_descricao} (ID: ${ing.produto_base_id})`);
-          console.log(`[SISTEMA] Retornando custo ZERO - frontend processará violação`);
-          
-          // CORREÇÃO DEFINITIVA: Retornar custo ZERO e registrar violação
-          // O useIngredientManagement processará esta violação no frontend
-          return { 
-            custo: 0, 
-            detalhes: {
-              ...detalhesBase,
-              custo_total: 0,
-              custo_por_refeicao: 0,
-              observacao: 'VIOLAÇÃO: Produto não encontrado no mercado - será processado pelo sistema de violações',
-              violacao: true,
-              tipo_violacao: 'ingrediente_faltante'
-            }
-          };
-        }
-
-        const quantidadeNecessaria = Number(ing.quantidade ?? 0);
-        const unidadeNecessaria = String(ing.unidade ?? "").toUpperCase();
-        
-        if (quantidadeNecessaria <= 0) {
-          console.warn(`[custo] Quantidade inválida: ${quantidadeNecessaria} ${unidadeNecessaria}`);
-          return { custo: 0, detalhes: detalhesBase };
-        }
-
-        // Encontrar melhor oferta baseada em embalagem real
-        let melhorCusto = Infinity;
-        let melhorProduto = null;
-        let melhorDetalhes = null;
-        
-        for (const produto of produtos) {
-          try {
-            // Converter quantidade necessária para a unidade da embalagem
-            const conversao = toMercadoBase(quantidadeNecessaria, unidadeNecessaria, produto.embalagem_unidade);
-            if (!conversao.ok) {
-              console.warn(`[custo] Conversão falhou: ${quantidadeNecessaria} ${unidadeNecessaria} → ${produto.embalagem_unidade}`);
-              continue;
             }
             
             const necessidadeNaUnidadeProduto = conversao.valor;
@@ -988,37 +936,6 @@ serve(async (req) => {
             console.error(`[custo] Erro processando produto ${produto.descricao}:`, e);
           }
         }
-        
-        if (melhorDetalhes && Number.isFinite(melhorCusto) && melhorProduto) {
-          // Log detalhado para auditoria
-          console.log(`[custo] ${ing.produto_base_descricao}: ${melhorDetalhes.necessidade} → ${melhorDetalhes.embalagem} × ${melhorDetalhes.embalagens_necessarias.toFixed(2)} = R$ ${melhorCusto.toFixed(2)}${melhorDetalhes.promocao ? ' (PROMOÇÃO)' : ''}`);
-          
-          const detalhesCompletos = {
-            nome: ing.produto_base_descricao || ing.nome || 'Ingrediente desconhecido',
-            quantidade_necessaria: quantidadeNecessaria,
-            unidade: ing.unidade || '',
-            preco_embalagem: melhorProduto.preco_reais,
-            tamanho_embalagem: melhorProduto.embalagem_tamanho,
-            custo_unitario: melhorProduto.preco_reais / melhorProduto.embalagem_tamanho,
-            custo_total: melhorCusto,
-            custo_por_refeicao: melhorCusto,
-            pode_fracionado: !melhorProduto.apenas_valor_inteiro_sim_nao,
-            eficiencia_uso: melhorDetalhes.eficiencia_uso,
-            produto_encontrado: true,
-            descricao_produto: melhorProduto.descricao,
-            promocao: melhorProduto.em_promocao_sim_nao
-          };
-          
-          return { custo: melhorCusto, detalhes: detalhesCompletos };
-        }
-        
-        return { custo: 0, detalhes: detalhesBase };
-      } catch (e) {
-        console.error('[custo] erro calcularCustoIngredienteDetalhado', ing, e);
-        warnings.push(`Falha no cálculo de custo para ${ing.produto_base_descricao || ing.produto_base_id}`);
-        return { custo: 0, detalhes: detalhesBase };
-      }
-    };
 
     // Sistema corrigido de escalonamento de receitas
     function calculateScalingFactor(targetServings: number, recipeIngredients: any[]): number {
