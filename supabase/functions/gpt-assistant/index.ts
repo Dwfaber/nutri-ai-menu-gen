@@ -531,6 +531,25 @@ serve(async (req) => {
 
     const calcularCustoIngredienteDetalhado = (ing: any) => {
       try {
+        console.log(`\n[custo] Calculando ingrediente: ${ing.produto_base_descricao || ing.nome} (ID: ${ing.produto_base_id})`);
+        console.log(`[custo] Quantidade necessária: ${ing.quantidade} ${ing.unidade}`);
+        
+        // Tratamento especial para água (ID 17) - custo zero
+        if (Number(ing.produto_base_id) === 17) {
+          console.log(`[custo] ÁGUA detectada - aplicando custo zero`);
+          return { 
+            custo: 0, 
+            detalhes: {
+              nome: 'ÁGUA',
+              quantidade_necessaria: Number(ing.quantidade ?? 0),
+              unidade: String(ing.unidade ?? ''),
+              custo_unitario: 0,
+              custo_total: 0,
+              observacao: 'Ingrediente básico - custo zero'
+            }
+          };
+        }
+        
         // 1. Tentar encontrar por produto_base_id primeiro
         let produtos = marketByProduto.get(Number(ing.produto_base_id)) ?? [];
         
@@ -560,8 +579,15 @@ serve(async (req) => {
         };
         
         if (!produtos.length) {
-          console.warn(`[custo] Ingrediente não encontrado: ${ing.produto_base_descricao} (ID: ${ing.produto_base_id})`);
-          return { custo: 0, detalhes: detalhesBase };
+          console.error(`[custo] Ingrediente não encontrado: ${ing.produto_base_descricao} (ID: ${ing.produto_base_id})`);
+          console.log(`[custo] Aplicando fallback - custo zero para ingrediente ausente`);
+          return { 
+            custo: 0, 
+            detalhes: {
+              ...detalhesBase,
+              observacao: 'Produto não encontrado no mercado - custo estimado como zero'
+            }
+          };
         }
 
         const quantidadeNecessaria = Number(ing.quantidade ?? 0);
@@ -747,9 +773,12 @@ serve(async (req) => {
           total += resultado.custo;
           ingredientesDetalhados.push(resultado.detalhes);
           
-          // Log para auditoria
-          if (resultado.custo > 0) {
-            console.log(`Ingrediente ${ing.nome}: ${ing.quantidade_original} * ${ing.fator_escalonamento} = ${ing.quantidade} ${ing.unidade} = R$ ${resultado.custo.toFixed(2)}`);
+          // Log detalhado para auditoria
+          console.log(`Ingrediente ${ing.nome}: ${ing.quantidade_original} * ${ing.fator_escalonamento} = ${ing.quantidade} ${ing.unidade} = R$ ${resultado.custo.toFixed(2)}`);
+          
+          // Log adicional dos detalhes se disponível
+          if (resultado.detalhes && typeof resultado.detalhes === 'object') {
+            console.log(`[detalhes] ${JSON.stringify(resultado.detalhes)}`);
           }
         }
 
@@ -1177,6 +1206,17 @@ serve(async (req) => {
 
     const totalPorcoes = refeicoesPorDia * numDays;
     const custoMedioPorPorcao = totalGeral / Math.max(totalPorcoes, 1);
+    const orcamentoTotal = days.reduce((sum, day) => sum + (day.budget_per_meal * refeicoesPorDia), 0);
+
+    console.log(`\n=== RESUMO FINAL DA GERAÇÃO ===`);
+    console.log(`Total de dias gerados: ${days.length}`);
+    console.log(`Custo total do menu: R$ ${round2(totalGeral)}`);
+    console.log(`Orçamento disponível: R$ ${round2(orcamentoTotal)}`);
+    console.log(`${totalGeral <= orcamentoTotal ? '✅ DENTRO DO ORÇAMENTO' : '❌ ACIMA DO ORÇAMENTO'}`);
+    console.log(`Economia obtida: R$ ${round2(orcamentoTotal - totalGeral)}`);
+    console.log(`Percentual usado: ${round2((totalGeral / orcamentoTotal) * 100)}%`);
+    console.log(`Custo médio por refeição: R$ ${round2(custoMedioPorPorcao)}`);
+    console.log(`===============================\n`);
 
     // Gerar shopping list básico
     const shoppingList: any[] = [];
