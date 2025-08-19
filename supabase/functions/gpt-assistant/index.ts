@@ -124,10 +124,6 @@ function packSizeToBase(qty: number | null | undefined, base: "KG" | "LT" | "UN"
   return v;
 }
 
-function like(str: string, keywords: string[]): boolean {
-  const s = (str ?? "").toLowerCase();
-  return keywords.some((k) => s.includes(k.toLowerCase()));
-}
 
 // FUNÇÃO DE FALLBACK DE EMERGÊNCIA
 function createEmergencyFallbackMenu(numDays: number, refeicoesPorDia: number, custos: any) {
