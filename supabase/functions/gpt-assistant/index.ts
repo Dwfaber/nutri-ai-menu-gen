@@ -279,10 +279,7 @@ serve(async (req) => {
         produto_base_descricao, 
         quantidade, 
         unidade, 
-        quantidade_refeicoes,
-        produtos_base:produto_base_id (
-          descricao
-        )
+        quantidade_refeicoes
       `)
       .in("receita_id_legado", candidateIds);
 
@@ -295,13 +292,6 @@ serve(async (req) => {
     // CORREÇÃO: Garantir que todas as chaves do mapa sejam strings e melhorar nomes
     for (const ing of ingredientes ?? []) {
       const key = String(ing.receita_id_legado);
-      
-      // MELHORADO: Usar produtos_base.descricao como fallback
-      if (!ing.produto_base_descricao && ing.produtos_base?.descricao) {
-        ing.produto_base_descricao = ing.produtos_base.descricao;
-        console.log(`[ingredientes] Fallback aplicado para produto_base_id ${ing.produto_base_id}: ${ing.produtos_base.descricao}`);
-      }
-      
       (ingByReceita.get(key) ?? ingByReceita.set(key, []).get(key))!.push(ing);
     }
 
