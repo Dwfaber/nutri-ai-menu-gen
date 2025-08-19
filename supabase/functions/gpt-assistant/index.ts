@@ -124,6 +124,101 @@ function packSizeToBase(qty: number | null | undefined, base: "KG" | "LT" | "UN"
   return v;
 }
 
+function like(str: string, keywords: string[]): boolean {
+  const s = (str ?? "").toLowerCase();
+  return keywords.some((k) => s.includes(k.toLowerCase()));
+}
+
+// FUNÇÃO DE FALLBACK DE EMERGÊNCIA
+function createEmergencyFallbackMenu(numDays: number, refeicoesPorDia: number, custos: any) {
+  console.log(`[EMERGENCY] Criando menu de emergência para ${numDays} dias`);
+  
+  function dayLabelByIndex(idx: number): string {
+    const days = ["SEGUNDA", "TERÇA", "QUARTA", "QUINTA", "SEXTA", "SÁBADO", "DOMINGO"];
+    return days[idx % 7];
+  }
+  
+  function getBudgetLabel(dayIdx: number, useDiaEspecial: boolean): string {
+    if (useDiaEspecial) return 'ESPECIAL';
+    return dayLabelByIndex(dayIdx);
+  }
+  
+  function getBudgetPerMealFromCustos(row: any, label: string): number {
+    switch (label) {
+      case 'SEGUNDA':  return Number(row.RefCustoSegunda) || 10;
+      case 'TERÇA':    return Number(row.RefCustoTerca) || 10;
+      case 'QUARTA':   return Number(row.RefCustoQuarta) || 10;
+      case 'QUINTA':   return Number(row.RefCustoQuinta) || 10;
+      case 'SEXTA':    return Number(row.RefCustoSexta) || 10;
+      case 'SÁBADO':
+      case 'SABADO':   return Number(row.RefCustoSabado) || 10;
+      case 'DOMINGO':  return Number(row.RefCustoDomingo) || 10;
+      case 'ESPECIAL': return Number(row.RefCustoDiaEspecial) || 10;
+      default:         return 10;
+    }
+  }
+  
+  function round2(n: number): number {
+    return Math.round(n * 100) / 100;
+  }
+  
+  const days: any[] = [];
+  let totalCusto = 0;
+  
+  for (let i = 0; i < numDays; i++) {
+    const dia = dayLabelByIndex(i);
+    const budgetLabel = getBudgetLabel(i, false);
+    const budgetPerMeal = getBudgetPerMealFromCustos(custos, budgetLabel);
+    
+    // Menu básico de emergência
+    const itens = [
+      { slot: 'ARROZ BRANCO', nome: 'Arroz Branco (Emergência)', custo_total: 1.50, custo_por_refeicao: 1.50 / refeicoesPorDia, placeholder: true },
+      { slot: 'FEIJÃO', nome: 'Feijão (Emergência)', custo_total: 2.00, custo_por_refeicao: 2.00 / refeicoesPorDia, placeholder: true },
+      { slot: 'PRATO PRINCIPAL 1', nome: 'Proteína (Emergência)', custo_total: 3.50, custo_por_refeicao: 3.50 / refeicoesPorDia, placeholder: true },
+      { slot: 'SALADA 1 (VERDURAS)', nome: 'Salada Verde (Emergência)', custo_total: 1.00, custo_por_refeicao: 1.00 / refeicoesPorDia, placeholder: true },
+      { slot: 'SUCO 1', nome: 'Suco Natural (Emergência)', custo_total: 1.00, custo_por_refeicao: 1.00 / refeicoesPorDia, placeholder: true }
+    ];
+    
+    const custo_total_dia = itens.reduce((s, it) => s + (it.custo_total || 0), 0);
+    const custo_por_refeicao = custo_total_dia / refeicoesPorDia;
+    
+    days.push({
+      dia,
+      label_orcamento: budgetLabel,
+      budget_per_meal: round2(budgetPerMeal || 10),
+      custo_total_dia: round2(custo_total_dia),
+      custo_por_refeicao: round2(custo_por_refeicao),
+      dentro_orcamento: true,
+      emergency_mode: true,
+      itens
+    });
+    
+    totalCusto += custo_total_dia;
+  }
+  
+  const totalPorcoes = refeicoesPorDia * numDays;
+  const custoMedioPorPorcao = totalCusto / totalPorcoes;
+  
+  function json(obj: any) {
+    return new Response(JSON.stringify(obj), {
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+  
+  return json({
+    success: true,
+    emergency_mode: true,
+    menu: {
+      days,
+      total_cost: round2(totalCusto),
+      average_cost_per_meal: round2(custoMedioPorPorcao),
+      portions_total: totalPorcoes,
+    },
+    shoppingList: [],
+    warnings: ['Menu de emergência gerado devido à falta de dados no sistema'],
+  });
+}
+
 // ---------------- server ----------------
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
@@ -645,6 +740,30 @@ serve(async (req) => {
     }
 
     console.log(`[menu] Processados ${mercado.length} produtos do mercado`);
+    
+    // VALIDAÇÃO APRIMORADA DE DADOS SUFICIENTES
+    console.log(`[VALIDAÇÃO] Receitas disponíveis: ${receitas?.length || 0}`);
+    console.log(`[VALIDAÇÃO] Produtos do mercado: ${mercado.length}`);
+    console.log(`[VALIDAÇÃO] Receitas com ingredientes: ${ingByReceita.size}`);
+    console.log(`[VALIDAÇÃO] Candidatos por categoria:`, Object.keys(candidatesByCat).map(cat => `${cat}: ${candidatesByCat[cat].length}`));
+    
+    // Validação inteligente: só criar fallback se realmente não houver dados mínimos
+    const temReceitasBasicas = receitas && receitas.length > 0;
+    const temProdutosMercado = mercado.length > 0;
+    const temAlgunsIngredientes = ingByReceita.size > 0;
+    const temCandidatos = Object.values(candidatesByCat).some(cat => cat.length > 0);
+    
+    // CONDIÇÃO CORRIGIDA: só fallback se dados críticos estiverem ausentes
+    if (!temReceitasBasicas || !temProdutosMercado) {
+      console.warn(`[FALLBACK] Dados críticos ausentes:`, {
+        receitas: temReceitasBasicas,
+        mercado: temProdutosMercado,
+        ingredientes: temAlgunsIngredientes,
+        candidatos: temCandidatos
+      });
+      
+      return createEmergencyFallbackMenu(numDays, refeicoesPorDia, c0);
+    }
     
     // Validação básica de preços
     let precosInvalidos = 0;
