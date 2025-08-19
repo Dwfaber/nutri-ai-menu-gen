@@ -266,11 +266,14 @@ serve(async (req) => {
       String(arrozBaseId),   // Incluir arroz base
       String(feijaoBaseId)   // Incluir feijão base
     ];
+    
+    console.log(`[DEBUG] CandidateIds inicial: ${candidateIds.length} receitas`, candidateIds.slice(0, 10));
+    
     if (candidateIds.length === 0) {
       return bad(400, "Nenhuma receita candidata encontrada");
     }
 
-    // MELHORADO: Incluir LEFT JOIN com produtos_base para fallback de nomes
+    // BUSCA INICIAL: Ingredientes das receitas candidatas
     const { data: ingredientes, error: iErr } = await supabase
       .from("receita_ingredientes")
       .select(`
@@ -289,10 +292,44 @@ serve(async (req) => {
     }
 
     const ingByReceita = new Map<string, any[]>();
-    // CORREÇÃO: Garantir que todas as chaves do mapa sejam strings e melhorar nomes
+    // Organizar ingredientes por receita
     for (const ing of ingredientes ?? []) {
       const key = String(ing.receita_id_legado);
       (ingByReceita.get(key) ?? ingByReceita.set(key, []).get(key))!.push(ing);
+    }
+    
+    console.log(`[DEBUG] Receitas com ingredientes carregados: ${ingByReceita.size}`);
+    
+    // FUNÇÃO AUXILIAR: Buscar ingredientes para receitas não incluídas na busca inicial
+    async function buscarIngredientesAdicionais(receitasExtras: string[]): Promise<void> {
+      if (receitasExtras.length === 0) return;
+      
+      console.log(`[DEBUG] Buscando ingredientes para ${receitasExtras.length} receitas extras:`, receitasExtras);
+      
+      const { data: ingredientesExtras, error: extraErr } = await supabase
+        .from("receita_ingredientes")
+        .select(`
+          receita_id_legado, 
+          produto_base_id, 
+          produto_base_descricao, 
+          quantidade, 
+          unidade, 
+          quantidade_refeicoes
+        `)
+        .in("receita_id_legado", receitasExtras);
+
+      if (extraErr) {
+        console.error("[buscarIngredientesAdicionais]", extraErr);
+        return;
+      }
+
+      // Adicionar ao mapa existente
+      for (const ing of ingredientesExtras ?? []) {
+        const key = String(ing.receita_id_legado);
+        (ingByReceita.get(key) ?? ingByReceita.set(key, []).get(key))!.push(ing);
+      }
+      
+      console.log(`[DEBUG] Total de receitas com ingredientes após busca extra: ${ingByReceita.size}`);
     }
 
     // 4) Sistema inteligente de precificação com embalagens reais
@@ -990,13 +1027,52 @@ serve(async (req) => {
       return { valido: erros.length === 0, erros, avisos };
     }
 
+    // FUNÇÃO AUXILIAR ROBUSTA: Buscar ingredientes de receita específica se não encontrada
+    async function garantirIngredientesReceita(receitaId: string): Promise<any[]> {
+      const key = String(receitaId);
+      let ings = ingByReceita.get(key) ?? [];
+      
+      // Se não tem ingredientes, buscar individualmente
+      if (!ings.length) {
+        console.log(`[DEBUG] Buscando ingredientes para receita ${receitaId} não incluída no candidateIds`);
+        
+        const { data: ingredientesReceita, error: receitaErr } = await supabase
+          .from("receita_ingredientes")
+          .select(`
+            receita_id_legado, 
+            produto_base_id, 
+            produto_base_descricao, 
+            quantidade, 
+            unidade, 
+            quantidade_refeicoes
+          `)
+          .eq("receita_id_legado", receitaId);
+
+        if (receitaErr) {
+          console.error(`[garantirIngredientesReceita] Erro ao buscar receita ${receitaId}:`, receitaErr);
+          return [];
+        }
+
+        ings = ingredientesReceita ?? [];
+        if (ings.length > 0) {
+          // Cache para próximas consultas
+          ingByReceita.set(key, ings);
+          console.log(`[DEBUG] ✓ Encontrados ${ings.length} ingredientes para receita ${receitaId}`);
+        } else {
+          console.warn(`[DEBUG] ✗ Receita ${receitaId} realmente não tem ingredientes no banco`);
+        }
+      }
+      
+      return ings;
+    }
+
     function costOfRecipe(receitaId: string, servings: number): number | null {
       try {
-      // CORREÇÃO: Garantir conversão para string na busca de ingredientes
+      // CORREÇÃO: Usar função robusta para garantir ingredientes
       const ings = ingByReceita.get(String(receitaId)) ?? [];
       if (!ings.length) {
-        console.warn(`[costOfRecipe] Receita ${receitaId}: nenhum ingrediente encontrado`);
-        warnings.push(`Receita ${receitaId}: nenhum ingrediente encontrado`);
+        console.error(`[costOfRecipe] Receita ${receitaId}: nenhum ingrediente encontrado - será buscado individualmente na próxima execução`);
+        warnings.push(`Receita ${receitaId}: ingredientes não foram pré-carregados`);
         return null;
       }
 
@@ -1553,6 +1629,29 @@ serve(async (req) => {
     const custoMedioPorPorcao = totalGeral / Math.max(totalPorcoes, 1);
     const orcamentoTotal = days.reduce((sum, day) => sum + (day.budget_per_meal * refeicoesPorDia), 0);
 
+    // SISTEMA DE CORREÇÃO AUTOMÁTICA: Detectar receitas usadas sem ingredientes
+    const receitasUsadasSemIngredientes = new Set<string>();
+    
+    for (const day of days) {
+      for (const item of day.itens) {
+        if (item.placeholder || !item.receita_id) continue;
+        
+        const receitaId = String(item.receita_id);
+        const ings = ingByReceita.get(receitaId) ?? [];
+        
+        if (!ings.length) {
+          receitasUsadasSemIngredientes.add(receitaId);
+        }
+      }
+    }
+    
+    // Buscar ingredientes para receitas usadas que não foram pré-carregadas
+    if (receitasUsadasSemIngredientes.size > 0) {
+      console.log(`[CORREÇÃO] Detectadas ${receitasUsadasSemIngredientes.size} receitas usadas sem ingredientes:`, Array.from(receitasUsadasSemIngredientes));
+      
+      await buscarIngredientesAdicionais(Array.from(receitasUsadasSemIngredientes));
+    }
+
     console.log(`\n=== RESUMO FINAL DA GERAÇÃO ===`);
     console.log(`Total de dias gerados: ${days.length}`);
     console.log(`Custo total do menu: R$ ${round2(totalGeral)}`);
@@ -1561,6 +1660,7 @@ serve(async (req) => {
     console.log(`Economia obtida: R$ ${round2(orcamentoTotal - totalGeral)}`);
     console.log(`Percentual usado: ${round2((totalGeral / orcamentoTotal) * 100)}%`);
     console.log(`Custo médio por refeição: R$ ${round2(custoMedioPorPorcao)}`);
+    console.log(`Receitas com ingredientes carregados: ${ingByReceita.size}`);
     console.log(`===============================\n`);
 
     // Gerar shopping list básico
