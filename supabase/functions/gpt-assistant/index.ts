@@ -754,6 +754,18 @@ serve(async (req) => {
           const produtos = marketByProduto.get(Number(ing.produto_base_id));
           produtoMercado = produtos[0]; // Usar primeiro resultado
           console.log(`[custo] ✓ Encontrado por ID ${ing.produto_base_id}: ${produtoMercado.descricao}`);
+          
+          // Log específico para ARROZ (ID 38)
+          if (ing.produto_base_id === 38) {
+            console.log(`[DEBUG ARROZ] Produto selecionado:`, {
+              descricao: produtoMercado.descricao,
+              preco: produtoMercado.preco,
+              quantidade_embalagem: produtoMercado.produto_base_quantidade_embalagem,
+              apenas_inteiro: produtoMercado.apenas_valor_inteiro_sim_nao,
+              em_promocao: produtoMercado.em_promocao_sim_nao,
+              unidade: produtoMercado.unidade
+            });
+          }
         }
         
     // 2. Se não encontrou por ID, busca por nome com sistema inteligente
@@ -866,7 +878,23 @@ serve(async (req) => {
         }
         
         const quantidadeConvertida = conversao.valor;
-        const apenasValorInteiro = Boolean(produtoMercado.apenas_valor_inteiro_sim_nao);
+        // CORREÇÃO: Validação mais robusta para apenas_valor_inteiro
+        const apenasValorInteiro = produtoMercado.apenas_valor_inteiro_sim_nao === true || 
+                                   produtoMercado.apenas_valor_inteiro_sim_nao === 1 || 
+                                   produtoMercado.apenas_valor_inteiro_sim_nao === "true";
+        
+        // Log específico para ARROZ (ID 38)
+        if (ing.produto_base_id === 38) {
+          console.log(`[DEBUG ARROZ] Cálculo detalhado:`, {
+            quantidadeNecessaria,
+            unidadeIngrediente,
+            quantidadeConvertida,
+            embalagem,
+            precoMercado,
+            apenasValorInteiro,
+            raw_apenas_inteiro: produtoMercado.apenas_valor_inteiro_sim_nao
+          });
+        }
         
         let fatorEmbalagem, custoTotal;
         
@@ -875,6 +903,11 @@ serve(async (req) => {
           fatorEmbalagem = Math.ceil(quantidadeConvertida / embalagem);
           custoTotal = fatorEmbalagem * precoMercado;
           console.log(`[custo] ${produtoMercado.descricao}: ${quantidadeNecessaria} ${unidadeIngrediente} → ${embalagem} ${unidadeMercado} × ${fatorEmbalagem} (inteiro) = R$ ${custoTotal.toFixed(2)}`);
+          
+          // Log extra para ARROZ
+          if (ing.produto_base_id === 38) {
+            console.log(`[DEBUG ARROZ] Cálculo inteiro: ${quantidadeConvertida} ÷ ${embalagem} = ${quantidadeConvertida / embalagem} → Math.ceil = ${fatorEmbalagem} × R$ ${precoMercado} = R$ ${custoTotal}`);
+          }
         } else {
           // Produto pode ser comprado fracionado
           fatorEmbalagem = quantidadeConvertida / embalagem;
