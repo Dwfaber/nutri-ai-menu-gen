@@ -1117,7 +1117,20 @@ serve(async (req) => {
         
         for (const ing of ingredientesEscalados) {
           const resultado = calcularCustoIngredienteDetalhado(ing);
-          total += resultado.custo;
+          
+          // Validação robusta do resultado
+          if (!resultado) {
+            console.error(`[custo] Erro: calcularCustoIngredienteDetalhado retornou undefined para ingrediente ${ing.nome} (ID: ${ing.produto_base_id})`);
+            continue;
+          }
+          
+          // Verificar se detalhes existe antes de usar
+          if (!resultado.detalhes) {
+            console.error(`[custo] Erro: resultado.detalhes é undefined para ingrediente ${ing.nome} (ID: ${ing.produto_base_id})`);
+            continue;
+          }
+          
+          total += resultado.custo || 0;
           ingredientesDetalhados.push(resultado.detalhes);
           
           // Coletar violações para rastreabilidade
@@ -1125,9 +1138,9 @@ serve(async (req) => {
             violacoesReceita.push(resultado.violacao);
           }
           
-          // Log apenas para ingredientes com problemas
-          if (resultado.detalhes.status !== 'encontrado') {
-            console.log(`[${resultado.detalhes.status}] ${ing.nome}: R$ ${resultado.custo.toFixed(2)} - ${resultado.detalhes.motivo || 'Processado'}`);
+          // Log apenas para ingredientes com problemas (com verificação de status)
+          if (resultado.detalhes.status && resultado.detalhes.status !== 'encontrado') {
+            console.log(`[${resultado.detalhes.status}] ${ing.nome}: R$ ${(resultado.custo || 0).toFixed(2)} - ${resultado.detalhes.motivo || 'Processado'}`);
           }
         }
 
