@@ -1090,19 +1090,61 @@ serve(async (req) => {
         const precoMercado = Number(produtoMercado.preco ?? 0);
         const embalagem = Number(produtoMercado.produto_base_quantidade_embalagem ?? 1);
         
-        // VALIDAÇÃO: Verificar se preço é válido
+        // VALIDAÇÃO: Verificar se preço é válido COM FALLBACK INTELIGENTE
         if (isNaN(precoMercado) || precoMercado <= 0) {
           console.warn(`[custo] ⚠️ Preço inválido para ${produtoMercado.descricao}: ${produtoMercado.preco}`);
-          return { 
-            custo: 0, 
+          
+          // FALLBACK INTELIGENTE: Para arroz e feijão, usar preços médios estimados
+          let precoEstimado = 0;
+          const nomeNormalizado = (produtoMercado.descricao || '').toLowerCase();
+          
+          if (nomeNormalizado.includes('arroz')) {
+            precoEstimado = 6.0; // R$ 6,00 por kg estimado para arroz
+            console.log(`[custo] 🍚 Aplicando preço estimado para ARROZ: R$ ${precoEstimado}`);
+          } else if (nomeNormalizado.includes('feijao') || nomeNormalizado.includes('feijão')) {
+            precoEstimado = 8.0; // R$ 8,00 por kg estimado para feijão
+            console.log(`[custo] 🫘 Aplicando preço estimado para FEIJÃO: R$ ${precoEstimado}`);
+          } else {
+            // Para outros ingredientes sem preço, retornar custo zero
+            return { 
+              custo: 0, 
+              violacao: {
+                tipo: 'preco_invalido',
+                ingrediente: produtoMercado.descricao,
+                preco_original: produtoMercado.preco
+              },
+              detalhes: {
+                nome: produtoMercado.descricao,
+                quantidade_necessaria: quantidade,
+                unidade: unidadeIngrediente,
+                custo_unitario: 0,
+                custo_total: 0,
+                observacao: `Preço inválido: ${produtoMercado.preco}`,
+                status: 'invalid_price'
+              }
+            };
+          }
+          
+          // Usar preço estimado para cálculo
+          const quantidadeConvertida = toMercadoBase(quantidade, unidadeIngrediente, unidadeMercado)?.valor || quantidade;
+          const custoEstimado = (quantidadeConvertida / embalagem) * precoEstimado;
+          
+          return {
+            custo: custoEstimado,
+            violacao: {
+              tipo: 'preco_estimado', 
+              ingrediente: produtoMercado.descricao,
+              preco_original: produtoMercado.preco,
+              preco_estimado: precoEstimado
+            },
             detalhes: {
               nome: produtoMercado.descricao,
               quantidade_necessaria: quantidade,
               unidade: unidadeIngrediente,
-              custo_unitario: 0,
-              custo_total: 0,
-              observacao: `Preço inválido: ${produtoMercado.preco}`,
-              status: 'invalid_price'
+              custo_unitario: precoEstimado / embalagem,
+              custo_total: custoEstimado,
+              observacao: `Preço estimado aplicado: R$ ${precoEstimado}`,
+              status: 'estimated_price'
             }
           };
         }
@@ -1765,9 +1807,13 @@ serve(async (req) => {
     }
     poolSucos.sort((a, b) => a._cost - b._cost);
 
-    // ARROZ obrigatório (usar baseRecipes.arroz se fornecido)
+    // ARROZ obrigatório com múltiplas tentativas de busca
     let arroz;
+    const arrozIds = [arrozBaseId, 38, 1, 2]; // IDs alternativos para arroz
+    
+    // 1. Tentar receita base fornecida
     if (arrozReceita) {
+      console.log(`[arroz] 🍚 Tentando receita base fornecida: ID ${arrozReceita.receita_id_legado}`);
       const resultado = await costOfRecipe(String(arrozReceita.receita_id_legado), refeicoesPorDia);
       if (resultado !== null) {
         const cost = typeof resultado === 'object' ? resultado.total : resultado;
@@ -1777,19 +1823,67 @@ serve(async (req) => {
           id: String(arrozReceita.receita_id_legado),
           ingredientes_detalhados: typeof resultado === 'object' ? resultado.ingredientesDetalhados : []
         };
+        console.log(`[arroz] ✓ Receita base funcionou: R$ ${cost.toFixed(2)}`);
       }
     }
+    
+    // 2. Se não funcionou, tentar pool de candidatos
     if (!arroz) {
+      console.log(`[arroz] 🔍 Tentando pool de candidatos ARROZ BRANCO`);
       arroz = await pickCheapest("ARROZ BRANCO", refeicoesPorDia);
+      if (arroz) {
+        console.log(`[arroz] ✓ Encontrado no pool: ${arroz.nome} R$ ${arroz._cost.toFixed(2)}`);
+      }
     }
     
+    // 3. Se ainda não funcionou, tentar IDs específicos
     if (!arroz) {
-      return bad(400, "Não foi possível precificar ARROZ");
+      console.log(`[arroz] 🎯 Tentando IDs específicos: ${arrozIds.join(', ')}`);
+      for (const arrozId of arrozIds) {
+        const { data: receitaEspecifica } = await supabase
+          .from("receitas_legado")
+          .select("*")
+          .eq("receita_id_legado", String(arrozId))
+          .limit(1);
+          
+        if (receitaEspecifica?.[0]) {
+          const resultado = await costOfRecipe(String(arrozId), refeicoesPorDia);
+          if (resultado !== null) {
+            const cost = typeof resultado === 'object' ? resultado.total : resultado;
+            arroz = {
+              id: String(arrozId),
+              receita_id_legado: arrozId,
+              nome_receita: receitaEspecifica[0].nome_receita || 'ARROZ BRANCO',
+              _cost: cost,
+              ingredientes_detalhados: typeof resultado === 'object' ? resultado.ingredientesDetalhados : []
+            };
+            console.log(`[arroz] ✓ ID específico funcionou: ${arrozId} R$ ${cost.toFixed(2)}`);
+            break;
+          }
+        }
+      }
+    }
+    
+    // 4. Se nada funcionou, criar placeholder obrigatório
+    if (!arroz) {
+      console.warn(`[arroz] ⚠️ Nenhuma receita de arroz encontrada, criando placeholder`);
+      warnings.push("ARROZ: Receita não encontrada - usando placeholder");
+      arroz = { 
+        id: String(arrozBaseId), 
+        _cost: 0, 
+        nome_receita: 'ARROZ BRANCO (PLACEHOLDER)',
+        ingredientes_detalhados: [],
+        placeholder: true
+      };
     }
 
-    // FEIJÃO obrigatório (usar baseRecipes.feijao se fornecido)
+    // FEIJÃO obrigatório com múltiplas tentativas de busca
     let feijao;
+    const feijaoIds = [feijaoBaseId, 1600, 3, 4, 5]; // IDs alternativos para feijão
+    
+    // 1. Tentar receita base fornecida
     if (feijaoReceita) {
+      console.log(`[feijao] 🫘 Tentando receita base fornecida: ID ${feijaoReceita.receita_id_legado}`);
       const resultado = await costOfRecipe(String(feijaoReceita.receita_id_legado), refeicoesPorDia);
       if (resultado !== null) {
         const cost = typeof resultado === 'object' ? resultado.total : resultado;
@@ -1799,18 +1893,57 @@ serve(async (req) => {
           id: String(feijaoReceita.receita_id_legado),
           ingredientes_detalhados: typeof resultado === 'object' ? resultado.ingredientesDetalhados : []
         };
+        console.log(`[feijao] ✓ Receita base funcionou: R$ ${cost.toFixed(2)}`);
       }
     }
+    
+    // 2. Se não funcionou, tentar pool de candidatos
     if (!feijao) {
+      console.log(`[feijao] 🔍 Tentando pool de candidatos FEIJÃO`);
       feijao = await pickCheapest("FEIJÃO", refeicoesPorDia);
+      if (feijao) {
+        console.log(`[feijao] ✓ Encontrado no pool: ${feijao.nome} R$ ${feijao._cost.toFixed(2)}`);
+      }
     }
     
+    // 3. Se ainda não funcionou, tentar IDs específicos
     if (!feijao) {
-      warnings.push("Não foi possível precificar FEIJÃO - usando placeholder");
+      console.log(`[feijao] 🎯 Tentando IDs específicos: ${feijaoIds.join(', ')}`);
+      for (const feijaoId of feijaoIds) {
+        const { data: receitaEspecifica } = await supabase
+          .from("receitas_legado")
+          .select("*")
+          .eq("receita_id_legado", String(feijaoId))
+          .limit(1);
+          
+        if (receitaEspecifica?.[0]) {
+          const resultado = await costOfRecipe(String(feijaoId), refeicoesPorDia);
+          if (resultado !== null) {
+            const cost = typeof resultado === 'object' ? resultado.total : resultado;
+            feijao = {
+              id: String(feijaoId),
+              receita_id_legado: feijaoId,
+              nome_receita: receitaEspecifica[0].nome_receita || 'FEIJÃO MIX - CARIOCA + BANDINHA 50%',
+              _cost: cost,
+              ingredientes_detalhados: typeof resultado === 'object' ? resultado.ingredientesDetalhados : []
+            };
+            console.log(`[feijao] ✓ ID específico funcionou: ${feijaoId} R$ ${cost.toFixed(2)}`);
+            break;
+          }
+        }
+      }
+    }
+    
+    // 4. Se nada funcionou, criar placeholder obrigatório
+    if (!feijao) {
+      console.warn(`[feijao] ⚠️ Nenhuma receita de feijão encontrada, criando placeholder`);
+      warnings.push("FEIJÃO: Receita não encontrada - usando placeholder");
       feijao = { 
         id: String(feijaoBaseId), 
         _cost: 0, 
-        nome_receita: 'FEIJÃO MIX - CARIOCA + BANDINHA 50%' 
+        nome_receita: 'FEIJÃO MIX - CARIOCA + BANDINHA 50% (PLACEHOLDER)',
+        ingredientes_detalhados: [],
+        placeholder: true
       };
     }
 
@@ -1828,47 +1961,31 @@ serve(async (req) => {
     ) {
       const itens: any[] = [];
 
-      // ARROZ BRANCO (obrigatório)
-      if (arroz._cost > 0) {
-        itens.push({
-          slot: 'ARROZ BRANCO',
-          receita_id: arroz.id,
-          nome: arrozReceita?.nome_receita || 'ARROZ BRANCO',
-          custo_total: round2(arroz._cost),
-          custo_por_refeicao: round2(arroz._cost / refeicoesPorDia),
-          ingredientes: arroz.ingredientes_detalhados || []
-        });
-        markUsed('ARROZ BRANCO', arroz.id);
-      } else {
-        itens.push({ 
-          slot: 'ARROZ BRANCO', 
-          placeholder: true, 
-          nome: `ARROZ (ID ${arrozBaseId} - SEM CUSTO)`, 
-          custo_total: 0, 
-          custo_por_refeicao: 0 
-        });
-      }
+      // ARROZ BRANCO (SEMPRE OBRIGATÓRIO)
+      itens.push({
+        slot: 'ARROZ BRANCO',
+        receita_id: arroz.id || String(arrozBaseId),
+        nome: arroz.nome_receita || arrozReceita?.nome_receita || 'ARROZ BRANCO',
+        custo_total: round2(arroz._cost || 0),
+        custo_por_refeicao: round2((arroz._cost || 0) / refeicoesPorDia),
+        ingredientes: arroz.ingredientes_detalhados || [],
+        placeholder: arroz._cost === 0 || arroz.placeholder === true,
+        observacao: arroz._cost === 0 ? 'Custo não calculado ou receita não encontrada' : undefined
+      });
+      if (arroz.id) markUsed('ARROZ BRANCO', arroz.id);
 
-      // FEIJÃO (obrigatório com custo real)
-      if (feijao._cost > 0) {
-        itens.push({ 
-          slot: 'FEIJÃO', 
-          receita_id: feijao.id, 
-          nome: feijaoReceita?.nome_receita || 'FEIJÃO MIX - CARIOCA + BANDINHA 50%',
-          custo_total: round2(feijao._cost),
-          custo_por_refeicao: round2(feijao._cost / refeicoesPorDia),
-          ingredientes: feijao.ingredientes_detalhados || []
-        });
-        markUsed('FEIJÃO', feijao.id);
-      } else {
-        itens.push({ 
-          slot: 'FEIJÃO', 
-          placeholder: true, 
-          nome: `FEIJÃO (ID ${feijaoBaseId} - SEM CUSTO)`, 
-          custo_total: 0, 
-          custo_por_refeicao: 0 
-        });
-      }
+      // FEIJÃO (SEMPRE OBRIGATÓRIO)
+      itens.push({ 
+        slot: 'FEIJÃO', 
+        receita_id: feijao.id || String(feijaoBaseId), 
+        nome: feijao.nome_receita || feijaoReceita?.nome_receita || 'FEIJÃO MIX - CARIOCA + BANDINHA 50%',
+        custo_total: round2(feijao._cost || 0),
+        custo_por_refeicao: round2((feijao._cost || 0) / refeicoesPorDia),
+        ingredientes: feijao.ingredientes_detalhados || [],
+        placeholder: feijao._cost === 0 || feijao.placeholder === true,
+        observacao: feijao._cost === 0 ? 'Custo não calculado ou receita não encontrada' : undefined
+      });
+      if (feijao.id) markUsed('FEIJÃO', feijao.id);
 
       // PP1
       const pp1 = pickUnique(pools.pp1, 'PRATO PRINCIPAL 1');

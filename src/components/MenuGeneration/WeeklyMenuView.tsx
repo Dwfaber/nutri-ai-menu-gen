@@ -22,6 +22,8 @@ interface MenuRecipe {
   cost: number;
   servings: number;
   ingredients?: Ingredient[];
+  placeholder?: boolean;
+  observacao?: string;
 }
 
 interface WeekData {
@@ -251,50 +253,100 @@ const WeeklyMenuView: React.FC<WeeklyMenuViewProps> = ({
                           </Badge>
                         </div>
                         
-                        <div className="space-y-3">
-                          {NEW_MENU_CATEGORIES.map((category) => {
-                            const categoryRecipes = day.recipes.filter(recipe => recipe.category === category);
+                         <div className="space-y-3">
+                           {NEW_MENU_CATEGORIES.map((category) => {
+                             const categoryRecipes = day.recipes.filter(recipe => recipe.category === category);
+                             
+                             // SEMPRE MOSTRAR ARROZ E FEIJÃO, mesmo sem receitas
+                             if (categoryRecipes.length === 0 && !['ARROZ BRANCO', 'FEIJÃO'].includes(category)) return null;
                             
-                            if (categoryRecipes.length === 0) return null;
-                            
-                            return (
-                              <div key={category} className="space-y-2">
-                                {categoryRecipes.map((recipe, index) => (
-                                  <div key={`${recipe.id}-${index}`} className="flex items-center justify-between p-3 rounded-lg border bg-card hover:bg-muted/50 transition-colors">
-                                    <div className="flex items-center gap-3 flex-1">
-                                      <Badge 
-                                        variant="outline" 
-                                        className={cn("shrink-0 font-medium", CATEGORY_COLORS[category] || 'bg-gray-100 text-gray-800')}
-                                      >
-                                        {CATEGORY_DISPLAY_NAMES[category] || category}
-                                      </Badge>
-                                      
-                                      <div className="flex-1">
-                                        <p className="font-medium leading-tight">{recipe.name}</p>
-                                        <p className="text-sm text-muted-foreground">
-                                          {recipe.servings} porções
-                                        </p>
-                                        
-                                        {recipe.ingredients && recipe.ingredients.length > 0 && (
-                                          <div className="mt-1">
-                                            <p className="text-xs text-muted-foreground">
-                                              {recipe.ingredients.slice(0, 2).map(ing => ing.name).join(', ')}
-                                              {recipe.ingredients.length > 2 && ` +${recipe.ingredients.length - 2}`}
-                                            </p>
-                                          </div>
-                                        )}
-                                      </div>
-                                    </div>
-                                    
-                                    <div className="text-right">
-                                      <p className="font-bold text-lg text-green-600">
-                                        R$ {recipe.cost.toFixed(2)}
-                                      </p>
-                                    </div>
-                                  </div>
-                                ))}
-                              </div>
-                            );
+                             return (
+                               <div key={category} className="space-y-2">
+                                 {/* Se há receitas, mostrar normalmente */}
+                                 {categoryRecipes.length > 0 ? (
+                                   categoryRecipes.map((recipe, index) => (
+                                     <div key={`${recipe.id}-${index}`} className="flex items-center justify-between p-3 rounded-lg border bg-card hover:bg-muted/50 transition-colors">
+                                       <div className="flex items-center gap-3 flex-1">
+                                         <Badge 
+                                           variant="outline" 
+                                           className={cn(
+                                             "shrink-0 font-medium", 
+                                             recipe.placeholder ? 'bg-amber-100 text-amber-800 border-amber-300' : 
+                                             CATEGORY_COLORS[category] || 'bg-gray-100 text-gray-800'
+                                           )}
+                                         >
+                                           {CATEGORY_DISPLAY_NAMES[category] || category}
+                                         </Badge>
+                                         
+                                         <div className="flex-1">
+                                           <p className="font-medium leading-tight">
+                                             {recipe.name}
+                                             {recipe.placeholder && <span className="ml-2 text-xs text-amber-600">(Placeholder)</span>}
+                                           </p>
+                                           <p className="text-sm text-muted-foreground">
+                                             {recipe.servings} porções
+                                           </p>
+                                           
+                                           {recipe.observacao && (
+                                             <p className="text-xs text-amber-600 mt-1">
+                                               ⚠️ {recipe.observacao}
+                                             </p>
+                                           )}
+                                           
+                                           {recipe.ingredients && recipe.ingredients.length > 0 && (
+                                             <div className="mt-1">
+                                               <p className="text-xs text-muted-foreground">
+                                                 {recipe.ingredients.slice(0, 2).map(ing => ing.name).join(', ')}
+                                                 {recipe.ingredients.length > 2 && ` +${recipe.ingredients.length - 2}`}
+                                               </p>
+                                             </div>
+                                           )}
+                                         </div>
+                                       </div>
+                                       
+                                       <div className="text-right">
+                                         <p className={cn(
+                                           "font-bold text-lg",
+                                           recipe.cost > 0 ? "text-green-600" : "text-amber-600"
+                                         )}>
+                                           R$ {recipe.cost.toFixed(2)}
+                                         </p>
+                                       </div>
+                                     </div>
+                                   ))
+                                 ) : (
+                                   /* Placeholder para ARROZ E FEIJÃO quando não há receitas */
+                                   ['ARROZ BRANCO', 'FEIJÃO'].includes(category) && (
+                                     <div className="flex items-center justify-between p-3 rounded-lg border bg-amber-50 border-amber-200">
+                                       <div className="flex items-center gap-3 flex-1">
+                                         <Badge 
+                                           variant="outline" 
+                                           className="shrink-0 font-medium bg-amber-100 text-amber-800 border-amber-300"
+                                         >
+                                           {CATEGORY_DISPLAY_NAMES[category] || category}
+                                         </Badge>
+                                         
+                                         <div className="flex-1">
+                                           <p className="font-medium leading-tight text-amber-800">
+                                             {category === 'ARROZ BRANCO' ? 'ARROZ BRANCO' : 'FEIJÃO MIX - CARIOCA + BANDINHA 50%'}
+                                             <span className="ml-2 text-xs">(Receita não encontrada)</span>
+                                           </p>
+                                           <p className="text-sm text-amber-600">
+                                             ⚠️ Aguardando configuração de receita
+                                           </p>
+                                         </div>
+                                       </div>
+                                       
+                                       <div className="text-right">
+                                         <p className="font-bold text-lg text-amber-600">
+                                           R$ 0,00
+                                         </p>
+                                       </div>
+                                     </div>
+                                   )
+                                 )}
+                               </div>
+                             );
                           })}
                         </div>
                       </div>
