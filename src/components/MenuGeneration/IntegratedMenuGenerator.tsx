@@ -281,34 +281,24 @@ const IntegratedMenuGenerator = () => {
             </div>
           </CardHeader>
           <CardContent className="space-y-6">
-            {/* Cost Breakdown Component */}
-            {generatedMenu.menu && (
-              <MenuCostBreakdown 
-                menu={generatedMenu.menu} 
-                warnings={generatedMenu.warnings || []} 
-              />
-            )}
-
-            {/* Legacy Menu Summary - manter para compatibilidade */}
-            {!generatedMenu.menu && (
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4 bg-gray-50 rounded-lg">
-                <div className="text-center">
-                  <DollarSign className="w-8 h-8 mx-auto mb-2 text-green-600" />
-                  <p className="font-medium text-gray-700">Custo Total</p>
-                  <p className="text-xl font-bold text-green-600">R$ {generatedMenu.totalCost.toFixed(2)}</p>
-                </div>
-                <div className="text-center">
-                  <Users className="w-8 h-8 mx-auto mb-2 text-blue-600" />
-                  <p className="font-medium text-gray-700">Custo por Refeição</p>
-                  <p className="text-xl font-bold text-blue-600">R$ {generatedMenu.costPerMeal.toFixed(2)}</p>
-                </div>
-                <div className="text-center">
-                  <ChefHat className="w-8 h-8 mx-auto mb-2 text-purple-600" />
-                  <p className="font-medium text-gray-700">Receitas</p>
-                  <p className="text-xl font-bold text-purple-600">{generatedMenu.recipes.length}</p>
-                </div>
+            {/* Menu Summary */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4 bg-gray-50 rounded-lg">
+              <div className="text-center">
+                <DollarSign className="w-8 h-8 mx-auto mb-2 text-green-600" />
+                <p className="font-medium text-gray-700">Custo Total</p>
+                <p className="text-xl font-bold text-green-600">R$ {generatedMenu.totalCost.toFixed(2)}</p>
               </div>
-            )}
+              <div className="text-center">
+                <Users className="w-8 h-8 mx-auto mb-2 text-blue-600" />
+                <p className="font-medium text-gray-700">Custo por Refeição</p>
+                <p className="text-xl font-bold text-blue-600">R$ {generatedMenu.costPerMeal.toFixed(2)}</p>
+              </div>
+              <div className="text-center">
+                <ChefHat className="w-8 h-8 mx-auto mb-2 text-purple-600" />
+                <p className="font-medium text-gray-700">Receitas</p>
+                <p className="text-xl font-bold text-purple-600">{generatedMenu.recipes.length}</p>
+              </div>
+            </div>
 
             {/* Business Rules Validation */}
             {validationRules && (
