@@ -876,10 +876,21 @@ serve(async (req) => {
         }
         
         const quantidadeConvertida = conversao.valor;
-        const fatorEmbalagem = Math.ceil(quantidadeConvertida / embalagem);
-        const custoTotal = fatorEmbalagem * precoMercado;
+        const apenasValorInteiro = Boolean(produtoMercado.apenas_valor_inteiro_sim_nao);
         
-        console.log(`[custo] ${produtoMercado.descricao}: ${quantidadeNecessaria} ${unidadeIngrediente} → ${embalagem} ${unidadeMercado} × ${fatorEmbalagem.toFixed(2)} = R$ ${custoTotal.toFixed(2)}`);
+        let fatorEmbalagem, custoTotal;
+        
+        if (apenasValorInteiro) {
+          // Produto só pode ser comprado em embalagens inteiras
+          fatorEmbalagem = Math.ceil(quantidadeConvertida / embalagem);
+          custoTotal = fatorEmbalagem * precoMercado;
+          console.log(`[custo] ${produtoMercado.descricao}: ${quantidadeNecessaria} ${unidadeIngrediente} → ${embalagem} ${unidadeMercado} × ${fatorEmbalagem} (inteiro) = R$ ${custoTotal.toFixed(2)}`);
+        } else {
+          // Produto pode ser comprado fracionado
+          fatorEmbalagem = quantidadeConvertida / embalagem;
+          custoTotal = fatorEmbalagem * precoMercado;
+          console.log(`[custo] ${produtoMercado.descricao}: ${quantidadeNecessaria} ${unidadeIngrediente} → ${embalagem} ${unidadeMercado} × ${fatorEmbalagem.toFixed(4)} (fracionado) = R$ ${custoTotal.toFixed(2)}`);
+        }
         
         return { 
           custo: custoTotal, 
