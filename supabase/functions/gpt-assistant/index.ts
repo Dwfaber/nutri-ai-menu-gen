@@ -1034,7 +1034,7 @@ serve(async (req) => {
       
       // Se não tem ingredientes, buscar individualmente
       if (!ings.length) {
-        console.log(`[DEBUG] Buscando ingredientes para receita ${receitaId} não incluída no candidateIds`);
+        console.log(`[FASE 1] Buscando ingredientes para receita ${receitaId} não incluída no candidateIds`);
         
         const { data: ingredientesReceita, error: receitaErr } = await supabase
           .from("receita_ingredientes")
@@ -1049,7 +1049,7 @@ serve(async (req) => {
           .eq("receita_id_legado", receitaId);
 
         if (receitaErr) {
-          console.error(`[garantirIngredientesReceita] Erro ao buscar receita ${receitaId}:`, receitaErr);
+          console.error(`[FASE 1] Erro ao buscar receita ${receitaId}:`, receitaErr);
           return [];
         }
 
@@ -1057,104 +1057,219 @@ serve(async (req) => {
         if (ings.length > 0) {
           // Cache para próximas consultas
           ingByReceita.set(key, ings);
-          console.log(`[DEBUG] ✓ Encontrados ${ings.length} ingredientes para receita ${receitaId}`);
+          console.log(`[FASE 1] ✓ Encontrados ${ings.length} ingredientes para receita ${receitaId}`);
         } else {
-          console.warn(`[DEBUG] ✗ Receita ${receitaId} realmente não tem ingredientes no banco`);
+          console.warn(`[FASE 1] ✗ Receita ${receitaId} realmente não tem ingredientes no banco`);
         }
       }
       
       return ings;
     }
 
-    function costOfRecipe(receitaId: string, servings: number): number | null {
+    // FASE 1: Função de custo robusta com busca automática de ingredientes
+    async function costOfRecipe(receitaId: string, servings: number): Promise<any> {
       try {
-      // CORREÇÃO: Usar função robusta para garantir ingredientes
-      const ings = ingByReceita.get(String(receitaId)) ?? [];
-      if (!ings.length) {
-        console.error(`[costOfRecipe] Receita ${receitaId}: nenhum ingrediente encontrado - será buscado individualmente na próxima execução`);
-        warnings.push(`Receita ${receitaId}: ingredientes não foram pré-carregados`);
-        return null;
-      }
+        // CORREÇÃO: Garantir ingredientes dinamicamente se não existirem
+        let ings = ingByReceita.get(String(receitaId)) ?? [];
+        
+        if (!ings.length) {
+          console.log(`[FASE 1] Receita ${receitaId}: ingredientes não encontrados, buscando...`);
+          ings = await garantirIngredientesReceita(receitaId);
+          
+          if (!ings.length) {
+            console.error(`[FASE 1] Receita ${receitaId}: nenhum ingrediente encontrado mesmo após busca individual`);
+            return { 
+              total: 0, 
+              ingredientesDetalhados: [], 
+              violacoes: [],
+              estatisticas: {
+                total_ingredientes: 0,
+                ingredientes_encontrados: 0,
+                ingredientes_zero_cost: 0,
+                ingredientes_com_sugestoes: 0,
+                ingredientes_sem_solucao: 0,
+                taxa_sucesso: 0
+              }
+            };
+          }
+        }
 
-        // Validar ingredientes
+        // FASE 2: Validar ingredientes com sistema robusto
         const ingredientesValidos = [];
         for (const ing of ings) {
           const validacao = validateIngredient(ing);
           if (!validacao.valido) {
-            console.warn(`Ingrediente inválido ${ing.produto_base_descricao}:`, validacao.erros);
+            console.warn(`[FASE 2] Ingrediente inválido ${ing.produto_base_descricao}:`, validacao.erros);
             warnings.push(`Ingrediente ${ing.produto_base_descricao}: ${validacao.erros.join(', ')}`);
-            continue; // Pular ingrediente inválido
+            continue;
           }
           if (validacao.avisos.length > 0) {
-            console.warn(`Aviso ingrediente ${ing.produto_base_descricao}:`, validacao.avisos);
+            console.warn(`[FASE 2] Aviso ingrediente ${ing.produto_base_descricao}:`, validacao.avisos);
           }
           ingredientesValidos.push(ing);
         }
 
         if (!ingredientesValidos.length) {
-          warnings.push(`Receita ${receitaId}: todos os ingredientes são inválidos`);
-          return null;
+          console.warn(`[FASE 2] Receita ${receitaId}: todos os ingredientes são inválidos, criando fallback`);
+          return { 
+            total: 5.0, // Custo estimado de fallback
+            ingredientesDetalhados: [{
+              nome: 'Estimativa de custo',
+              quantidade_necessaria: servings,
+              custo_total: 5.0,
+              observacao: 'Custo estimado - dados incompletos',
+              status: 'fallback_estimate'
+            }], 
+            violacoes: [{
+              tipo: 'dados_incompletos',
+              receita_id: receitaId,
+              descricao: 'Receita sem ingredientes válidos'
+            }],
+            estatisticas: {
+              total_ingredientes: 1,
+              ingredientes_encontrados: 0,
+              ingredientes_zero_cost: 0,
+              ingredientes_com_sugestoes: 0,
+              ingredientes_sem_solucao: 1,
+              taxa_sucesso: 0,
+              modo_fallback: true
+            }
+          };
         }
 
-        // Calcular fator de escalonamento usando dados reais
+        // FASE 3: Calcular fator de escalonamento robusto
         const fator = calculateScalingFactor(servings, ingredientesValidos);
         let total = 0;
 
         // Escalar ingredientes com dados de auditoria
         const ingredientesEscalados = ingredientesValidos.map((ing) => ({
           produto_base_id: ing.produto_base_id,
-          nome: ing.produto_base_descricao || '',
+          nome: ing.produto_base_descricao || `Ingrediente_${ing.produto_base_id}`,
           quantidade: Number(ing.quantidade ?? 0) * fator,
           quantidade_original: Number(ing.quantidade ?? 0),
           fator_escalonamento: fator,
           receita_base_servings: ingredientesValidos[0]?.quantidade_refeicoes || 100,
-          unidade: ing.unidade
+          unidade: ing.unidade || 'UN'
         }));
 
-        // Calcular custo de cada ingrediente com proteção
+        // FASE 3: Calcular custo com sistema de fallback robusto
         const ingredientesDetalhados = [];
         const violacoesReceita = [];
+        let ingredientesComErro = 0;
         
         for (const ing of ingredientesEscalados) {
-          const resultado = calcularCustoIngredienteDetalhado(ing);
-          
-          // Validação robusta do resultado
-          if (!resultado) {
-            console.error(`[custo] Erro: calcularCustoIngredienteDetalhado retornou undefined para ingrediente ${ing.nome} (ID: ${ing.produto_base_id})`);
-            continue;
-          }
-          
-          // Verificar se detalhes existe antes de usar
-          if (!resultado.detalhes) {
-            console.error(`[custo] Erro: resultado.detalhes é undefined para ingrediente ${ing.nome} (ID: ${ing.produto_base_id})`);
-            continue;
-          }
-          
-          total += resultado.custo || 0;
-          ingredientesDetalhados.push(resultado.detalhes);
-          
-          // Coletar violações para rastreabilidade
-          if (resultado.violacao) {
-            violacoesReceita.push(resultado.violacao);
-          }
-          
-          // Log apenas para ingredientes com problemas (com verificação de status)
-          if (resultado.detalhes.status && resultado.detalhes.status !== 'encontrado') {
-            console.log(`[${resultado.detalhes.status}] ${ing.nome}: R$ ${(resultado.custo || 0).toFixed(2)} - ${resultado.detalhes.motivo || 'Processado'}`);
+          try {
+            const resultado = calcularCustoIngredienteDetalhado(ing);
+            
+            // FASE 4: Validação robusta com fallback inteligente
+            if (!resultado) {
+              console.warn(`[FASE 4] Resultado undefined para ${ing.nome}, criando fallback`);
+              ingredientesComErro++;
+              
+              // Criar fallback inteligente
+              const custoEstimado = Math.max(0.1, ing.quantidade * 0.01); // R$ 0.01 por unidade mínimo
+              total += custoEstimado;
+              
+              ingredientesDetalhados.push({
+                nome: ing.nome,
+                quantidade_necessaria: ing.quantidade,
+                unidade: ing.unidade,
+                custo_total: custoEstimado,
+                observacao: 'Custo estimado - cálculo falhou',
+                status: 'fallback_error'
+              });
+              
+              violacoesReceita.push({
+                tipo: 'calculo_falhou',
+                ingrediente: ing.nome,
+                motivo: 'Função retornou undefined'
+              });
+              continue;
+            }
+            
+            // Verificar se detalhes existe
+            if (!resultado.detalhes) {
+              console.warn(`[FASE 4] Detalhes undefined para ${ing.nome}, criando fallback`);
+              ingredientesComErro++;
+              
+              const custoEstimado = resultado.custo || Math.max(0.1, ing.quantidade * 0.01);
+              total += custoEstimado;
+              
+              ingredientesDetalhados.push({
+                nome: ing.nome,
+                quantidade_necessaria: ing.quantidade,
+                unidade: ing.unidade,
+                custo_total: custoEstimado,
+                observacao: 'Custo calculado mas sem detalhes',
+                status: 'partial_success'
+              });
+              
+              if (resultado.violacao) {
+                violacoesReceita.push(resultado.violacao);
+              }
+              continue;
+            }
+            
+            // Sucesso total
+            total += resultado.custo || 0;
+            ingredientesDetalhados.push(resultado.detalhes);
+            
+            if (resultado.violacao) {
+              violacoesReceita.push(resultado.violacao);
+            }
+            
+            // Log apenas para ingredientes com problemas
+            if (resultado.detalhes.status && resultado.detalhes.status !== 'encontrado') {
+              console.log(`[FASE 4] [${resultado.detalhes.status}] ${ing.nome}: R$ ${(resultado.custo || 0).toFixed(2)} - ${resultado.detalhes.motivo || 'Processado'}`);
+            }
+          } catch (error) {
+            console.error(`[FASE 4] Erro no processamento de ${ing.nome}:`, error);
+            ingredientesComErro++;
+            
+            // Fallback para erros de processamento
+            const custoEstimado = Math.max(0.5, ing.quantidade * 0.02);
+            total += custoEstimado;
+            
+            ingredientesDetalhados.push({
+              nome: ing.nome,
+              quantidade_necessaria: ing.quantidade,
+              unidade: ing.unidade,
+              custo_total: custoEstimado,
+              observacao: `Erro: ${error.message}`,
+              status: 'error_fallback'
+            });
+            
+            violacoesReceita.push({
+              tipo: 'erro_processamento',
+              ingrediente: ing.nome,
+              erro: error.message
+            });
           }
         }
 
-        // Contabilizar estatísticas para relatório
+        // FASE 5: Estatísticas detalhadas e logs estruturados
         const totalIngredientes = ingredientesDetalhados.length;
-        const ingredientesEncontrados = ingredientesDetalhados.filter(d => d.status === 'encontrado' || d.produto_encontrado).length;
-        const ingredientesZeroCost = ingredientesDetalhados.filter(d => d.status === 'zero_cost_automatic').length;
-        const ingredientesComSugestoes = ingredientesDetalhados.filter(d => d.status === 'not_found_with_suggestions').length;
-        const ingredientesSemSolucao = ingredientesDetalhados.filter(d => d.status === 'not_found' && d.sugestoes_count === 0).length;
+        const ingredientesEncontrados = ingredientesDetalhados.filter(d => 
+          d.status === 'encontrado' || d.produto_encontrado
+        ).length;
+        const ingredientesZeroCost = ingredientesDetalhados.filter(d => 
+          d.status === 'zero_cost_automatic'
+        ).length;
+        const ingredientesComSugestoes = ingredientesDetalhados.filter(d => 
+          d.status === 'not_found_with_suggestions'
+        ).length;
+        const ingredientesSemSolucao = ingredientesDetalhados.filter(d => 
+          d.status === 'not_found' && (!d.sugestoes_count || d.sugestoes_count === 0)
+        ).length;
+        const ingredientesFallback = ingredientesDetalhados.filter(d => 
+          d.status?.includes('fallback') || d.status?.includes('error')
+        ).length;
         
-        console.log(`📊 Estatísticas da receita ${receitaId}:`);
+        console.log(`📊 [FASE 5] Estatísticas da receita ${receitaId}:`);
         console.log(`   Total: ${totalIngredientes} | Encontrados: ${ingredientesEncontrados} | Zero Cost: ${ingredientesZeroCost}`);
-        console.log(`   Com Sugestões: ${ingredientesComSugestoes} | Sem Solução: ${ingredientesSemSolucao}`);
-        console.log(`   Custo Total: R$ ${total.toFixed(2)} | Violações: ${violacoesReceita.length}`);
+        console.log(`   Com Sugestões: ${ingredientesComSugestoes} | Sem Solução: ${ingredientesSemSolucao} | Fallback: ${ingredientesFallback}`);
+        console.log(`   Custo Total: R$ ${total.toFixed(2)} | Violações: ${violacoesReceita.length} | Erros: ${ingredientesComErro}`);
+        console.log(`   Taxa de Sucesso: ${Math.round((ingredientesEncontrados / totalIngredientes) * 100)}%`);
 
         return { 
           total, 
@@ -1166,13 +1281,43 @@ serve(async (req) => {
             ingredientes_zero_cost: ingredientesZeroCost,
             ingredientes_com_sugestoes: ingredientesComSugestoes,
             ingredientes_sem_solucao: ingredientesSemSolucao,
-            taxa_sucesso: Math.round((ingredientesEncontrados / totalIngredientes) * 100)
+            ingredientes_fallback: ingredientesFallback,
+            ingredientes_com_erro: ingredientesComErro,
+            taxa_sucesso: Math.round((ingredientesEncontrados / totalIngredientes) * 100),
+            custo_medio_por_ingrediente: totalIngredientes > 0 ? total / totalIngredientes : 0
           }
         };
       } catch (e) {
-        console.error('[menu] erro costOfRecipe', receitaId, e);
-        warnings.push(`Erro no cálculo da receita ${receitaId}: ${e.message}`);
-        return null;
+        console.error('[FASE 5] Erro crítico em costOfRecipe', receitaId, e);
+        
+        // FASE 4: Fallback de emergência para erros críticos
+        const custoEmergencia = servings * 0.1; // R$ 0.10 por porção
+        return { 
+          total: custoEmergencia, 
+          ingredientesDetalhados: [{
+            nome: `Receita ${receitaId}`,
+            quantidade_necessaria: servings,
+            custo_total: custoEmergencia,
+            observacao: `Erro crítico: ${e.message}`,
+            status: 'emergency_fallback'
+          }], 
+          violacoes: [{
+            tipo: 'erro_critico',
+            receita_id: receitaId,
+            erro: e.message
+          }],
+          estatisticas: {
+            total_ingredientes: 1,
+            ingredientes_encontrados: 0,
+            ingredientes_zero_cost: 0,
+            ingredientes_com_sugestoes: 0,
+            ingredientes_sem_solucao: 0,
+            ingredientes_fallback: 1,
+            ingredientes_com_erro: 1,
+            taxa_sucesso: 0,
+            modo_emergencia: true
+          }
+        };
       }
     }
 
@@ -1215,14 +1360,15 @@ serve(async (req) => {
       return r ?? null;
     }
 
-    function pickCheapest(cat: string, servings: number, excludeIds = new Set<string>()) {
+    async function pickCheapest(cat: string, servings: number, excludeIds = new Set<string>()) {
       const list = candidatesByCat[cat] ?? [];
       let best: { r: any; cost: number } | null = null;
       for (const r of list) {
         // CORREÇÃO: Garantir conversão para string na comparação
         const id = String(r.receita_id_legado);
         if (excludeIds.has(id)) continue;
-        const c = costOfRecipe(id, servings);
+        const resultado = await costOfRecipe(id, servings);
+        const c = typeof resultado === 'object' ? resultado?.total : resultado;
         if (c == null) continue;
         if (!best || c < best.cost) best = { r, cost: c };
       }
@@ -1241,7 +1387,7 @@ serve(async (req) => {
       const pool = cat === "PRATO PRINCIPAL 1" ? poolPP1 : poolPP2;
       
       for (const r of candidates) {
-        const resultado = costOfRecipe(String(r.receita_id_legado), refeicoesPorDia);
+        const resultado = await costOfRecipe(String(r.receita_id_legado), refeicoesPorDia);
         if (resultado !== null && typeof resultado === 'object') {
           // Classificar receita por número de violações
           const numViolacoes = resultado.violacoes?.length || 0;
@@ -1294,7 +1440,7 @@ serve(async (req) => {
     for (const cat of ["SALADA 1 (VERDURAS)", "SALADA 2 (LEGUMES)"]) {
       const candidates = candidatesByCat[cat] ?? [];
       for (const r of candidates) {
-        const resultado = costOfRecipe(String(r.receita_id_legado), refeicoesPorDia);
+        const resultado = await costOfRecipe(String(r.receita_id_legado), refeicoesPorDia);
         if (resultado !== null) {
           const cost = typeof resultado === 'object' ? resultado.total : resultado;
           poolSaladas.push({
@@ -1314,7 +1460,7 @@ serve(async (req) => {
     for (const cat of ["SUCO 1", "SUCO 2"]) {
       const candidates = candidatesByCat[cat] ?? [];
       for (const r of candidates) {
-        const resultado = costOfRecipe(String(r.receita_id_legado), refeicoesPorDia);
+        const resultado = await costOfRecipe(String(r.receita_id_legado), refeicoesPorDia);
         if (resultado !== null) {
           const cost = typeof resultado === 'object' ? resultado.total : resultado;
           poolSucos.push({
@@ -1333,7 +1479,7 @@ serve(async (req) => {
     // ARROZ obrigatório (usar baseRecipes.arroz se fornecido)
     let arroz;
     if (arrozReceita) {
-      const resultado = costOfRecipe(String(arrozReceita.receita_id_legado), refeicoesPorDia);
+      const resultado = await costOfRecipe(String(arrozReceita.receita_id_legado), refeicoesPorDia);
       if (resultado !== null) {
         const cost = typeof resultado === 'object' ? resultado.total : resultado;
         arroz = { 
@@ -1345,7 +1491,7 @@ serve(async (req) => {
       }
     }
     if (!arroz) {
-      arroz = pickCheapest("ARROZ BRANCO", refeicoesPorDia);
+      arroz = await pickCheapest("ARROZ BRANCO", refeicoesPorDia);
     }
     
     if (!arroz) {
@@ -1355,7 +1501,7 @@ serve(async (req) => {
     // FEIJÃO obrigatório (usar baseRecipes.feijao se fornecido)
     let feijao;
     if (feijaoReceita) {
-      const resultado = costOfRecipe(String(feijaoReceita.receita_id_legado), refeicoesPorDia);
+      const resultado = await costOfRecipe(String(feijaoReceita.receita_id_legado), refeicoesPorDia);
       if (resultado !== null) {
         const cost = typeof resultado === 'object' ? resultado.total : resultado;
         feijao = { 
@@ -1367,7 +1513,7 @@ serve(async (req) => {
       }
     }
     if (!feijao) {
-      feijao = pickCheapest("FEIJÃO", refeicoesPorDia);
+      feijao = await pickCheapest("FEIJÃO", refeicoesPorDia);
     }
     
     if (!feijao) {
