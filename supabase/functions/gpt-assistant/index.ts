@@ -252,11 +252,27 @@ async function fetchRecipeIngredients(recipeId: string): Promise<any[]> {
     
     const { data, error } = await supabase
       .from('receita_ingredientes')
-      .select('*')
+      .select(`
+        produto_base_descricao,
+        produto_base_id,
+        quantidade,
+        unidade,
+        nome,
+        receita_id_legado
+      `)
       .eq('receita_id_legado', recipeId);
     
     if (error) throw error;
-    return data || [];
+    
+    // Log ingredientes para debug
+    const ingredients = data || [];
+    if (ingredients.length > 0) {
+      console.log(`📦 Receita ${recipeId} - Ingredientes:`, 
+        ingredients.map(i => i.produto_base_descricao || i.nome).join(', ')
+      );
+    }
+    
+    return ingredients;
   });
 }
 
@@ -328,8 +344,15 @@ async function calculateRecipeCostWithWarnings(recipeId: string, mealQuantity: n
         ing.unidade || ''
       );
       
-      // CRITICAL: Busca simples para evitar CPU timeout - sem calculateSimilarity
-      const normalizedName = normalizeIngredientName(ing.nome || '');
+      // CRITICAL: Usar produto_base_descricao ao invés de nome da receita
+      const ingredientName = ing.produto_base_descricao || ing.nome || '';
+      const normalizedName = normalizeIngredientName(ingredientName);
+      
+      if (!normalizedName) {
+        console.warn(`⚠️ Ingrediente sem nome válido:`, ing);
+        continue;
+      }
+      
       const matchingProducts = marketProducts.filter(p => {
         const productName = normalizeIngredientName(p.descricao || '');
         return productName.includes(normalizedName) || 
@@ -351,7 +374,7 @@ async function calculateRecipeCostWithWarnings(recipeId: string, mealQuantity: n
         calculatedCost += totalPrice;
         
         pricedIngredients.push({
-          nome: ing.nome,
+          nome: ingredientName,
           quantidade: qty,
           unidade: ing.unidade,
           preco_unitario: unitPrice,
@@ -361,25 +384,27 @@ async function calculateRecipeCostWithWarnings(recipeId: string, mealQuantity: n
         });
         
         details.push({
-          ingrediente: ing.nome,
+          ingrediente: ingredientName,
           status: '✅',
           preco: totalPrice.toFixed(2),
-          fornecedor: priceInfo.descricao
+          fornecedor: priceInfo.descricao,
+          produto_mercado: priceInfo.descricao
         });
       } else {
         // Ingrediente sem preço - adicionar aviso
         missingIngredients.push({
-          nome: ing.nome,
+          nome: ingredientName,
+          produto_base_id: ing.produto_base_id,
           quantidade: qty,
           unidade: ing.unidade,
-          warning: `⚠️ Ingrediente "${ing.nome}" não encontrado no mercado`
+          warning: `⚠️ Ingrediente "${ingredientName}" (ID: ${ing.produto_base_id || 'N/A'}) não encontrado no mercado`
         });
         
         details.push({
-          ingrediente: ing.nome,
+          ingrediente: ingredientName,
           status: '⚠️',
           preco: 'N/A',
-          aviso: 'Sem preço no mercado atual'
+          aviso: `Sem preço cadastrado (ID: ${ing.produto_base_id || 'N/A'})`
         });
       }
     }
