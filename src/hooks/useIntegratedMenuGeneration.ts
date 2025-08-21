@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { withRetry } from '@/utils/connectionUtils';
 import { useSelectedClient } from '@/contexts/SelectedClientContext';
 import { useClientContractsContext } from '@/contexts/ClientContractsContext';
 import { MarketProduct } from './useMarketProducts';
@@ -379,11 +380,19 @@ export const useIntegratedMenuGeneration = () => {
 
       console.log('[Frontend] Enviando payload padronizado:', payload);
 
-      // Use GPT Assistant para gerar cardápio (função limpa)
-      console.log('[Conectividade] Testando Edge Function limpa...');
-      const { data, error: functionError } = await supabase.functions.invoke('gpt-assistant', {
-        body: payload
-      });
+      // Use GPT Assistant com retry logic para maior robustez
+      console.log('[Conectividade] Invocando Edge Function com retry...');
+      const { data, error: functionError } = await withRetry(
+        () => supabase.functions.invoke('gpt-assistant', {
+          body: payload
+        }),
+        {
+          maxRetries: 3,
+          initialDelay: 1500,
+          maxDelay: 10000,
+          backoffFactor: 2
+        }
+      );
 
       console.log('Resposta da função GPT Assistant:', { data, functionError });
 
@@ -422,9 +431,9 @@ export const useIntegratedMenuGeneration = () => {
             errorStatus = 'Erro de comunicação';
             errorDetails = 'Falha na comunicação com o servidor. Tente novamente.';
             shouldFallbackToLocal = true;
-          } else if (functionError.name === 'FunctionsFetchError') {
-            errorStatus = 'Erro de rede';
-            errorDetails = 'Problema de conectividade. Usando geração local.';
+        } else if (functionError.name === 'FunctionsFetchError') {
+            errorStatus = 'Erro de conectividade';
+            errorDetails = 'Falha na comunicação com o servidor. O sistema tentou reconectar automaticamente mas não conseguiu estabelecer conexão estável.';
             shouldFallbackToLocal = true;
           }
         } catch (processingError) {

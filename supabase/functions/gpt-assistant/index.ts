@@ -244,12 +244,16 @@ function createEmergencyFallbackMenu(numDays: number, refeicoesPorDia: number, c
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
-  // Health check endpoint
+  // Health check endpoint com informações detalhadas
   if (req.method === "GET") {
     return json({ 
+      success: true,
       status: "healthy", 
       timestamp: new Date().toISOString(),
-      version: "3.0-robust"
+      version: "3.1-connectivity-enhanced",
+      environment: Deno.env.get("ENVIRONMENT") || "development",
+      supabase_url: SUPABASE_URL ? "configured" : "missing",
+      service_role: SERVICE_ROLE ? "configured" : "missing"
     });
   }
 
