@@ -52,16 +52,16 @@ const App = () => {
                         <div className="flex-1 flex flex-col">
                           <UserHeader />
                           <main className="flex-1 p-6 overflow-auto">
-                          <Routes>
-                            <Route path="/" element={<Dashboard />} />
-                            <Route path="/cardapios" element={<Cardapios />} />
-                            <Route path="/compras" element={<Compras />} />
-                            <Route path="/relatorios" element={<Relatorios />} />
-                            <Route path="/arquitetura" element={<SystemArchitecture />} />
-                            <Route path="/configuracoes" element={<Dashboard />} />
-                            <Route path="/welcome" element={<Index />} />
-                            <Route path="*" element={<NotFound />} />
-                          </Routes>
+                           <Routes>
+                             <Route path="/" element={<Dashboard />} />
+                             <Route path="/cardapios" element={<Cardapios />} />
+                             <Route path="/compras" element={<Compras />} />
+                             <Route path="/relatorios" element={<Relatorios />} />
+                             <Route path="/arquitetura" element={<SystemArchitecture />} />
+                             <Route path="/configuracoes" element={<Dashboard />} />
+                             <Route path="/welcome" element={<Index />} />
+                             <Route path="*" element={<NotFound />} />
+                           </Routes>
                           </main>
                         </div>
                       </div>

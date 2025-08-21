@@ -83,8 +83,18 @@ const Index = () => {
         <div className="text-center space-y-4">
           <div className="flex gap-4 justify-center">
             <Button onClick={() => navigate('/')} size="lg" className="px-8">
-              Acessar Sistema
+              Acessar Dashboard
             </Button>
+            <Button 
+              onClick={() => navigate('/cardapios')} 
+              size="lg" 
+              className="px-8 flex items-center gap-2"
+            >
+              <ChefHat className="w-4 h-4" />
+              Gerar Cardápios Inteligentes
+            </Button>
+          </div>
+          <div className="flex gap-4 justify-center">
             <Button 
               onClick={() => setShowTestGenerator(!showTestGenerator)} 
               variant="outline" 
@@ -92,8 +102,15 @@ const Index = () => {
               className="px-8 flex items-center gap-2"
             >
               <TestTube className="w-4 h-4" />
-              {showTestGenerator ? 'Ocultar' : 'Testar'} Geração de Cardápio
+              {showTestGenerator ? 'Ocultar' : 'Testar'} Geração Rápida
             </Button>
+          </div>
+          
+          <div className="mt-6 p-4 bg-muted/30 rounded-lg">
+            <p className="text-sm text-muted-foreground">
+              💡 <strong>Dica:</strong> Para resultados completos com cálculos de custo reais, 
+              utilize a seção "Gerar Cardápios Inteligentes" que conecta com nossa base de preços atualizada.
+            </p>
           </div>
         </div>
         

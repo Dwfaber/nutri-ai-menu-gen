@@ -52,8 +52,13 @@ export function TestMenuGenerator() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <ChefHat className="w-5 h-5" />
-            Teste de Geração de Cardápio
+            Geração Rápida de Cardápio
           </CardTitle>
+          <div className="text-sm text-muted-foreground bg-muted/20 p-3 rounded-md">
+            <p>⚠️ <strong>Versão Simplificada:</strong> Esta é uma demonstração rápida. 
+            Para cálculos de custo precisos e recursos completos, acesse a seção 
+            <strong> "Cardápios" → "Gerador Inteligente"</strong>.</p>
+          </div>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
