@@ -5,6 +5,7 @@
 
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
+import { CostCalculator, type MenuRequest, type RecipeCost } from './cost-calculator.ts';
 
 // === CONFIGURAÇÕES E TIPOS ===
 const CONFIG = {
@@ -159,6 +160,7 @@ const recipeCache = new LRUCache<Recipe[]>(50, 10 * 60 * 1000); // 10 min para r
 const rateLimitMap = new Map<string, { count: number; resetTime: number }>();
 const supabaseCircuit = new CircuitBreaker();
 let supabaseClient: any = null;
+const costCalculator = new CostCalculator();
 
 // === FUNÇÕES AUXILIARES ===
 function getSupabaseClient() {
@@ -309,13 +311,100 @@ async function fetchMarketProducts(): Promise<Product[]> {
 }
 
 /**
- * Calcula custo real da receita com transparência sobre ingredientes faltantes
+ * Calcula o custo real de uma receita usando o módulo CostCalculator
  */
-async function calculateRecipeCostWithWarnings(recipeId: string, mealQuantity: number = 1) {
+async function calculateRecipeCostWithWarnings(recipeId: string, mealQuantity: number = 1): Promise<any> {
   const startTime = Date.now();
   
   try {
-    // 1. Buscar ingredientes da receita
+    console.log(`🧮 Calculando custo da receita ${recipeId} para ${mealQuantity} refeições (usando CostCalculator)`);
+    
+    // Usar o módulo CostCalculator para cálculo preciso
+    const recipeCost: RecipeCost = await costCalculator.calculateRecipeCost(
+      parseInt(recipeId), 
+      mealQuantity, 
+      1 // 1 dia
+    );
+    
+    // Converter resultado para formato compatível com API atual
+    const result = {
+      total_cost: recipeCost.custo_total,
+      cost_calculated: recipeCost.custo_total,
+      cost_per_meal: recipeCost.custo_por_porcao,
+      has_missing_prices: recipeCost.ingredientes_sem_preco.length > 0,
+      total_ingredients: recipeCost.ingredientes.length + recipeCost.ingredientes_sem_preco.length,
+      priced_ingredients: recipeCost.ingredientes.length,
+      missing_ingredients: recipeCost.ingredientes_sem_preco.length,
+      accuracy_percentage: recipeCost.precisao_calculo,
+      warnings: [
+        ...recipeCost.avisos,
+        ...recipeCost.ingredientes_sem_preco.map(nome => `⚠️ Ingrediente "${nome}" sem preço no mercado`)
+      ],
+      missing_items: recipeCost.ingredientes_sem_preco.map(nome => ({
+        nome: nome,
+        warning: `⚠️ Ingrediente "${nome}" não encontrado no mercado`
+      })),
+      priced_items: recipeCost.ingredientes.map(ing => ({
+        nome: ing.nome,
+        quantidade: ing.quantidade_necessaria,
+        unidade: ing.unidade,
+        preco_unitario: ing.preco_unitario,
+        preco_total: ing.custo_utilizado,
+        fornecedor: ing.fornecedor,
+        tem_preco: true,
+        em_promocao: ing.em_promocao
+      })),
+      details: [
+        ...recipeCost.ingredientes.map(ing => ({
+          ingrediente: ing.nome,
+          status: '✅',
+          preco: ing.custo_utilizado.toFixed(2),
+          fornecedor: ing.fornecedor,
+          produto_mercado: ing.nome,
+          promocao: ing.em_promocao ? '🏷️' : ''
+        })),
+        ...recipeCost.ingredientes_sem_preco.map(nome => ({
+          ingrediente: nome,
+          status: '⚠️',
+          preco: 'N/A',
+          aviso: 'Sem preço cadastrado no mercado'
+        }))
+      ],
+      calculation_time_ms: Date.now() - startTime,
+      recipe_info: {
+        nome: recipeCost.nome,
+        categoria: recipeCost.categoria,
+        porcoes_base: recipeCost.porcoes_base,
+        porcoes_calculadas: recipeCost.porcoes_calculadas,
+        dentro_orcamento: recipeCost.dentro_orcamento
+      }
+    };
+    
+    // Log consolidado
+    if (recipeCost.ingredientes_sem_preco.length > 0) {
+      console.warn(`⚠️ Receita ${recipeId} (${recipeCost.nome}) tem ${recipeCost.ingredientes_sem_preco.length} ingredientes sem preço:`, 
+        recipeCost.ingredientes_sem_preco.join(', ')
+      );
+    } else {
+      console.log(`✅ Receita ${recipeId} (${recipeCost.nome}): todos os ${recipeCost.ingredientes.length} ingredientes com preço - Custo total: R$ ${recipeCost.custo_total.toFixed(2)}`);
+    }
+    
+    return result;
+    
+  } catch (error) {
+    console.error(`❌ Erro ao calcular custo da receita ${recipeId}:`, error);
+    
+    // Fallback para método antigo em caso de erro
+    console.log(`🔄 Tentando método de fallback para receita ${recipeId}...`);
+    return await calculateRecipeCostFallback(recipeId, mealQuantity);
+  }
+}
+
+/**
+ * Método de fallback para cálculo de custos (versão antiga simplificada)
+ */
+async function calculateRecipeCostFallback(recipeId: string, mealQuantity: number): Promise<any> {
+  try {
     const ingredients = await fetchRecipeIngredients(recipeId);
     
     if (!ingredients || ingredients.length === 0) {
@@ -328,118 +417,27 @@ async function calculateRecipeCostWithWarnings(recipeId: string, mealQuantity: n
       };
     }
     
-    // 2. Buscar produtos do mercado (usando cache)
-    const marketProducts = await fetchMarketProducts();
-    
-    // 3. Calcular custos e identificar problemas
-    let calculatedCost = 0;
-    const missingIngredients = [];
-    const pricedIngredients = [];
-    const details = [];
-    
-    for (const ing of ingredients) {
-      // Converter quantidade para número
-      const qty = convertToStandardUnit(
-        parseFloat(String(ing.quantidade)) || 0, 
-        ing.unidade || ''
-      );
-      
-      // CRITICAL: Usar produto_base_descricao ao invés de nome da receita
-      const ingredientName = ing.produto_base_descricao || ing.nome || '';
-      const normalizedName = normalizeIngredientName(ingredientName);
-      
-      if (!normalizedName) {
-        console.warn(`⚠️ Ingrediente sem nome válido:`, ing);
-        continue;
-      }
-      
-      const matchingProducts = marketProducts.filter(p => {
-        const productName = normalizeIngredientName(p.descricao || '');
-        return productName.includes(normalizedName) || 
-               normalizedName.includes(productName);
-      });
-      
-      let priceInfo = null;
-      if (matchingProducts.length > 0) {
-        // Escolher o produto com melhor preço
-        priceInfo = matchingProducts.reduce((prev, current) => 
-          (prev.preco < current.preco) ? prev : current
-        );
-      }
-      
-      // Processar resultado
-      if (priceInfo) {
-        const unitPrice = convertPriceToKg(priceInfo.preco, priceInfo.unidade);
-        const totalPrice = unitPrice * qty;
-        calculatedCost += totalPrice;
-        
-        pricedIngredients.push({
-          nome: ingredientName,
-          quantidade: qty,
-          unidade: ing.unidade,
-          preco_unitario: unitPrice,
-          preco_total: totalPrice,
-          fornecedor: priceInfo.descricao,
-          tem_preco: true
-        });
-        
-        details.push({
-          ingrediente: ingredientName,
-          status: '✅',
-          preco: totalPrice.toFixed(2),
-          fornecedor: priceInfo.descricao,
-          produto_mercado: priceInfo.descricao
-        });
-      } else {
-        // Ingrediente sem preço - adicionar aviso
-        missingIngredients.push({
-          nome: ingredientName,
-          produto_base_id: ing.produto_base_id,
-          quantidade: qty,
-          unidade: ing.unidade,
-          warning: `⚠️ Ingrediente "${ingredientName}" (ID: ${ing.produto_base_id || 'N/A'}) não encontrado no mercado`
-        });
-        
-        details.push({
-          ingrediente: ingredientName,
-          status: '⚠️',
-          preco: 'N/A',
-          aviso: `Sem preço cadastrado (ID: ${ing.produto_base_id || 'N/A'})`
-        });
-      }
-    }
-    
-    // 4. Escalar para quantidade de refeições
-    const scaledCost = calculatedCost * mealQuantity;
-    
-    // 5. Montar resposta com transparência
-    const result = {
-      total_cost: scaledCost,
-      cost_per_meal: calculatedCost,
-      has_missing_prices: missingIngredients.length > 0,
-      total_ingredients: ingredients.length,
-      priced_ingredients: pricedIngredients.length,
-      missing_ingredients: missingIngredients.length,
-      accuracy_percentage: Math.round((pricedIngredients.length / ingredients.length) * 100),
-      warnings: missingIngredients.map(i => i.warning),
-      missing_items: missingIngredients,
-      priced_items: pricedIngredients,
-      details: details,
-      calculation_time_ms: Date.now() - startTime
+    return {
+      total_cost: 0,
+      cost_calculated: 0,
+      has_missing_prices: true,
+      warnings: ['Erro no cálculo - usando estimativa básica'],
+      details: ingredients.map(ing => ({
+        ingrediente: ing.produto_base_descricao || ing.nome,
+        status: '⚠️',
+        preco: 'N/A',
+        aviso: 'Erro no cálculo de preço'
+      }))
     };
-    
-    // Log para debug
-    if (missingIngredients.length > 0) {
-      console.warn(`⚠️ Receita ${recipeId} tem ${missingIngredients.length} ingredientes sem preço:`, 
-        missingIngredients.map(i => i.nome).join(', ')
-      );
-    }
-    
-    return result;
-    
   } catch (error) {
-    console.error(`❌ Erro ao calcular custo da receita ${recipeId}:`, error);
-    throw error;
+    console.error('Erro no fallback:', error);
+    return {
+      total_cost: 0,
+      cost_calculated: 0,
+      has_missing_prices: true,
+      warnings: [`Erro interno: ${error.message}`],
+      details: []
+    };
   }
 }
 
