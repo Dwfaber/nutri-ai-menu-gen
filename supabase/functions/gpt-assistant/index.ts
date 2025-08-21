@@ -1573,15 +1573,6 @@ serve(async (req) => {
       }
     };
 
-    // Sistema corrigido de escalonamento de receitas
-    function calculateScalingFactor(targetServings: number, recipeIngredients: any[]): number {
-      // Usar quantidade_refeicoes real da receita, não valor fixo
-      const recipeBaseServings = recipeIngredients[0]?.quantidade_refeicoes || 100;
-      const fator = targetServings / recipeBaseServings;
-      
-      console.log(`Escalonamento: ${recipeBaseServings} → ${targetServings} (fator: ${fator.toFixed(3)})`);
-      return fator;
-    }
 
     function validateIngredient(ingredient: any): { valido: boolean; erros: string[]; avisos: string[] } {
       const erros: string[] = [];
