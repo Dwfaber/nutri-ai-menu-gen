@@ -19,6 +19,7 @@ import NotFound from "./pages/NotFound";
 import SystemArchitecture from "./pages/SystemArchitecture";
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
+import ResetPassword from "./pages/ResetPassword";
 import ClientSelectionWrapper from "./components/ClientSelection/ClientSelectionWrapper";
 
 const queryClient = new QueryClient({
@@ -40,8 +41,9 @@ const App = () => {
             <Toaster />
             <Sonner />
             <BrowserRouter>
-              <Routes>
-                <Route path="/auth" element={<Auth />} />
+            <Routes>
+              <Route path="/auth" element={<Auth />} />
+              <Route path="/reset-password" element={<ResetPassword />} />
                 <Route path="/*" element={
                   <ProtectedRoute requireRole="viewer" fallbackPath="/auth">
                     <ClientSelectionWrapper>
