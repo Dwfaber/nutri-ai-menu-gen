@@ -978,38 +978,7 @@ serve(async (req) => {
       'PEÇAS': { base: 'UN', factor: 1 }
     };
 
-    const toMercadoBase = (qtd: number, unidadeIngrediente: string, unidadeMercado: string) => {
-      const origem = (unidadeIngrediente || '').trim().toUpperCase();
-      const destino = (unidadeMercado || '').trim().toUpperCase();
-      
-      // Mesma unidade
-      if (origem === destino) {
-        return { ok: true, valor: qtd, conversao: `${origem} → ${destino} (sem conversão)` };
-      }
-      
-      const configOrigem = UNIT_CONVERSIONS[origem];
-      const configDestino = UNIT_CONVERSIONS[destino];
-      
-      // Unidades não reconhecidas
-      if (!configOrigem || !configDestino) {
-        console.warn(`Unidade não reconhecida: ${origem} ou ${destino}`);
-        return { ok: false, valor: qtd, erro: `Unidade não reconhecida: ${origem} ou ${destino}` };
-      }
-      
-      // Bases incompatíveis (peso vs volume)
-      if (configOrigem.base !== configDestino.base) {
-        console.warn(`Conversão impossível: ${configOrigem.base} ≠ ${configDestino.base}`);
-        return { ok: false, valor: qtd, erro: `Conversão impossível: ${configOrigem.base} ≠ ${configDestino.base}` };
-      }
-      
-      // Conversão
-      const valorBase = qtd * configOrigem.factor;
-      const valorFinal = valorBase / configDestino.factor;
-      const conversao = `${qtd} ${origem} → ${valorFinal} ${destino}`;
-      
-      console.log(`Conversão realizada: ${conversao}`);
-      return { ok: true, valor: valorFinal, conversao };
-    };
+    // Função toMercadoBase removida - usando a versão robusta declarada anteriormente
 
     type MarketRow = {
       produto_base_id: number;
