@@ -1574,31 +1574,6 @@ serve(async (req) => {
     };
 
 
-    function validateIngredient(ingredient: any): { valido: boolean; erros: string[]; avisos: string[] } {
-      const erros: string[] = [];
-      const avisos: string[] = [];
-      
-      // Validações obrigatórias
-      if (!ingredient.produto_base_descricao && !ingredient.nome) {
-        erros.push('Nome do ingrediente ausente');
-      }
-      
-      if (!ingredient.unidade) {
-        erros.push('Unidade não especificada');
-      }
-      
-      // Validação de quantidade
-      const quantidade = Number(ingredient.quantidade || 0);
-      if (isNaN(quantidade)) {
-        erros.push('Quantidade não é um número válido');
-      } else if (quantidade <= 0) {
-        erros.push('Quantidade deve ser maior que zero');
-      } else if (quantidade > 10000) {
-        avisos.push(`Quantidade muito alta: ${quantidade} ${ingredient.unidade}`);
-      }
-      
-      return { valido: erros.length === 0, erros, avisos };
-    }
 
     // FUNÇÃO AUXILIAR ROBUSTA: Buscar ingredientes de receita específica se não encontrada
     async function garantirIngredientesReceita(receitaId: string): Promise<any[]> {
