@@ -2,6 +2,7 @@
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { Client } from "https://deno.land/x/postgres@v0.17.0/mod.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -14,8 +15,13 @@ const legacyDbConfig = {
   user: Deno.env.get('LEGACY_DB_USER'),
   password: Deno.env.get('LEGACY_DB_PASSWORD'),
   port: parseInt(Deno.env.get('LEGACY_DB_PORT') || '1433'),
-  database: 'master' // Ou o nome específico do seu banco
+  database: Deno.env.get('LEGACY_DB_NAME') || 'master'
 };
+
+// Configurações de timeout e retry
+const CONNECTION_TIMEOUT = 10000; // 10 segundos
+const MAX_RETRIES = 3;
+const RETRY_DELAY = 2000; // 2 segundos
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -23,9 +29,10 @@ serve(async (req) => {
   }
 
   try {
+    // CORREÇÃO DE SEGURANÇA: Usar SERVICE_ROLE_KEY para operações de escrita
     const supabaseClient = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_ANON_KEY') ?? ''
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
     const { action } = await req.json();
@@ -54,88 +61,91 @@ serve(async (req) => {
 });
 
 async function discoverDatabaseSchema(supabaseClient: any) {
-  console.log('Connecting to SQL Server for schema discovery...');
+  console.log('Conectando ao SQL Server para descoberta de schema...');
   
-  // Simular descoberta de schema - na produção você usaria um driver SQL Server real
-  const discoveredSchema = {
-    tables: [
-      {
-        name: 'produtos',
-        columns: [
-          { name: 'cod_produto', type: 'varchar', length: 20, nullable: false },
-          { name: 'nome_produto', type: 'varchar', length: 100, nullable: false },
-          { name: 'categoria_id', type: 'int', nullable: true },
-          { name: 'unidade_medida', type: 'varchar', length: 10, nullable: false },
-          { name: 'preco_custo', type: 'decimal', precision: 10, scale: 2, nullable: false },
-          { name: 'peso_kg', type: 'decimal', precision: 8, scale: 3, nullable: true },
-          { name: 'ativo', type: 'bit', nullable: false },
-          { name: 'data_cadastro', type: 'datetime', nullable: false }
-        ]
+  let legacyClient: Client | null = null;
+  let discoveredSchema: any = null;
+  
+  try {
+    // Validar configurações obrigatórias
+    if (!legacyDbConfig.host || !legacyDbConfig.user || !legacyDbConfig.password) {
+      throw new Error('Configurações do banco SQL Server legado não encontradas');
+    }
+
+    // Tentar conectar ao SQL Server com retry logic
+    legacyClient = await connectWithRetry();
+    console.log('Conexão com SQL Server estabelecida com sucesso');
+
+    // Descobrir tabelas reais do banco
+    const tables = await discoverTables(legacyClient);
+    console.log(`Descobertas ${tables.length} tabelas no banco legado`);
+
+    // Descobrir relacionamentos FK
+    const relationships = await discoverRelationships(legacyClient);
+    console.log(`Descobertos ${relationships.length} relacionamentos FK`);
+
+    discoveredSchema = {
+      database: legacyDbConfig.database,
+      discoveredAt: new Date().toISOString(),
+      tables,
+      relationships,
+      connectionStatus: 'successful'
+    };
+
+    // Validar schema descoberto
+    if (!validateDiscoveredSchema(discoveredSchema)) {
+      throw new Error('Schema descoberto não passou na validação');
+    }
+
+  } catch (error) {
+    console.error('Erro durante descoberta de schema:', error);
+    
+    // Log detalhado do erro
+    const errorLog = {
+      error: error.message,
+      stack: error.stack,
+      config: {
+        host: legacyDbConfig.host,
+        port: legacyDbConfig.port,
+        database: legacyDbConfig.database,
+        hasCredentials: !!(legacyDbConfig.user && legacyDbConfig.password)
       },
-      {
-        name: 'receitas',
-        columns: [
-          { name: 'id_receita', type: 'int', nullable: false, identity: true },
-          { name: 'nome_receita', type: 'varchar', length: 150, nullable: false },
-          { name: 'tipo_receita', type: 'varchar', length: 50, nullable: true },
-          { name: 'rendimento', type: 'int', nullable: false },
-          { name: 'tempo_preparo_min', type: 'int', nullable: true },
-          { name: 'instrucoes', type: 'text', nullable: true },
-          { name: 'custo_estimado', type: 'decimal', precision: 10, scale: 2, nullable: true }
-        ]
-      },
-      {
-        name: 'ingredientes_receita',
-        columns: [
-          { name: 'id_receita', type: 'int', nullable: false },
-          { name: 'cod_produto', type: 'varchar', length: 20, nullable: false },
-          { name: 'quantidade', type: 'decimal', precision: 10, scale: 3, nullable: false },
-          { name: 'unidade', type: 'varchar', length: 10, nullable: false }
-        ]
-      },
-      {
-        name: 'clientes_corporativos',
-        columns: [
-          { name: 'id_cliente', type: 'int', nullable: false, identity: true },
-          { name: 'razao_social', type: 'varchar', length: 200, nullable: false },
-          { name: 'cnpj', type: 'varchar', length: 18, nullable: true },
-          { name: 'num_funcionarios', type: 'int', nullable: false },
-          { name: 'orcamento_mensal', type: 'decimal', precision: 12, scale: 2, nullable: false },
-          { name: 'restricoes_json', type: 'text', nullable: true },
-          { name: 'data_contrato', type: 'date', nullable: false },
-          { name: 'status_contrato', type: 'varchar', length: 20, nullable: false }
-        ]
-      },
-      {
-        name: 'categorias_produto',
-        columns: [
-          { name: 'categoria_id', type: 'int', nullable: false, identity: true },
-          { name: 'nome_categoria', type: 'varchar', length: 80, nullable: false },
-          { name: 'grupo_nutricional', type: 'varchar', length: 50, nullable: true }
-        ]
+      timestamp: new Date().toISOString()
+    };
+
+    // Salvar erro nos logs
+    await supabaseClient
+      .from('sync_logs')
+      .insert({
+        tabela_destino: 'schema_discovery',
+        operacao: 'discover',
+        status: 'erro',
+        erro_msg: error.message,
+        detalhes: errorLog
+      });
+
+    return new Response(
+      JSON.stringify({ 
+        success: false, 
+        error: error.message,
+        details: errorLog
+      }),
+      { 
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
       }
-    ],
-    relationships: [
-      {
-        fromTable: 'produtos',
-        fromColumn: 'categoria_id',
-        toTable: 'categorias_produto',
-        toColumn: 'categoria_id'
-      },
-      {
-        fromTable: 'ingredientes_receita',
-        fromColumn: 'id_receita',
-        toTable: 'receitas',
-        toColumn: 'id_receita'
-      },
-      {
-        fromTable: 'ingredientes_receita',
-        fromColumn: 'cod_produto',
-        toTable: 'produtos',
-        toColumn: 'cod_produto'
+    );
+  } finally {
+    // Sempre fechar conexão
+    if (legacyClient) {
+      try {
+        await legacyClient.end();
+        console.log('Conexão SQL Server fechada');
+      } catch (closeError) {
+        console.error('Erro ao fechar conexão:', closeError);
       }
-    ]
-  };
+    }
+  }
 
   // Salvar schema descoberto
   const { error } = await supabaseClient
@@ -144,21 +154,196 @@ async function discoverDatabaseSchema(supabaseClient: any) {
       tabela_destino: 'schema_discovery',
       operacao: 'discover',
       status: 'concluido',
-      detalhes: discoveredSchema
+      detalhes: discoveredSchema,
+      registros_processados: discoveredSchema.tables.length
     });
 
   if (error) {
-    console.error('Error saving discovered schema:', error);
+    console.error('Erro ao salvar schema descoberto:', error);
+    return new Response(
+      JSON.stringify({ 
+        success: false, 
+        error: 'Falha ao salvar schema no Supabase',
+        details: error
+      }),
+      { 
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+      }
+    );
   }
 
+  console.log('Schema descoberto e salvo com sucesso');
   return new Response(
     JSON.stringify({ 
       success: true, 
       schema: discoveredSchema,
-      message: 'Schema descoberto e mapeado com sucesso'
+      message: `Schema real descoberto: ${discoveredSchema.tables.length} tabelas, ${discoveredSchema.relationships.length} relacionamentos`
     }),
     { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
   );
+}
+
+// Função para conectar com retry logic
+async function connectWithRetry(): Promise<Client> {
+  let lastError: Error;
+  
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      console.log(`Tentativa de conexão ${attempt}/${MAX_RETRIES}`);
+      
+      const client = new Client({
+        hostname: legacyDbConfig.host,
+        port: legacyDbConfig.port,
+        user: legacyDbConfig.user,
+        password: legacyDbConfig.password,
+        database: legacyDbConfig.database,
+      });
+
+      // Conectar com timeout
+      const connectPromise = client.connect();
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Connection timeout')), CONNECTION_TIMEOUT)
+      );
+
+      await Promise.race([connectPromise, timeoutPromise]);
+      
+      // Testar conexão com query simples
+      await client.queryArray('SELECT 1');
+      
+      return client;
+      
+    } catch (error) {
+      lastError = error as Error;
+      console.error(`Tentativa ${attempt} falhou:`, error.message);
+      
+      if (attempt < MAX_RETRIES) {
+        console.log(`Aguardando ${RETRY_DELAY}ms antes da próxima tentativa...`);
+        await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
+      }
+    }
+  }
+  
+  throw new Error(`Falha ao conectar após ${MAX_RETRIES} tentativas. Último erro: ${lastError.message}`);
+}
+
+// Descobrir tabelas reais do banco
+async function discoverTables(client: Client) {
+  const tablesQuery = `
+    SELECT 
+      t.table_name,
+      c.column_name,
+      c.data_type,
+      c.character_maximum_length,
+      c.numeric_precision,
+      c.numeric_scale,
+      c.is_nullable,
+      c.column_default,
+      CASE WHEN pk.column_name IS NOT NULL THEN true ELSE false END as is_primary_key
+    FROM information_schema.tables t
+    JOIN information_schema.columns c ON t.table_name = c.table_name
+    LEFT JOIN information_schema.key_column_usage pk ON 
+      c.table_name = pk.table_name AND 
+      c.column_name = pk.column_name AND
+      pk.constraint_name LIKE 'PK_%'
+    WHERE t.table_type = 'BASE TABLE'
+      AND t.table_schema = 'dbo'
+    ORDER BY t.table_name, c.ordinal_position
+  `;
+
+  const result = await client.queryArray(tablesQuery);
+  const tablesMap = new Map();
+
+  for (const row of result.rows) {
+    const [tableName, columnName, dataType, maxLength, precision, scale, nullable, defaultValue, isPrimaryKey] = row;
+    
+    if (!tablesMap.has(tableName)) {
+      tablesMap.set(tableName, {
+        name: tableName,
+        columns: []
+      });
+    }
+
+    tablesMap.get(tableName).columns.push({
+      name: columnName,
+      type: dataType,
+      length: maxLength,
+      precision: precision,
+      scale: scale,
+      nullable: nullable === 'YES',
+      defaultValue: defaultValue,
+      isPrimaryKey: isPrimaryKey
+    });
+  }
+
+  return Array.from(tablesMap.values());
+}
+
+// Descobrir relacionamentos FK
+async function discoverRelationships(client: Client) {
+  const relationshipsQuery = `
+    SELECT 
+      fk.constraint_name,
+      fk.table_name as from_table,
+      fk.column_name as from_column,
+      pk.table_name as to_table,
+      pk.column_name as to_column
+    FROM information_schema.referential_constraints rc
+    JOIN information_schema.key_column_usage fk ON rc.constraint_name = fk.constraint_name
+    JOIN information_schema.key_column_usage pk ON rc.unique_constraint_name = pk.constraint_name
+    WHERE fk.table_schema = 'dbo' AND pk.table_schema = 'dbo'
+    ORDER BY fk.table_name, fk.column_name
+  `;
+
+  const result = await client.queryArray(relationshipsQuery);
+  
+  return result.rows.map(row => {
+    const [constraintName, fromTable, fromColumn, toTable, toColumn] = row;
+    return {
+      constraintName,
+      fromTable,
+      fromColumn,
+      toTable,
+      toColumn
+    };
+  });
+}
+
+// Validar schema descoberto
+function validateDiscoveredSchema(schema: any): boolean {
+  if (!schema || !schema.tables || !Array.isArray(schema.tables)) {
+    console.error('Schema inválido: estrutura de tabelas ausente');
+    return false;
+  }
+
+  if (schema.tables.length === 0) {
+    console.error('Schema inválido: nenhuma tabela descoberta');
+    return false;
+  }
+
+  // Validar cada tabela
+  for (const table of schema.tables) {
+    if (!table.name || !table.columns || !Array.isArray(table.columns)) {
+      console.error(`Tabela inválida: ${table.name || 'sem nome'}`);
+      return false;
+    }
+
+    if (table.columns.length === 0) {
+      console.error(`Tabela sem colunas: ${table.name}`);
+      return false;
+    }
+
+    // Validar cada coluna
+    for (const column of table.columns) {
+      if (!column.name || !column.type) {
+        console.error(`Coluna inválida na tabela ${table.name}: ${JSON.stringify(column)}`);
+        return false;
+      }
+    }
+  }
+
+  console.log('Schema validado com sucesso');
+  return true;
 }
 
 async function mapLegacyTables(supabaseClient: any) {
