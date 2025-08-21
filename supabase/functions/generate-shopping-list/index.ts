@@ -6,7 +6,7 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// Sistema otimizado de embalagens com validação rigorosa
+// INTERFACES CORRIGIDAS E VALIDADAS
 interface PackagingOption {
   produto_id: any;
   descricao: string;
@@ -15,6 +15,7 @@ interface PackagingOption {
   apenas_valor_inteiro: boolean;
   em_promocao: boolean;
   disponivel?: boolean;
+  unidade: string;
 }
 
 interface OptimizationResult {
@@ -33,25 +34,74 @@ interface OptimizationResult {
   desperdicio_percentual: number;
 }
 
-function validateIngredientData(ingredient: any): { valid: boolean; errors: string[] } {
+// ESTRUTURA DE DADOS CORRIGIDA
+interface ConsolidatedIngredient {
+  produto_base_id: number;
+  nome: string;
+  quantidade_total: number;
+  unidade: string;
+  receitas: string[];
+}
+
+interface ValidationResult {
+  valid: boolean;
+  errors: string[];
+  warnings: string[];
+}
+
+// VALIDAÇÃO RIGOROSA CORRIGIDA
+function validateIngredientData(ingredient: any): ValidationResult {
   const errors: string[] = [];
+  const warnings: string[] = [];
   
+  // Validações críticas
   if (!ingredient.produto_base_id || ingredient.produto_base_id <= 0) {
-    errors.push('produto_base_id inválido');
+    errors.push('produto_base_id inválido ou ausente');
   }
   
   if (!ingredient.quantidade_total || ingredient.quantidade_total <= 0) {
-    errors.push('quantidade_total inválida');
+    errors.push('quantidade_total inválida ou zero');
   }
   
   if (!ingredient.unidade || ingredient.unidade.trim() === '') {
     errors.push('unidade não especificada');
   }
   
+  // Validações de warning
+  if (ingredient.quantidade_total > 10000) {
+    warnings.push('quantidade muito alta - verificar unidade');
+  }
+  
   return {
     valid: errors.length === 0,
-    errors
+    errors,
+    warnings
   };
+}
+
+// CONVERSÃO DE UNIDADES EXPANDIDA
+function convertUnits(quantidade: number, unidadeOrigem: string, unidadeDestino: string): number {
+  const origem = unidadeOrigem?.toUpperCase() || 'GR';
+  const destino = unidadeDestino?.toUpperCase() || 'GR';
+  
+  if (origem === destino) return quantidade;
+  
+  // Conversões de peso
+  if (origem === 'GR' && destino === 'KG') return quantidade / 1000;
+  if (origem === 'KG' && destino === 'GR') return quantidade * 1000;
+  
+  // Conversões de volume
+  if (origem === 'ML' && destino === 'L') return quantidade / 1000;
+  if (origem === 'L' && destino === 'ML') return quantidade * 1000;
+  
+  // Conversões especiais
+  if (origem === 'UN' && destino === 'CX') return quantidade / 12; // 12 unidades por caixa
+  if (origem === 'CX' && destino === 'UN') return quantidade * 12;
+  if (origem === 'PCT' && destino === 'UN') return quantidade * 500; // 500g por pacote
+  if (origem === 'DZ' && destino === 'UN') return quantidade * 12; // 12 unidades por dúzia
+  
+  console.warn(`Conversão não encontrada: ${origem} -> ${destino}`);
+  return quantidade; // Sem conversão disponível
 }
 
 function calculateOptimalPackaging(quantidadeNecessaria: number, opcoes: PackagingOption[]): OptimizationResult {
@@ -165,22 +215,51 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    // Parse request body
+    // VALIDAÇÃO E PARSE DA REQUISIÇÃO
     const { menuId, clientName, budgetPredicted, servingsPerDay = 100 } = await req.json();
+
+    // Validação de entrada
+    if (!menuId || !clientName) {
+      throw new Error('menuId e clientName são obrigatórios');
+    }
+
+    if (budgetPredicted && budgetPredicted <= 0) {
+      throw new Error('Orçamento deve ser maior que zero');
+    }
+
+    if (servingsPerDay <= 0) {
+      throw new Error('Porções por dia deve ser maior que zero');
+    }
 
     console.log('Gerando lista de compras para cardápio:', menuId);
     console.log('Cliente:', clientName, 'Orçamento:', budgetPredicted, 'Porções/dia:', servingsPerDay);
 
-    // Buscar informações do cardápio gerado
-    const { data: menuData, error: menuError } = await supabase
-      .from('generated_menus')
-      .select('*')
-      .eq('id', menuId)
-      .maybeSingle();
+    // OTIMIZAÇÃO: CONSULTAS PARALELAS USANDO Promise.all
+    const [menuResult, solicitacaoResult] = await Promise.all([
+      supabase
+        .from('generated_menus')
+        .select('*')
+        .eq('id', menuId)
+        .maybeSingle(),
+      supabase
+        .from('co_solicitacao_produto_listagem')
+        .select('solicitacao_id')
+        .order('solicitacao_id', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+    ]);
+
+    const { data: menuData, error: menuError } = menuResult;
+    const { data: latestSolicitacao, error: solicitacaoError } = solicitacaoResult;
 
     if (menuError || !menuData) {
       console.error('Erro ao buscar cardápio:', menuError);
       throw new Error(`Cardápio não encontrado: ${menuId}`);
+    }
+
+    if (solicitacaoError || !latestSolicitacao) {
+      console.error('Erro ao buscar última solicitação:', solicitacaoError);
+      throw new Error('Nenhuma solicitação de produtos encontrada');
     }
 
     console.log('Cardápio encontrado:', {
@@ -190,18 +269,6 @@ serve(async (req) => {
     });
 
     // Buscar produtos do mercado
-    const { data: latestSolicitacao, error: solicitacaoError } = await supabase
-      .from('co_solicitacao_produto_listagem')
-      .select('solicitacao_id')
-      .order('solicitacao_id', { ascending: false })
-      .limit(1)
-      .maybeSingle();
-
-    if (solicitacaoError || !latestSolicitacao) {
-      console.error('Erro ao buscar última solicitação:', solicitacaoError);
-      throw new Error('Nenhuma solicitação de produtos encontrada');
-    }
-
     const { data: marketProducts, error: marketError } = await supabase
       .from('co_solicitacao_produto_listagem')
       .select('*')
@@ -251,24 +318,59 @@ serve(async (req) => {
     // Consolidar ingredientes por produto_base_id
     const consolidatedIngredients = new Map();
 
-    // Processar receitas adaptadas primeiro (prioridade)
+    // FASE 1: CORREÇÃO DA ESTRUTURA DE DADOS - SEPARAR PROCESSAMENTO
+    // Processar receitas adaptadas (estrutura diferente de ingredientes)
     for (const receitaAdaptada of receitasAdaptadas) {
-      const ing = receitaAdaptada;
-      const adaptedIngredients = ing.ingredientes || [];
+      // AQUI NÃO É INGREDIENTE, É RECEITA ADAPTADA
+      console.log(`[RECEITA ADAPTADA] Processando receita: ${receitaAdaptada.nome_receita || receitaAdaptada.id}`);
+      
+      // Verificar se existe lista de ingredientes na receita adaptada
+      const adaptedIngredients = receitaAdaptada.ingredientes || [];
+      
+      if (!Array.isArray(adaptedIngredients)) {
+        console.warn(`Receita ${receitaAdaptada.nome_receita} sem ingredientes válidos`);
+        continue;
+      }
+      
       for (const adaptedIng of adaptedIngredients) {
         const produtoBaseId = adaptedIng.produto_base_id;
-        if (!produtoBaseId) continue;
+        if (!produtoBaseId) {
+          console.warn('Ingrediente sem produto_base_id:', adaptedIng);
+          continue;
+        }
         
-        const quantidadeNecessaria = Number(adaptedIng.quantidade || 0) * Number(servingsMultiplier);
+        // VALIDAÇÃO RIGOROSA DO INGREDIENTE ADAPTADO
+        const validation = validateIngredientData({
+          produto_base_id: adaptedIng.produto_base_id,
+          quantidade_total: adaptedIng.quantidade,
+          unidade: adaptedIng.unidade
+        });
+        
+        if (!validation.valid) {
+          console.error(`Ingrediente inválido na receita adaptada:`, validation.errors);
+          warnings.push(`Receita adaptada - ${validation.errors.join(', ')}`);
+          continue;
+        }
+        
+        // CÁLCULO CORRIGIDO - EVITAR DIVISÃO POR ZERO
+        const baseServing = Number(adaptedIng.quantidade_refeicoes || 100);
+        if (baseServing <= 0) {
+          console.error(`Base serving inválido para ingrediente ${adaptedIng.nome}: ${baseServing}`);
+          continue;
+        }
+        
+        const quantidadeNecessaria = (Number(adaptedIng.quantidade || 0) * servingsMultiplier) / baseServing;
         if (quantidadeNecessaria <= 0) continue;
         
-        console.log(`[RECEITAS ADAPTADAS] Processando ingrediente: ${adaptedIng.produto_base_descricao || adaptedIng.nome}, qtd necessária: ${quantidadeNecessaria}`);
+        console.log(`[RECEITA ADAPTADA] Ingrediente: ${adaptedIng.produto_base_descricao || adaptedIng.nome}`);
+        console.log(`- Qtd base: ${adaptedIng.quantidade} para ${baseServing} refeições`);
+        console.log(`- Qtd necessária: ${quantidadeNecessaria} ${adaptedIng.unidade}`);
 
-        // Add to consolidated ingredients map
+        // Consolidar no mapa
         if (!consolidatedIngredients.has(produtoBaseId)) {
           consolidatedIngredients.set(produtoBaseId, {
             produto_base_id: produtoBaseId,
-            nome: adaptedIng.produto_base_descricao || 'Ingrediente não identificado',
+            nome: adaptedIng.produto_base_descricao || adaptedIng.nome || 'Ingrediente não identificado',
             quantidade_total: 0,
             unidade: adaptedIng.unidade || 'GR',
             receitas: []
@@ -277,16 +379,16 @@ serve(async (req) => {
 
         const existingIngredient = consolidatedIngredients.get(produtoBaseId);
         existingIngredient.quantidade_total += quantidadeNecessaria;
-        existingIngredient.receitas.push(ing.nome_receita || '');
+        existingIngredient.receitas.push(receitaAdaptada.nome_receita || 'Receita adaptada');
       }
     }
 
-    // Processar ingredientes das receitas legado com validação rigorosa
+    // PROCESSAR INGREDIENTES DAS RECEITAS LEGADO (SEPARADO DAS ADAPTADAS)
     const warnings = [];
     
     if (ingredients && ingredients.length > 0) {
       for (const ingredient of ingredients) {
-        // Validação rigorosa de ingredientes
+        // VALIDAÇÃO RIGOROSA DE INGREDIENTES LEGADO
         const validation = validateIngredientData({
           produto_base_id: ingredient.produto_base_id,
           quantidade_total: ingredient.quantidade,
@@ -301,22 +403,40 @@ serve(async (req) => {
 
         const produtoBaseId = Number(ingredient.produto_base_id);
 
-        // Calcular quantidade necessária usando quantidade_refeicoes real
-        const baseServing = Number(ingredient.quantidade_refeicoes || 100); // fallback para 100
-        const quantidadeNecessaria = Number(ingredient.quantidade || 0) * Number(servingsMultiplier / baseServing);
+        // CÁLCULO CORRIGIDO - EVITAR DIVISÃO POR ZERO
+        const baseServing = Number(ingredient.quantidade_refeicoes || 100);
+        if (baseServing <= 0) {
+          console.error(`Base serving inválido para ingrediente ${ingredient.produto_base_descricao}: ${baseServing}`);
+          warnings.push(`Ingrediente ${ingredient.produto_base_descricao}: base serving inválido`);
+          continue;
+        }
         
-        console.log(`Processando ingrediente: ${ingredient.produto_base_descricao || ingredient.nome}`);
-        console.log(`- Qtd base: ${ingredient.quantidade} ${ingredient.unidade}`);
-        console.log(`- Base serving: ${baseServing} refeições`);
-        console.log(`- Target serving: ${servingsMultiplier} refeições`);
-        console.log(`- Fator: ${(servingsMultiplier / baseServing).toFixed(3)}`);
-        console.log(`- Qtd necessária: ${quantidadeNecessaria} ${ingredient.unidade}`);
+        const quantidadeNecessaria = (Number(ingredient.quantidade || 0) * servingsMultiplier) / baseServing;
+        if (quantidadeNecessaria <= 0) {
+          console.warn(`Quantidade necessária zero para ${ingredient.produto_base_descricao}`);
+          continue;
+        }
+        
+        console.log(`[INGREDIENTE LEGADO] ${ingredient.produto_base_descricao || ingredient.nome}`);
+        console.log(`- Qtd base: ${ingredient.quantidade} ${ingredient.unidade} para ${baseServing} refeições`);
+        console.log(`- Fator multiplicador: ${(servingsMultiplier / baseServing).toFixed(3)}`);
+        console.log(`- Qtd necessária: ${quantidadeNecessaria.toFixed(2)} ${ingredient.unidade}`);
 
-        // Add to consolidated ingredients map
+        // USAR CONVERSÃO DE UNIDADES SE NECESSÁRIO
+        const ingredientUnit = ingredient.unidade?.toUpperCase() || 'GR';
+        let finalQuantity = quantidadeNecessaria;
+        
+        // Aplicar conversões se necessário para padronizar
+        if (ingredientUnit !== 'GR' && ingredientUnit !== 'KG' && ingredientUnit !== 'ML' && ingredientUnit !== 'L') {
+          finalQuantity = convertUnits(quantidadeNecessaria, ingredientUnit, 'GR');
+          console.log(`- Conversão aplicada: ${quantidadeNecessaria} ${ingredientUnit} -> ${finalQuantity} GR`);
+        }
+
+        // Consolidar no mapa
         if (!consolidatedIngredients.has(produtoBaseId)) {
           consolidatedIngredients.set(produtoBaseId, {
             produto_base_id: produtoBaseId,
-            nome: ingredient.produto_base_descricao || 'Ingrediente não identificado',
+            nome: ingredient.produto_base_descricao || ingredient.nome || 'Ingrediente não identificado',
             quantidade_total: 0,
             unidade: ingredient.unidade || 'GR',
             receitas: []
@@ -324,7 +444,7 @@ serve(async (req) => {
         }
 
         const existingIngredient = consolidatedIngredients.get(produtoBaseId);
-        existingIngredient.quantidade_total += quantidadeNecessaria;
+        existingIngredient.quantidade_total += finalQuantity;
         existingIngredient.receitas.push(ingredient.nome || 'Receita não identificada');
       }
     }
@@ -532,11 +652,28 @@ serve(async (req) => {
   } catch (error) {
     console.error('Erro na geração da lista de compras:', error);
     
-    return new Response(JSON.stringify({
+    // TRATAMENTO ROBUSTO DE ERROS COM ESTRUTURA PADRONIZADA
+    const errorResponse = {
       success: false,
-      error: error.message,
-      details: 'Erro interno na geração da lista de compras'
-    }), {
+      error: error.message || 'Erro desconhecido',
+      details: 'Erro interno na geração da lista de compras',
+      timestamp: new Date().toISOString(),
+      context: {
+        menuId: req.body?.menuId || 'N/A',
+        clientName: req.body?.clientName || 'N/A'
+      }
+    };
+
+    // Log estruturado para debugging
+    console.error('ERROR_DETAILS:', {
+      timestamp: errorResponse.timestamp,
+      error_type: error.constructor.name,
+      error_message: error.message,
+      stack_trace: error.stack,
+      context: errorResponse.context
+    });
+    
+    return new Response(JSON.stringify(errorResponse), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     });
