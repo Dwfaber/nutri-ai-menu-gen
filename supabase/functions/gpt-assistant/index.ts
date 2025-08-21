@@ -491,14 +491,6 @@ function convertPriceToKg(preco: number, unidade: string): number {
   return preco;
 }
 
-function normalizeIngredientName(name: string): string {
-  return name
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
 
 async function generateShoppingList(selectedRecipes: Recipe[], mealQuantity: number): Promise<any[]> {
   const shoppingList: any[] = [];
