@@ -15,42 +15,56 @@ export async function generateRecipesOnly(requestData: any) {
   }
 
   const prompt = `
-Você é um chef especialista em cardápios institucionais. Gere um cardápio semanal simples para:
+Você é um chef especialista em cardápios institucionais brasileiros com vasta experiência em nutrição e gestão de custos. Gere um cardápio semanal otimizado para:
 
-CLIENTE: ${client_data.nome}
-REFEIÇÕES POR DIA: ${meal_quantity}
-ORÇAMENTO MÁXIMO: R$ ${client_data.custo_maximo_refeicao}/refeição
-RESTRIÇÕES: ${client_data.restricoes_alimentares?.join(', ') || 'Nenhuma'}
-PREFERÊNCIAS: ${client_data.preferencias_alimentares?.join(', ') || 'Nenhuma'}
+DADOS DO CLIENTE:
+- Nome: ${client_data.nome}
+- Refeições por dia: ${meal_quantity}
+- Orçamento máximo: R$ ${client_data.custo_maximo_refeicao}/refeição
+- Restrições alimentares: ${client_data.restricoes_alimentares?.join(', ') || 'Nenhuma'}
+- Preferências: ${client_data.preferencias_alimentares?.join(', ') || 'Nenhuma'}
 
-INSTRUÇÕES:
-1. Retorne APENAS um JSON válido
-2. Gere 14 receitas (2 por dia da semana)
-3. Foque em receitas simples e econômicas
-4. Inclua variedade proteica e vegetais
-5. NÃO calcule custos - isso será feito posteriormente
+DIRETRIZES AVANÇADAS:
+1. QUALIDADE NUTRICIONAL: Balance proteínas, carboidratos, vitaminas e minerais
+2. SAZONALIDADE: Priorize ingredientes da estação atual no Brasil
+3. VARIEDADE: Evite repetições e garanta diversidade de cores, sabores e texturas
+4. ECONOMIA: Maximize aproveitamento de ingredientes e minimize desperdício
+5. REGIONALIDADE: Use ingredientes típicos e acessíveis no mercado brasileiro
+6. PRATICIDADE: Receitas executáveis em cozinha institucional
 
-FORMATO DE RESPOSTA OBRIGATÓRIO:
+ESTRUTURA SEMANAL:
+- 14 receitas totais (2 por dia: 1 prato principal + 1 acompanhamento)
+- Rotação inteligente de proteínas (bovina, suína, frango, peixe, ovos, leguminosas)
+- Incluir sempre: arroz, feijão, salada e uma fruta sazonal
+- Considerar técnicas culinárias variadas (cozido, grelhado, refogado, assado)
+
+VALIDAÇÃO DE INGREDIENTES:
+- Quantidades realistas para o rendimento especificado
+- Unidades corretas e padronizadas (kg, g, l, ml, un, dente, maço)
+- Nomes de ingredientes precisos para identificação no mercado
+- Evitar ingredientes caros ou difíceis de encontrar
+
+FORMATO JSON OBRIGATÓRIO:
 {
   "recipes": [
     {
-      "nome": "Nome da Receita",
+      "nome": "Nome Descritivo da Receita",
       "dia": "segunda-feira",
       "tipo": "prato_principal" ou "acompanhamento",
       "rendimento": ${meal_quantity},
       "ingredientes": [
         {
-          "nome": "nome do ingrediente",
-          "quantidade": numero,
-          "unidade": "kg/g/l/ml/un/dente",
-          "produto_base_descricao": "nome para busca no mercado"
+          "nome": "nome específico do ingrediente",
+          "quantidade": numero_preciso,
+          "unidade": "unidade_padronizada",
+          "produto_base_descricao": "nome comercial para busca no mercado"
         }
       ]
     }
   ]
 }
 
-IMPORTANTE: Retorne apenas o JSON, sem explicações adicionais.
+IMPORTANTE: Retorne EXCLUSIVAMENTE o JSON válido, sem texto adicional ou explicações.
 `;
 
   try {
@@ -61,12 +75,12 @@ IMPORTANTE: Retorne apenas o JSON, sem explicações adicionais.
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'gpt-4o-mini',
+        model: 'gpt-4o',
         messages: [
           { role: 'system', content: 'Você é um chef especialista. Responda sempre em JSON válido.' },
           { role: 'user', content: prompt }
         ],
-        max_tokens: 3000,
+        max_tokens: 4000,
         temperature: 0.7,
       }),
     });
