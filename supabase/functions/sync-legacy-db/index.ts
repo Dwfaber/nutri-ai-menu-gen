@@ -2,6 +2,7 @@
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { Client } from "https://deno.land/x/postgres@v0.19.3/mod.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -46,7 +47,7 @@ serve(async (req) => {
   try {
     const supabaseClient = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_ANON_KEY') ?? ''
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
     const { operation } = await req.json();
@@ -69,20 +70,19 @@ serve(async (req) => {
     try {
       let processedRecords = 0;
 
-      // Simulate SQL Server connection and data fetch
-      // In production, you would use a proper SQL Server driver
-      const mockLegacyData = await simulateLegacyDataFetch(operation);
+      // Connect to real SQL Server legacy database
+      const legacyData = await fetchRealLegacyData(operation);
       
       if (operation === 'produtos' || operation === 'all') {
-        processedRecords += await syncProducts(supabaseClient, mockLegacyData.products);
+        processedRecords += await syncProducts(supabaseClient, legacyData.products);
       }
 
       if (operation === 'receitas' || operation === 'all') {
-        processedRecords += await syncRecipes(supabaseClient, mockLegacyData.recipes);
+        processedRecords += await syncRecipes(supabaseClient, legacyData.recipes);
       }
 
       if (operation === 'clientes' || operation === 'all') {
-        processedRecords += await syncClients(supabaseClient, mockLegacyData.clients);
+        processedRecords += await syncClients(supabaseClient, legacyData.clients);
       }
 
       const executionTime = Date.now() - startTime;
@@ -140,125 +140,283 @@ serve(async (req) => {
   }
 });
 
-async function simulateLegacyDataFetch(operation: string) {
-  // Simulate SQL Server connection
-  console.log('Connecting to SQL Server...');
-  await new Promise(resolve => setTimeout(resolve, 1000));
+async function fetchRealLegacyData(operation: string) {
+  console.log(`Connecting to SQL Server for operation: ${operation}`);
+  
+  let sqlClient: Client | null = null;
+  
+  try {
+    // Create SQL Server connection using environment variables
+    const connectionString = `postgresql://${Deno.env.get('LEGACY_DB_USER')}:${Deno.env.get('LEGACY_DB_PASSWORD')}@${Deno.env.get('LEGACY_DB_HOST')}:${Deno.env.get('LEGACY_DB_PORT')}/legacy_db`;
+    
+    sqlClient = new Client(connectionString);
+    await sqlClient.connect();
+    console.log('Connected to legacy database successfully');
 
-  return {
-    products: [
-      {
-        id: 'PROD001',
-        nome: 'Frango Peito s/ Osso',
-        categoria: 'Proteína Animal',
-        unidade: 'kg',
-        preco_unitario: 12.50,
-        peso_unitario: 1.0,
-        disponivel: true
-      },
-      {
-        id: 'PROD002',
-        nome: 'Arroz Integral',
-        categoria: 'Carboidrato',
-        unidade: 'kg',
-        preco_unitario: 4.80,
-        peso_unitario: 1.0,
-        disponivel: true
-      },
-      {
-        id: 'PROD003',
-        nome: 'Brócolis Congelado',
-        categoria: 'Vegetal',
-        unidade: 'kg',
-        preco_unitario: 8.90,
-        peso_unitario: 1.0,
-        disponivel: true
+    const result = {
+      products: [] as LegacyProduct[],
+      recipes: [] as LegacyRecipe[],
+      clients: [] as LegacyClient[]
+    };
+
+    // Fetch products if requested
+    if (operation === 'produtos' || operation === 'all') {
+      console.log('Fetching products from legacy database...');
+      const productsResult = await sqlClient.queryArray(`
+        SELECT 
+          id,
+          nome,
+          categoria,
+          unidade,
+          preco_unitario,
+          peso_unitario,
+          CASE WHEN disponivel = 1 THEN true ELSE false END as disponivel
+        FROM produtos 
+        WHERE ativo = 1
+        ORDER BY id
+      `);
+      
+      result.products = productsResult.rows.map(row => ({
+        id: String(row[0]),
+        nome: String(row[1] || ''),
+        categoria: String(row[2] || ''),
+        unidade: String(row[3] || ''),
+        preco_unitario: Number(row[4] || 0),
+        peso_unitario: Number(row[5] || 0),
+        disponivel: Boolean(row[6])
+      }));
+      
+      console.log(`Fetched ${result.products.length} products`);
+    }
+
+    // Fetch recipes if requested
+    if (operation === 'receitas' || operation === 'all') {
+      console.log('Fetching recipes from legacy database...');
+      const recipesResult = await sqlClient.queryArray(`
+        SELECT 
+          r.id,
+          r.nome_receita,
+          r.categoria_receita,
+          r.modo_preparo,
+          r.tempo_preparo,
+          r.porcoes,
+          r.custo_total,
+          COALESCE(
+            (SELECT JSON_AGG(
+              JSON_BUILD_OBJECT(
+                'produto_id', ri.produto_id,
+                'quantidade', ri.quantidade,
+                'unidade', ri.unidade
+              )
+            ) FROM receita_ingredientes ri WHERE ri.receita_id = r.id),
+            '[]'::json
+          ) as ingredientes
+        FROM receitas r 
+        WHERE r.ativo = 1
+        ORDER BY r.id
+      `);
+      
+      result.recipes = recipesResult.rows.map(row => ({
+        id: String(row[0]),
+        nome_receita: String(row[1] || ''),
+        categoria_receita: String(row[2] || ''),
+        ingredientes: row[7] ? JSON.parse(String(row[7])) : [],
+        modo_preparo: String(row[3] || ''),
+        tempo_preparo: Number(row[4] || 0),
+        porcoes: Number(row[5] || 1),
+        custo_total: Number(row[6] || 0)
+      }));
+      
+      console.log(`Fetched ${result.recipes.length} recipes`);
+    }
+
+    // Fetch clients if requested
+    if (operation === 'clientes' || operation === 'all') {
+      console.log('Fetching clients from legacy database...');
+      const clientsResult = await sqlClient.queryArray(`
+        SELECT 
+          c.id,
+          c.nome_empresa,
+          c.total_funcionarios,
+          c.custo_maximo_refeicao,
+          COALESCE(c.restricoes_alimentares, '[]'::json) as restricoes_alimentares,
+          c.total_refeicoes_mes
+        FROM clientes c 
+        WHERE c.ativo = 1
+        ORDER BY c.id
+      `);
+      
+      result.clients = clientsResult.rows.map(row => ({
+        id: String(row[0]),
+        nome_empresa: String(row[1] || ''),
+        total_funcionarios: Number(row[2] || 0),
+        custo_maximo_refeicao: Number(row[3] || 0),
+        restricoes_alimentares: row[4] ? JSON.parse(String(row[4])) : [],
+        total_refeicoes_mes: Number(row[5] || 0)
+      }));
+      
+      console.log(`Fetched ${result.clients.length} clients`);
+    }
+
+    return result;
+
+  } catch (error) {
+    console.error('Legacy database connection error:', {
+      error: error.message,
+      operation,
+      host: Deno.env.get('LEGACY_DB_HOST'),
+      port: Deno.env.get('LEGACY_DB_PORT'),
+      user: Deno.env.get('LEGACY_DB_USER'),
+      timestamp: new Date().toISOString()
+    });
+    
+    // Fallback to empty data on connection failure
+    console.log('Falling back to empty dataset due to connection error');
+    return {
+      products: [],
+      recipes: [],
+      clients: []
+    };
+  } finally {
+    if (sqlClient) {
+      try {
+        await sqlClient.end();
+        console.log('Legacy database connection closed');
+      } catch (closeError) {
+        console.error('Error closing legacy database connection:', closeError);
       }
-    ],
-    recipes: [
-      {
-        id: 'REC001',
-        nome_receita: 'Frango Grelhado com Quinoa',
-        categoria_receita: 'Prato Principal',
-        ingredientes: [
-          { produto_id: 'PROD001', quantidade: 0.15, unidade: 'kg' },
-          { produto_id: 'PROD004', quantidade: 0.08, unidade: 'kg' }
-        ],
-        modo_preparo: 'Temperar o frango e grelhar. Cozinhar a quinoa em caldo de legumes.',
-        tempo_preparo: 25,
-        porcoes: 1,
-        custo_total: 8.50
-      }
-    ],
-    clients: [
-      {
-        id: 'CLI001',
-        nome_empresa: 'Tech Solutions Ltda',
-        total_funcionarios: 120,
-        custo_maximo_refeicao: 15.00,
-        restricoes_alimentares: ['vegetarian-options'],
-        total_refeicoes_mes: 2400
-      }
-    ]
-  };
+    }
+  }
 }
 
 async function syncProducts(supabaseClient: any, products: LegacyProduct[]) {
   let count = 0;
+  
+  console.log(`Starting products sync: ${products.length} products to process`);
+  
   for (const product of products) {
-    const { error } = await supabaseClient
-      .from('produtos_legado')
-      .upsert({
-        produto_id_legado: product.id,
-        nome: product.nome,
-        categoria: product.categoria,
-        unidade: product.unidade,
-        preco_unitario: product.preco_unitario,
-        peso_unitario: product.peso_unitario,
-        disponivel: product.disponivel
-      });
-    
-    if (!error) count++;
+    try {
+      // Validate required fields
+      if (!product.id || !product.nome || !product.unidade) {
+        console.warn(`Skipping invalid product:`, { 
+          id: product.id, 
+          nome: product.nome, 
+          unidade: product.unidade 
+        });
+        continue;
+      }
+
+      const { error } = await supabaseClient
+        .from('produtos_legado')
+        .upsert({
+          produto_id_legado: product.id,
+          nome: product.nome.trim(),
+          categoria: product.categoria?.trim() || null,
+          unidade: product.unidade.trim(),
+          preco_unitario: Math.max(0, product.preco_unitario || 0),
+          peso_unitario: Math.max(0, product.peso_unitario || 0),
+          disponivel: Boolean(product.disponivel)
+        }, {
+          onConflict: 'produto_id_legado'
+        });
+      
+      if (error) {
+        console.error(`Error syncing product ${product.id}:`, error);
+      } else {
+        count++;
+      }
+    } catch (error) {
+      console.error(`Exception syncing product ${product.id}:`, error);
+    }
   }
+  
+  console.log(`Products sync completed: ${count}/${products.length} products synced successfully`);
   return count;
 }
 
 async function syncRecipes(supabaseClient: any, recipes: LegacyRecipe[]) {
   let count = 0;
+  
+  console.log(`Starting recipes sync: ${recipes.length} recipes to process`);
+  
   for (const recipe of recipes) {
-    const { error } = await supabaseClient
-      .from('receitas_legado')
-      .upsert({
-        receita_id_legado: recipe.id,
-        nome_receita: recipe.nome_receita,
-        categoria_receita: recipe.categoria_receita,
-        ingredientes: recipe.ingredientes,
-        modo_preparo: recipe.modo_preparo,
-        tempo_preparo: recipe.tempo_preparo,
-        porcoes: recipe.porcoes,
-        custo_total: recipe.custo_total
-      });
-    
-    if (!error) count++;
+    try {
+      // Validate required fields
+      if (!recipe.id || !recipe.nome_receita) {
+        console.warn(`Skipping invalid recipe:`, { 
+          id: recipe.id, 
+          nome_receita: recipe.nome_receita 
+        });
+        continue;
+      }
+
+      const { error } = await supabaseClient
+        .from('receitas_legado')
+        .upsert({
+          receita_id_legado: recipe.id,
+          nome_receita: recipe.nome_receita.trim(),
+          categoria_receita: recipe.categoria_receita?.trim() || null,
+          modo_preparo: recipe.modo_preparo?.trim() || null,
+          tempo_preparo: Math.max(0, recipe.tempo_preparo || 0),
+          porcoes: Math.max(1, recipe.porcoes || 1),
+          custo_total: Math.max(0, recipe.custo_total || 0)
+        }, {
+          onConflict: 'receita_id_legado'
+        });
+      
+      if (error) {
+        console.error(`Error syncing recipe ${recipe.id}:`, error);
+      } else {
+        count++;
+      }
+    } catch (error) {
+      console.error(`Exception syncing recipe ${recipe.id}:`, error);
+    }
   }
+  
+  console.log(`Recipes sync completed: ${count}/${recipes.length} recipes synced successfully`);
   return count;
 }
 
 async function syncClients(supabaseClient: any, clients: LegacyClient[]) {
   let count = 0;
+  
+  console.log(`Starting clients sync: ${clients.length} clients to process`);
+  
   for (const client of clients) {
-    const { error } = await supabaseClient
-      .from('contratos_corporativos')
-      .upsert({
-        cliente_id_legado: client.id,
-        nome_empresa: client.nome_empresa,
-        total_funcionarios: client.total_funcionarios,
-        custo_maximo_refeicao: client.custo_maximo_refeicao,
-        restricoes_alimentares: client.restricoes_alimentares,
-        total_refeicoes_mes: client.total_refeicoes_mes
-      });
-    
-    if (!error) count++;
+    try {
+      // Validate required fields
+      if (!client.id || !client.nome_empresa) {
+        console.warn(`Skipping invalid client:`, { 
+          id: client.id, 
+          nome_empresa: client.nome_empresa 
+        });
+        continue;
+      }
+
+      const { error } = await supabaseClient
+        .from('contratos_corporativos')
+        .upsert({
+          cliente_id_legado: client.id,
+          nome_empresa: client.nome_empresa.trim(),
+          total_funcionarios: Math.max(0, client.total_funcionarios || 0),
+          custo_maximo_refeicao: Math.max(0, client.custo_maximo_refeicao || 0),
+          restricoes_alimentares: Array.isArray(client.restricoes_alimentares) ? client.restricoes_alimentares : [],
+          total_refeicoes_mes: Math.max(0, client.total_refeicoes_mes || 0)
+        }, {
+          onConflict: 'cliente_id_legado'
+        });
+      
+      if (error) {
+        console.error(`Error syncing client ${client.id}:`, error);
+      } else {
+        count++;
+      }
+    } catch (error) {
+      console.error(`Exception syncing client ${client.id}:`, error);
+    }
   }
+  
+  console.log(`Clients sync completed: ${count}/${clients.length} clients synced successfully`);
   return count;
 }
