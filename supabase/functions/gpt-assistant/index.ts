@@ -260,17 +260,35 @@ async function fetchRecipeIngredients(recipeId: string): Promise<any[]> {
   });
 }
 
+// Cache global para produtos do mercado
+let marketProductsCache: Product[] | null = null;
+let cacheTimestamp = 0;
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutos
+
 async function fetchMarketProducts(): Promise<Product[]> {
+  // Verificar cache
+  const now = Date.now();
+  if (marketProductsCache && (now - cacheTimestamp) < CACHE_TTL) {
+    return marketProductsCache;
+  }
+  
   return supabaseCircuit.execute(async () => {
     const supabase = getSupabaseClient();
     
     const { data, error } = await supabase
       .from('co_solicitacao_produto_listagem')
       .select('produto_id, descricao, preco, unidade')
+      .not('preco', 'is', null)
+      .gt('preco', 0)
       .order('descricao');
     
     if (error) throw error;
-    return data || [];
+    
+    // Atualizar cache
+    marketProductsCache = data || [];
+    cacheTimestamp = now;
+    
+    return marketProductsCache;
   });
 }
 
@@ -282,17 +300,7 @@ async function calculateRecipeCostWithWarnings(recipeId: string, mealQuantity: n
   
   try {
     // 1. Buscar ingredientes da receita
-    const { data: ingredients, error } = await getSupabaseClient()
-      .from('receita_ingredientes')
-      .select(`
-        nome,
-        produto_base_id,
-        quantidade,
-        unidade
-      `)
-      .eq('receita_id_legado', recipeId);
-    
-    if (error) throw error;
+    const ingredients = await fetchRecipeIngredients(recipeId);
     
     if (!ingredients || ingredients.length === 0) {
       return {
@@ -304,14 +312,8 @@ async function calculateRecipeCostWithWarnings(recipeId: string, mealQuantity: n
       };
     }
     
-    // 2. Buscar produtos do mercado
-    const { data: marketProducts, error: marketError } = await getSupabaseClient()
-      .from('co_solicitacao_produto_listagem')
-      .select('*')
-      .not('preco', 'is', null)
-      .gt('preco', 0);
-    
-    if (marketError) throw marketError;
+    // 2. Buscar produtos do mercado (usando cache)
+    const marketProducts = await fetchMarketProducts();
     
     // 3. Calcular custos e identificar problemas
     let calculatedCost = 0;
@@ -320,37 +322,27 @@ async function calculateRecipeCostWithWarnings(recipeId: string, mealQuantity: n
     const details = [];
     
     for (const ing of ingredients) {
-      const qty = convertToStandardUnit(ing.quantidade, ing.unidade);
+      // Converter quantidade para número
+      const qty = convertToStandardUnit(
+        parseFloat(String(ing.quantidade)) || 0, 
+        ing.unidade || ''
+      );
       
-      // Buscar preço do ingrediente
+      // Buscar preço do ingrediente apenas por nome normalizado
+      const normalizedName = normalizeIngredientName(ing.nome || '');
+      const matchingProducts = marketProducts.filter(p => {
+        const productName = normalizeIngredientName(p.descricao || '');
+        return productName.includes(normalizedName) || 
+               normalizedName.includes(productName) ||
+               calculateSimilarity(normalizedName, productName) > 0.7;
+      });
+      
       let priceInfo = null;
-      
-      // Primeiro tentar por produto_base_id
-      if (ing.produto_base_id) {
-        const matchingProducts = marketProducts.filter(p => 
-          p.produto_base_id === ing.produto_base_id
+      if (matchingProducts.length > 0) {
+        // Escolher o produto com melhor preço
+        priceInfo = matchingProducts.reduce((prev, current) => 
+          (prev.preco < current.preco) ? prev : current
         );
-        
-        if (matchingProducts.length > 0) {
-          priceInfo = matchingProducts.reduce((prev, current) => 
-            (prev.preco < current.preco) ? prev : current
-          );
-        }
-      }
-      
-      // Se não encontrou, tentar por nome
-      if (!priceInfo) {
-        const normalizedName = normalizeIngredientName(ing.nome);
-        const matchingProducts = marketProducts.filter(p => {
-          const productName = normalizeIngredientName(p.descricao || '');
-          return productName.includes(normalizedName) || normalizedName.includes(productName);
-        });
-        
-        if (matchingProducts.length > 0) {
-          priceInfo = matchingProducts.reduce((prev, current) => 
-            (prev.preco < current.preco) ? prev : current
-          );
-        }
       }
       
       // Processar resultado
@@ -379,17 +371,16 @@ async function calculateRecipeCostWithWarnings(recipeId: string, mealQuantity: n
         // Ingrediente sem preço - adicionar aviso
         missingIngredients.push({
           nome: ing.nome,
-          produto_base_id: ing.produto_base_id,
           quantidade: qty,
           unidade: ing.unidade,
-          warning: `⚠️ Ingrediente "${ing.nome}" (ID: ${ing.produto_base_id}) não tem preço no mercado`
+          warning: `⚠️ Ingrediente "${ing.nome}" não encontrado no mercado`
         });
         
         details.push({
           ingrediente: ing.nome,
           status: '⚠️',
           preco: 'N/A',
-          aviso: `Sem preço cadastrado (ID: ${ing.produto_base_id})`
+          aviso: 'Sem preço no mercado atual'
         });
       }
     }
@@ -441,6 +432,53 @@ function convertToStandardUnit(quantidade: number, unidade: string): number {
   };
   
   return qty * (conversions[unit] || 1);
+}
+
+function normalizeIngredientName(name: string): string {
+  return (name || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase()
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function calculateSimilarity(str1: string, str2: string): number {
+  const longer = str1.length > str2.length ? str1 : str2;
+  const shorter = str1.length > str2.length ? str2 : str1;
+  
+  if (longer.length === 0) return 1.0;
+  
+  const distance = levenshteinDistance(longer, shorter);
+  return (longer.length - distance) / longer.length;
+}
+
+function levenshteinDistance(str1: string, str2: string): number {
+  const matrix = [];
+  
+  for (let i = 0; i <= str2.length; i++) {
+    matrix[i] = [i];
+  }
+  
+  for (let j = 0; j <= str1.length; j++) {
+    matrix[0][j] = j;
+  }
+  
+  for (let i = 1; i <= str2.length; i++) {
+    for (let j = 1; j <= str1.length; j++) {
+      if (str2.charAt(i - 1) === str1.charAt(j - 1)) {
+        matrix[i][j] = matrix[i - 1][j - 1];
+      } else {
+        matrix[i][j] = Math.min(
+          matrix[i - 1][j - 1] + 1,
+          matrix[i][j - 1] + 1,
+          matrix[i - 1][j] + 1
+        );
+      }
+    }
+  }
+  
+  return matrix[str2.length][str1.length];
 }
 
 function convertPriceToKg(preco: number, unidade: string): number {
