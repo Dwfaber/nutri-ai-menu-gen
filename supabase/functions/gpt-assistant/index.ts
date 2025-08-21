@@ -239,7 +239,7 @@ async function fetchAvailableRecipes(maxCost?: number, categoria?: string): Prom
     // Não filtrar por custo_total pois está sempre 0 - calcular dinamicamente
     const { data, error } = await query
       .order('nome_receita', { ascending: true })
-      .limit(100);
+      .limit(10); // CRITICAL: Reduzir para 10 receitas para evitar CPU timeout
 
     if (error) throw error;
     return data || [];
@@ -328,13 +328,12 @@ async function calculateRecipeCostWithWarnings(recipeId: string, mealQuantity: n
         ing.unidade || ''
       );
       
-      // Buscar preço do ingrediente apenas por nome normalizado
+      // CRITICAL: Busca simples para evitar CPU timeout - sem calculateSimilarity
       const normalizedName = normalizeIngredientName(ing.nome || '');
       const matchingProducts = marketProducts.filter(p => {
         const productName = normalizeIngredientName(p.descricao || '');
         return productName.includes(normalizedName) || 
-               normalizedName.includes(productName) ||
-               calculateSimilarity(normalizedName, productName) > 0.7;
+               normalizedName.includes(productName);
       });
       
       let priceInfo = null;
@@ -537,6 +536,7 @@ async function generateShoppingList(selectedRecipes: Recipe[], mealQuantity: num
 async function generateIntelligentMenu(processedData: any): Promise<MenuGenerationResult> {
   const { client_data, meal_quantity = 50 } = processedData;
   const startTime = Date.now();
+  const SAFETY_TIMEOUT = 25000; // 25 segundos timeout de segurança
   
   try {
     console.log(`🍽️ Gerando cardápio para ${client_data.nome} (${meal_quantity} refeições)`);
@@ -554,36 +554,56 @@ async function generateIntelligentMenu(processedData: any): Promise<MenuGenerati
     const recipesWithRealCosts = [];
     const recipesWithWarnings = [];
     
-    for (const recipe of recipes.slice(0, 50)) { // Processar até 50 receitas
-      try {
-        const costData = await calculateRecipeCostWithWarnings(recipe.receita_id_legado, 1);
+    // CRITICAL: Timeout de segurança
+    const timeoutPromise = new Promise((_, reject) => 
+      setTimeout(() => reject(new Error('Timeout de processamento')), SAFETY_TIMEOUT)
+    );
+    
+    try {
+      await Promise.race([
+        (async () => {
+          for (const recipe of recipes.slice(0, 8)) { // CRITICAL: Reduzir para 8 receitas max
+            try {
+              // Verificar tempo decorrido
+              if (Date.now() - startTime > 20000) {
+                console.warn('⏰ Timeout preventivo - interrompendo processamento');
+                break;
+              }
+              
+              const costData = await calculateRecipeCostWithWarnings(recipe.receita_id_legado, 1);
         
-        // Adicionar receita com dados de custo
-        const recipeWithCost = {
-          ...recipe,
-          custo_calculado: costData.cost_per_meal,
-          custo_total_quantidade: costData.total_cost * meal_quantity,
-          tem_ingredientes_sem_preco: costData.has_missing_prices,
-          precisao_custo: costData.accuracy_percentage,
-          avisos: costData.warnings,
-          ingredientes_sem_preco: costData.missing_items,
-          detalhes_custo: costData.details
-        };
+              // Adicionar receita com dados de custo
+              const recipeWithCost = {
+                ...recipe,
+                custo_calculado: costData.cost_per_meal,
+                custo_total_quantidade: costData.total_cost * meal_quantity,
+                tem_ingredientes_sem_preco: costData.has_missing_prices,
+                precisao_custo: costData.accuracy_percentage,
+                avisos: costData.warnings,
+                ingredientes_sem_preco: costData.missing_items,
+                detalhes_custo: costData.details
+              };
         
-        // Classificar receita
-        if (costData.cost_per_meal <= client_data.custo_maximo_refeicao) {
-          if (costData.has_missing_prices) {
-            // Receita dentro do orçamento MAS com avisos
-            recipesWithWarnings.push(recipeWithCost);
-          } else {
-            // Receita perfeita - dentro do orçamento e com todos os preços
-            recipesWithRealCosts.push(recipeWithCost);
+              // Classificar receita
+              if (costData.cost_per_meal <= client_data.custo_maximo_refeicao) {
+                if (costData.has_missing_prices) {
+                  // Receita dentro do orçamento MAS com avisos
+                  recipesWithWarnings.push(recipeWithCost);
+                } else {
+                  // Receita perfeita - dentro do orçamento e com todos os preços
+                  recipesWithRealCosts.push(recipeWithCost);
+                }
+              }
+            } catch (error) {
+              console.warn(`Erro ao calcular custo da receita ${recipe.nome_receita}:`, error);
+              continue;
+            }
           }
-        }
-      } catch (error) {
-        console.warn(`Erro ao calcular custo da receita ${recipe.nome_receita}:`, error);
-        continue;
-      }
+        })(),
+        timeoutPromise
+      ]);
+    } catch (timeoutError) {
+      console.warn('⏰ Processamento interrompido por timeout de segurança');
     }
     
     console.log(`✅ ${recipesWithRealCosts.length} receitas com custos completos`);
