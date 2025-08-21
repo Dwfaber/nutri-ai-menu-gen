@@ -150,12 +150,25 @@ async function syncReceitas(supabaseClient: any, receitas: CpReceita[]) {
         console.log(`Processando receita ${processed}/${receitas.length}: ID ${receita.receita_id}`);
       }
 
-      // Preparar dados da receita
+      // Pular receitas inativas
+      if (receita.inativa === true) {
+        skipped++;
+        console.log(`Receita ${receita.receita_id} pulada - marcada como inativa`);
+        continue;
+      }
+
+      // Validar dados obrigatórios
+      if (!receita.receita_id || !receita.nome) {
+        console.error(`Receita ${receita.receita_id || 'sem ID'} pulada - dados obrigatórios ausentes`);
+        errors++;
+        continue;
+      }
+
+      // Preparar dados da receita (sem campo ingredientes que não existe na tabela)
       const receitaData = {
         receita_id_legado: receita.receita_id.toString(),
         nome_receita: receita.nome,
         modo_preparo: receita.modo_preparo || '',
-        ingredientes: receita.ingredientes || [],
         tempo_preparo: receita.tempo_preparo || 0,
         porcoes: receita.porcoes || 1,
         custo_total: receita.custo_total || 0,
@@ -163,7 +176,7 @@ async function syncReceitas(supabaseClient: any, receitas: CpReceita[]) {
         categoria_receita: receita.categoria_descricao,
         categoria_descricao: receita.categoria_descricao,
         quantidade_refeicoes: receita.quantidade_refeicoes || 1,
-        inativa: receita.inativa,
+        inativa: receita.inativa || false,
         usuario: receita.usuario,
         sync_at: new Date().toISOString()
       };
@@ -177,7 +190,16 @@ async function syncReceitas(supabaseClient: any, receitas: CpReceita[]) {
         });
 
       if (error) {
-        console.error(`Erro ao fazer upsert da receita ${receita.receita_id}:`, error);
+        console.error(`Erro ao fazer upsert da receita ${receita.receita_id}:`, {
+          error: error.message,
+          code: error.code,
+          details: error.details,
+          hint: error.hint,
+          receitaData: {
+            receita_id_legado: receitaData.receita_id_legado,
+            nome_receita: receitaData.nome_receita
+          }
+        });
         errors++;
       } else {
         success++;
