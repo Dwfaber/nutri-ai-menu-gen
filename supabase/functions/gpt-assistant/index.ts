@@ -1,38 +1,192 @@
 /**
- * GPT Assistant - Versão Simplificada e Otimizada
- * Migração completa para GPT-4o com foco em geração de receitas
+ * GPT Assistant - Version 3.0 Hybrid Intelligent
+ * Sistema completo com acesso aos dados reais + infraestrutura robusta
  */
 
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
-import { generateRecipesOnly } from './simplified.ts';
 
-// Cache simples para clientes frequentes
-const clientCache = new Map<number, any>();
-const CACHE_TTL = 5 * 60 * 1000; // 5 minutos
+// === CONFIGURAÇÕES E TIPOS ===
+const CONFIG = {
+  CACHE_TTL: 5 * 60 * 1000,
+  CACHE_MAX_SIZE: 100,
+  RATE_LIMIT: 30,
+  RATE_WINDOW: 60 * 1000,
+  REQUEST_TIMEOUT: 30000,
+  DEFAULT_MEAL_COST: 8.50,
+  DEFAULT_MEAL_QUANTITY: 50,
+  VERSION: '3.0-hybrid-intelligent'
+};
 
-// Rate limiting simples
+interface ClientData {
+  nome: string;
+  custo_maximo_refeicao: number;
+  restricoes_alimentares: string[];
+  preferencias_alimentares: string[];
+}
+
+interface RequestData {
+  action?: string;
+  filialIdLegado?: number;
+  numDays?: number;
+  refeicoesPorDia?: number;
+  client_data?: ClientData;
+  meal_quantity?: number;
+  simple_mode?: boolean;
+  baseRecipes?: any;
+  useDiaEspecial?: boolean;
+}
+
+interface Recipe {
+  receita_id_legado: string;
+  nome_receita: string;
+  categoria_descricao: string;
+  custo_total: number;
+  porcoes: number;
+  ingredientes?: any[];
+}
+
+interface Product {
+  produto_id: number;
+  descricao: string;
+  preco: number;
+  unidade: string;
+  disponivel?: boolean;
+}
+
+interface MenuGenerationResult {
+  success: boolean;
+  recipes?: Recipe[];
+  shopping_list?: any[];
+  total_cost?: number;
+  cost_per_meal?: number;
+  error?: string;
+}
+
+// === CACHE LRU OTIMIZADO ===
+class LRUCache<T> {
+  private cache = new Map<string | number, { data: T; timestamp: number; hits: number }>();
+  
+  constructor(
+    private maxSize = CONFIG.CACHE_MAX_SIZE, 
+    private ttl = CONFIG.CACHE_TTL
+  ) {
+    setInterval(() => this.cleanup(), 10 * 60 * 1000);
+  }
+  
+  get(key: string | number): T | null {
+    const item = this.cache.get(key);
+    if (!item) return null;
+    
+    if (Date.now() - item.timestamp > this.ttl) {
+      this.cache.delete(key);
+      return null;
+    }
+    
+    item.hits++;
+    return item.data;
+  }
+  
+  set(key: string | number, data: T): void {
+    if (this.cache.size >= this.maxSize) {
+      const lru = [...this.cache.entries()]
+        .sort((a, b) => a[1].hits - b[1].hits)[0];
+      if (lru) this.cache.delete(lru[0]);
+    }
+    
+    this.cache.set(key, { data, timestamp: Date.now(), hits: 0 });
+  }
+  
+  cleanup(): void {
+    const now = Date.now();
+    for (const [key, item] of this.cache.entries()) {
+      if (now - item.timestamp > this.ttl) {
+        this.cache.delete(key);
+      }
+    }
+  }
+  
+  stats() {
+    return { size: this.cache.size, maxSize: this.maxSize };
+  }
+}
+
+// === CIRCUIT BREAKER ===
+class CircuitBreaker {
+  private failures = 0;
+  private lastFailTime = 0;
+  private state: 'CLOSED' | 'OPEN' | 'HALF_OPEN' = 'CLOSED';
+  private readonly threshold = 5;
+  private readonly timeout = 60000;
+  
+  async execute<T>(fn: () => Promise<T>): Promise<T> {
+    if (this.state === 'OPEN') {
+      if (Date.now() - this.lastFailTime > this.timeout) {
+        this.state = 'HALF_OPEN';
+      } else {
+        throw new Error('Database temporarily unavailable');
+      }
+    }
+    
+    try {
+      const result = await fn();
+      if (this.state === 'HALF_OPEN') {
+        this.state = 'CLOSED';
+        this.failures = 0;
+      }
+      return result;
+    } catch (error) {
+      this.failures++;
+      this.lastFailTime = Date.now();
+      
+      if (this.failures >= this.threshold) {
+        this.state = 'OPEN';
+        console.error(`Circuit breaker opened after ${this.failures} failures`);
+      }
+      
+      throw error;
+    }
+  }
+  
+  getState() {
+    return { state: this.state, failures: this.failures };
+  }
+}
+
+// === INSTÂNCIAS GLOBAIS ===
+const clientCache = new LRUCache<ClientData>();
+const recipeCache = new LRUCache<Recipe[]>(50, 10 * 60 * 1000); // 10 min para receitas
 const rateLimitMap = new Map<string, { count: number; resetTime: number }>();
-const RATE_LIMIT = 30; // requisições por minuto
-const RATE_WINDOW = 60 * 1000; // 1 minuto
+const supabaseCircuit = new CircuitBreaker();
+let supabaseClient: any = null;
 
-// Função para verificar rate limit
+// === FUNÇÕES AUXILIARES ===
+function getSupabaseClient() {
+  if (!supabaseClient) {
+    supabaseClient = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+    );
+  }
+  return supabaseClient;
+}
+
 function checkRateLimit(clientId: string): boolean {
   const now = Date.now();
   
   if (!rateLimitMap.has(clientId)) {
-    rateLimitMap.set(clientId, { count: 1, resetTime: now + RATE_WINDOW });
+    rateLimitMap.set(clientId, { count: 1, resetTime: now + CONFIG.RATE_WINDOW });
     return true;
   }
   
   const client = rateLimitMap.get(clientId)!;
   if (now > client.resetTime) {
     client.count = 1;
-    client.resetTime = now + RATE_WINDOW;
+    client.resetTime = now + CONFIG.RATE_WINDOW;
     return true;
   }
   
-  if (client.count >= RATE_LIMIT) {
+  if (client.count >= CONFIG.RATE_LIMIT) {
     return false;
   }
   
@@ -40,193 +194,401 @@ function checkRateLimit(clientId: string): boolean {
   return true;
 }
 
-// Função para converter payload antigo para o novo formato com timeout e cache
+function validateRequestData(data: any): RequestData {
+  if (!data || typeof data !== 'object') {
+    throw new Error('Invalid request format');
+  }
+  
+  if (data.filialIdLegado !== undefined) {
+    data.filialIdLegado = Number(data.filialIdLegado);
+    if (isNaN(data.filialIdLegado)) {
+      throw new Error('Invalid filialIdLegado');
+    }
+  }
+  
+  if (data.meal_quantity !== undefined) {
+    data.meal_quantity = Math.min(Math.max(1, Number(data.meal_quantity)), 10000);
+  }
+  
+  return data as RequestData;
+}
+
+// === ACESSO AOS DADOS REAIS ===
+async function fetchAvailableRecipes(maxCost?: number, categoria?: string): Promise<Recipe[]> {
+  return supabaseCircuit.execute(async () => {
+    const supabase = getSupabaseClient();
+    
+    let query = supabase
+      .from('receitas_legado')
+      .select('receita_id_legado, nome_receita, categoria_descricao, custo_total, porcoes')
+      .eq('inativa', false);
+    
+    if (maxCost) {
+      query = query.lte('custo_total', maxCost);
+    }
+    
+    if (categoria) {
+      query = query.eq('categoria_descricao', categoria);
+    }
+    
+    const { data, error } = await query.limit(50);
+    
+    if (error) throw error;
+    return data || [];
+  });
+}
+
+async function fetchRecipeIngredients(recipeId: string): Promise<any[]> {
+  return supabaseCircuit.execute(async () => {
+    const supabase = getSupabaseClient();
+    
+    const { data, error } = await supabase
+      .from('receita_ingredientes')
+      .select('*')
+      .eq('receita_id_legado', recipeId);
+    
+    if (error) throw error;
+    return data || [];
+  });
+}
+
+async function fetchMarketProducts(): Promise<Product[]> {
+  return supabaseCircuit.execute(async () => {
+    const supabase = getSupabaseClient();
+    
+    const { data, error } = await supabase
+      .from('co_solicitacao_produto_listagem')
+      .select('produto_id, descricao, preco, unidade')
+      .order('descricao');
+    
+    if (error) throw error;
+    return data || [];
+  });
+}
+
+async function calculateRecipeCost(recipe: Recipe, mealQuantity: number): Promise<number> {
+  try {
+    const ingredients = await fetchRecipeIngredients(recipe.receita_id_legado);
+    const products = await fetchMarketProducts();
+    
+    if (!ingredients.length || !products.length) {
+      return recipe.custo_total * (mealQuantity / recipe.porcoes);
+    }
+    
+    let totalCost = 0;
+    
+    for (const ingredient of ingredients) {
+      const matchingProduct = products.find(p => 
+        p.descricao.toLowerCase().includes(ingredient.nome?.toLowerCase() || '') ||
+        ingredient.produto_base_descricao?.toLowerCase().includes(p.descricao.toLowerCase())
+      );
+      
+      if (matchingProduct && ingredient.quantidade) {
+        const cost = (ingredient.quantidade * matchingProduct.preco) / recipe.porcoes * mealQuantity;
+        totalCost += cost;
+      }
+    }
+    
+    return totalCost || recipe.custo_total * (mealQuantity / recipe.porcoes);
+    
+  } catch (error) {
+    console.error('Erro ao calcular custo da receita:', error);
+    return recipe.custo_total * (mealQuantity / recipe.porcoes);
+  }
+}
+
+async function generateShoppingList(selectedRecipes: Recipe[], mealQuantity: number): Promise<any[]> {
+  const shoppingList: any[] = [];
+  const products = await fetchMarketProducts();
+  
+  for (const recipe of selectedRecipes) {
+    try {
+      const ingredients = await fetchRecipeIngredients(recipe.receita_id_legado);
+      
+      for (const ingredient of ingredients) {
+        const matchingProduct = products.find(p => 
+          p.descricao.toLowerCase().includes(ingredient.nome?.toLowerCase() || '') ||
+          ingredient.produto_base_descricao?.toLowerCase().includes(p.descricao.toLowerCase())
+        );
+        
+        if (matchingProduct && ingredient.quantidade) {
+          const existingItem = shoppingList.find(item => item.produto_id === matchingProduct.produto_id);
+          const adjustedQuantity = ingredient.quantidade * (mealQuantity / recipe.porcoes);
+          
+          if (existingItem) {
+            existingItem.quantidade += adjustedQuantity;
+            existingItem.total_cost = existingItem.quantidade * existingItem.unit_price;
+          } else {
+            shoppingList.push({
+              produto_id: matchingProduct.produto_id,
+              product_name: matchingProduct.descricao,
+              quantidade: adjustedQuantity,
+              unit_price: matchingProduct.preco,
+              total_cost: adjustedQuantity * matchingProduct.preco,
+              unit: matchingProduct.unidade || 'kg',
+              recipe_source: recipe.nome_receita
+            });
+          }
+        }
+      }
+    } catch (error) {
+      console.error(`Erro ao processar ingredientes da receita ${recipe.nome_receita}:`, error);
+    }
+  }
+  
+  return shoppingList;
+}
+
+async function generateIntelligentMenu(processedData: any): Promise<MenuGenerationResult> {
+  const startTime = Date.now();
+  
+  try {
+    const { client_data, meal_quantity } = processedData;
+    const maxCostPerRecipe = client_data.custo_maximo_refeicao * meal_quantity;
+    
+    console.log(`🍽️ Gerando cardápio inteligente para ${client_data.nome}:`, {
+      meal_quantity,
+      max_cost_per_recipe: maxCostPerRecipe
+    });
+    
+    // Buscar receitas adequadas ao orçamento
+    const cacheKey = `recipes_${maxCostPerRecipe}_${meal_quantity}`;
+    let availableRecipes = recipeCache.get(cacheKey);
+    
+    if (!availableRecipes) {
+      availableRecipes = await fetchAvailableRecipes(maxCostPerRecipe);
+      recipeCache.set(cacheKey, availableRecipes);
+      console.log(`📊 ${availableRecipes.length} receitas encontradas no banco`);
+    } else {
+      console.log(`💾 ${availableRecipes.length} receitas do cache`);
+    }
+    
+    if (!availableRecipes.length) {
+      throw new Error('Nenhuma receita encontrada dentro do orçamento');
+    }
+    
+    // Selecionar receitas variadas (pratos principais, acompanhamentos, sobremesas)
+    const mainDishes = availableRecipes.filter(r => 
+      r.categoria_descricao?.toLowerCase().includes('principal') ||
+      r.categoria_descricao?.toLowerCase().includes('prato')
+    ).slice(0, 3);
+    
+    const sides = availableRecipes.filter(r => 
+      r.categoria_descricao?.toLowerCase().includes('acompanhamento') ||
+      r.categoria_descricao?.toLowerCase().includes('salada')
+    ).slice(0, 2);
+    
+    const desserts = availableRecipes.filter(r => 
+      r.categoria_descricao?.toLowerCase().includes('sobremesa')
+    ).slice(0, 1);
+    
+    const selectedRecipes = [...mainDishes, ...sides, ...desserts];
+    
+    if (!selectedRecipes.length) {
+      // Fallback: selecionar as 5 primeiras receitas
+      selectedRecipes.push(...availableRecipes.slice(0, 5));
+    }
+    
+    console.log(`🍴 ${selectedRecipes.length} receitas selecionadas para o cardápio`);
+    
+    // Calcular custos reais
+    const recipesWithCosts = await Promise.all(
+      selectedRecipes.map(async (recipe) => {
+        const realCost = await calculateRecipeCost(recipe, meal_quantity);
+        return { ...recipe, custo_ajustado: realCost };
+      })
+    );
+    
+    const totalCost = recipesWithCosts.reduce((sum, recipe) => sum + recipe.custo_ajustado, 0);
+    const costPerMeal = totalCost / meal_quantity;
+    
+    // Gerar lista de compras
+    const shoppingList = await generateShoppingList(selectedRecipes, meal_quantity);
+    
+    console.log(`✅ Cardápio gerado em ${Date.now() - startTime}ms:`, {
+      recipes: selectedRecipes.length,
+      total_cost: totalCost.toFixed(2),
+      cost_per_meal: costPerMeal.toFixed(2),
+      shopping_items: shoppingList.length
+    });
+    
+    return {
+      success: true,
+      recipes: recipesWithCosts,
+      shopping_list: shoppingList,
+      total_cost: totalCost,
+      cost_per_meal: costPerMeal
+    };
+    
+  } catch (error) {
+    console.error('❌ Erro na geração do cardápio:', error);
+    return {
+      success: false,
+      error: error.message || 'Erro interno na geração do cardápio'
+    };
+  }
+}
+
 async function convertLegacyPayload(requestData: RequestData): Promise<any> {
   const startTime = Date.now();
   
-  // Se já tem client_data, usar diretamente
-  if (requestData.client_data && requestData.client_data.nome) {
-    console.log(`⚡ Client data já presente (${Date.now() - startTime}ms)`);
+  console.log('🔄 Processando request...', {
+    hasFilialId: !!requestData.filialIdLegado,
+    hasClientData: !!requestData.client_data?.nome
+  });
+  
+  // Já tem client_data estruturado
+  if (requestData.client_data?.nome) {
+    console.log(`⚡ Client data presente (${Date.now() - startTime}ms)`);
     return {
       client_data: requestData.client_data,
-      meal_quantity: requestData.meal_quantity || requestData.refeicoesPorDia || 50,
-      simple_mode: true
+      meal_quantity: requestData.meal_quantity || requestData.refeicoesPorDia || CONFIG.DEFAULT_MEAL_QUANTITY,
+      simple_mode: true,
+      _from_cache: false
     };
   }
-
-  // Se tem filialIdLegado, buscar dados do cliente
+  
+  // Buscar cliente por filialIdLegado
   if (requestData.filialIdLegado) {
-    console.log(`🔄 Convertendo payload antigo para filial ${requestData.filialIdLegado}...`);
-    
-    // Verificar cache primeiro
     const cacheKey = requestData.filialIdLegado;
+    
     const cached = clientCache.get(cacheKey);
-    if (cached && (Date.now() - cached.timestamp) < CACHE_TTL) {
-      console.log(`💾 Cliente encontrado no cache (${Date.now() - startTime}ms)`);
+    if (cached) {
+      console.log(`💾 Cache hit para filial ${cacheKey} (${Date.now() - startTime}ms)`);
       return {
-        client_data: cached.data,
-        meal_quantity: requestData.refeicoesPorDia || 50,
-        simple_mode: true
+        client_data: cached,
+        meal_quantity: requestData.refeicoesPorDia || CONFIG.DEFAULT_MEAL_QUANTITY,
+        simple_mode: true,
+        _from_cache: true
       };
     }
-
+    
     try {
-      const supabase = createClient(
-        Deno.env.get('SUPABASE_URL') ?? '',
-        Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-      );
-
-      // 🔧 FIX CRÍTICO: Usar limit(1).maybeSingle() ao invés de single()
-      const { data: clientData, error } = await supabase
-        .from('custos_filiais')
-        .select('*')
-        .eq('filial_id', requestData.filialIdLegado)
-        .limit(1)
-        .maybeSingle();
-
-      if (error) {
-        console.error(`❌ Erro SQL na busca do cliente (${Date.now() - startTime}ms):`, error);
-        throw error;
-      }
-
-      if (!clientData) {
-        console.warn(`⚠️ Cliente ${requestData.filialIdLegado} não encontrado na base (${Date.now() - startTime}ms)`);
+      const clientData = await supabaseCircuit.execute(async () => {
+        const supabase = getSupabaseClient();
         
-        // Fallback inteligente com dados realistas baseados na filial
-        const fallbackData = {
-          nome: `Cliente Filial ${requestData.filialIdLegado}`,
-          custo_maximo_refeicao: requestData.filialIdLegado <= 100 ? 9.50 : 8.50, // Filiais menores = custo maior
-          restricoes_alimentares: [],
-          preferencias_alimentares: []
-        };
-
+        const { data, error } = await supabase
+          .from('custos_filiais')
+          .select('*')
+          .eq('filial_id', requestData.filialIdLegado)
+          .limit(1)
+          .maybeSingle();
+        
+        if (error) throw error;
+        if (!data) return null;
+        
         return {
-          client_data: fallbackData,
-          meal_quantity: requestData.refeicoesPorDia || 50,
-          simple_mode: true
+          nome: data.nome_fantasia || data.razao_social || `Cliente ${requestData.filialIdLegado}`,
+          custo_maximo_refeicao: data.custo_medio_semanal ? 
+            Number((data.custo_medio_semanal / 7).toFixed(2)) : 
+            data.RefCustoSegunda || CONFIG.DEFAULT_MEAL_COST,
+          restricoes_alimentares: data.restricoes_alimentares || [],
+          preferencias_alimentares: data.preferencias_alimentares || []
+        };
+      });
+      
+      if (clientData) {
+        clientCache.set(cacheKey, clientData);
+        console.log(`✅ Cliente ${cacheKey} encontrado e cacheado (${Date.now() - startTime}ms)`);
+        
+        return {
+          client_data: clientData,
+          meal_quantity: requestData.refeicoesPorDia || CONFIG.DEFAULT_MEAL_QUANTITY,
+          simple_mode: true,
+          _from_cache: false
         };
       }
-
-      // Mapear dados do cliente para o formato novo
-      const mappedClientData = {
-        nome: clientData.nome_fantasia || clientData.razao_social || `Cliente ${requestData.filialIdLegado}`,
-        custo_maximo_refeicao: clientData.custo_medio_semanal ? 
-          Number((clientData.custo_medio_semanal / 7).toFixed(2)) : 
-          clientData.RefCustoSegunda || 8.50,
-        restricoes_alimentares: [],
-        preferencias_alimentares: []
-      };
-
-      // Salvar no cache
-      clientCache.set(cacheKey, {
-        data: mappedClientData,
-        timestamp: Date.now()
-      });
-
-      console.log(`✅ Cliente mapeado e cacheado (${Date.now() - startTime}ms):`, {
-        nome: mappedClientData.nome,
-        custo: mappedClientData.custo_maximo_refeicao
-      });
-
-      return {
-        client_data: mappedClientData,
-        meal_quantity: requestData.refeicoesPorDia || 50,
-        simple_mode: true
-      };
-
     } catch (error) {
-      console.error(`💥 Erro crítico na busca do cliente (${Date.now() - startTime}ms):`, error);
-      
-      // Fallback robusto em caso de erro crítico
-      const emergencyFallback = {
-        nome: `Cliente Filial ${requestData.filialIdLegado} (Fallback)`,
-        custo_maximo_refeicao: 8.50,
-        restricoes_alimentares: [],
-        preferencias_alimentares: []
-      };
-
-      return {
-        client_data: emergencyFallback,
-        meal_quantity: requestData.refeicoesPorDia || 50,
-        simple_mode: true
-      };
+      console.error(`⚠️ Erro ao buscar cliente ${cacheKey}:`, error.message);
     }
+    
+    // Fallback
+    console.log(`📋 Usando fallback para filial ${cacheKey} (${Date.now() - startTime}ms)`);
+    const fallbackData = {
+      nome: `Cliente Filial ${requestData.filialIdLegado}`,
+      custo_maximo_refeicao: CONFIG.DEFAULT_MEAL_COST,
+      restricoes_alimentares: [],
+      preferencias_alimentares: []
+    };
+    
+    return {
+      client_data: fallbackData,
+      meal_quantity: requestData.refeicoesPorDia || CONFIG.DEFAULT_MEAL_QUANTITY,
+      simple_mode: true,
+      _from_cache: false
+    };
   }
-
-  // Fallback para dados mínimos
-  console.log(`⚠️ Usando dados padrão - payload não reconhecido (${Date.now() - startTime}ms)`);
+  
+  // Fallback geral
   return {
     client_data: {
       nome: 'Cliente Padrão',
-      custo_maximo_refeicao: 8.50,
+      custo_maximo_refeicao: CONFIG.DEFAULT_MEAL_COST,
       restricoes_alimentares: [],
       preferencias_alimentares: []
     },
-    meal_quantity: requestData.meal_quantity || 50,
-    simple_mode: true
+    meal_quantity: requestData.meal_quantity || CONFIG.DEFAULT_MEAL_QUANTITY,
+    simple_mode: true,
+    _from_cache: false
   };
 }
 
+// === CORS ===
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS'
 };
 
-interface RequestData {
-  action?: string;
-  filialIdLegado?: number;
-  numDays?: number;
-  refeicoesPorDia?: number;
-  client_data?: any;
-  meal_quantity?: number;
-  simple_mode?: boolean;
-  baseRecipes?: any;
-  useDiaEspecial?: boolean;
-}
-
+// === MAIN HANDLER ===
 Deno.serve(async (req) => {
   const requestStartTime = Date.now();
   
-  // Handle CORS preflight requests
+  // CORS preflight
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
-
-  // Health check endpoint com status das dependências
+  
+  // Health check com estatísticas avançadas
   if (req.method === 'GET') {
-    const cacheStats = {
-      cached_clients: clientCache.size,
-      rate_limit_entries: rateLimitMap.size
-    };
-    
     return new Response(
-      JSON.stringify({ 
-        status: 'healthy', 
-        version: '2.0-simplified-optimized',
-        model: 'gpt-4o',
+      JSON.stringify({
+        status: 'healthy',
+        version: CONFIG.VERSION,
+        model: 'hybrid-intelligent',
         timestamp: new Date().toISOString(),
-        cache_stats: cacheStats,
-        uptime_ms: Date.now() - requestStartTime
+        cache_stats: {
+          clients: clientCache.stats(),
+          recipes: recipeCache.stats()
+        },
+        rate_limit_entries: rateLimitMap.size,
+        circuit_breaker: supabaseCircuit.getState(),
+        features: [
+          'real_recipe_access',
+          'cost_calculation',
+          'shopping_list_generation',
+          'intelligent_selection',
+          'circuit_breaker',
+          'lru_cache'
+        ]
       }),
-      { 
+      {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 200 
+        status: 200
       }
     );
   }
-
-  // 🛡️ Rate limiting
+  
+  // Rate limiting
   const clientId = req.headers.get('x-forwarded-for') || 
                    req.headers.get('x-real-ip') || 
-                   req.headers.get('user-agent')?.slice(0, 50) || 
                    'unknown';
   
   if (!checkRateLimit(clientId)) {
-    console.warn(`🚫 Rate limit excedido para client: ${clientId}`);
     return new Response(
       JSON.stringify({
         success: false,
-        error: 'Rate limit excedido. Tente novamente em 1 minuto.',
+        error: 'Rate limit exceeded',
         retry_after: 60
       }),
       {
@@ -235,104 +597,92 @@ Deno.serve(async (req) => {
           'Content-Type': 'application/json',
           'Retry-After': '60'
         },
-        status: 429,
+        status: 429
       }
     );
   }
-
-  // ⏱️ Timeout de 30 segundos para toda a requisição
+  
+  // Timeout control
   const controller = new AbortController();
   const timeoutId = setTimeout(() => {
-    console.error(`⏰ Timeout de 30s atingido para client: ${clientId}`);
     controller.abort();
-  }, 30000);
-
+  }, CONFIG.REQUEST_TIMEOUT);
+  
   try {
-    const requestData: RequestData = await req.json();
-    console.log(`📝 Request recebido de ${clientId}:`, { 
+    // Parse e validar request
+    const rawData = await req.json();
+    const requestData = validateRequestData(rawData);
+    
+    console.log(`📝 Request v3.0 de ${clientId}:`, {
       action: requestData.action,
       filial: requestData.filialIdLegado,
-      meal_quantity: requestData.meal_quantity || requestData.refeicoesPorDia,
       timestamp: new Date().toISOString()
     });
-
-    // Converter payload antigo para o formato novo se necessário
-    const payloadStartTime = Date.now();
+    
+    // Processar dados do cliente
     const processedData = await convertLegacyPayload(requestData);
-    const payloadTime = Date.now() - payloadStartTime;
     
-    console.log(`🔄 Payload processado em ${payloadTime}ms`);
+    // Gerar cardápio inteligente com dados reais
+    const result = await generateIntelligentMenu(processedData);
     
-    // Todas as requisições agora usam o modo simplificado com GPT-4o
-    const aiStartTime = Date.now();
-    const result = await generateRecipesOnly(processedData);
-    const aiTime = Date.now() - aiStartTime;
-    const totalTime = Date.now() - requestStartTime;
-
-    console.log(`🤖 AI respondeu em ${aiTime}ms | Total: ${totalTime}ms`);
-
     clearTimeout(timeoutId);
-
-    // Adicionar métricas na resposta
-    const enhancedResult = {
-      ...result,
-      performance: {
-        total_time_ms: totalTime,
-        payload_processing_ms: payloadTime,
-        ai_processing_ms: aiTime,
-        cached_client: processedData._from_cache || false
-      }
-    };
-
-    return new Response(
-      JSON.stringify(enhancedResult),
-      {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 200,
-      }
-    );
-
-  } catch (error) {
-    clearTimeout(timeoutId);
-    const totalTime = Date.now() - requestStartTime;
     
-    // Categorizar tipos de erro
-    let statusCode = 500;
-    let errorCategory = 'internal_error';
-    
-    if (error.name === 'AbortError') {
-      statusCode = 408;
-      errorCategory = 'timeout';
-    } else if (error.message?.includes('JSON')) {
-      statusCode = 400;
-      errorCategory = 'invalid_json';
-    } else if (error.message?.includes('rate limit')) {
-      statusCode = 429;
-      errorCategory = 'rate_limit';
-    }
-
-    console.error(`❌ Erro [${errorCategory}] após ${totalTime}ms para ${clientId}:`, {
-      error: error.message,
-      stack: error.stack?.split('\n')[0], // Primeira linha do stack
-      category: errorCategory,
-      timestamp: new Date().toISOString()
-    });
-    
+    // Resposta com métricas completas
     return new Response(
       JSON.stringify({
-        success: false,
-        error: error.message || 'Erro interno do servidor',
-        error_category: errorCategory,
-        timestamp: new Date().toISOString(),
-        version: '2.0-simplified-optimized',
+        ...result,
+        client_info: {
+          name: processedData.client_data.nome,
+          max_cost_per_meal: processedData.client_data.custo_maximo_refeicao,
+          meal_quantity: processedData.meal_quantity
+        },
         performance: {
-          total_time_ms: totalTime,
-          failed_at: errorCategory
+          total_time_ms: Date.now() - requestStartTime,
+          cached_client: processedData._from_cache || false,
+          version: CONFIG.VERSION,
+          data_source: 'real_database'
         }
       }),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: statusCode,
+        status: 200
+      }
+    );
+    
+  } catch (error) {
+    clearTimeout(timeoutId);
+    
+    // Categorização avançada de erros
+    let status = 500;
+    let category = 'internal_error';
+    
+    if (error.name === 'AbortError') {
+      status = 408;
+      category = 'timeout';
+    } else if (error.message?.includes('Invalid')) {
+      status = 400;
+      category = 'validation_error';
+    } else if (error.message?.includes('Rate limit')) {
+      status = 429;
+      category = 'rate_limit';
+    } else if (error.message?.includes('unavailable')) {
+      status = 503;
+      category = 'service_unavailable';
+    }
+    
+    console.error(`❌ Erro [${category}] para ${clientId}:`, error.message);
+    
+    return new Response(
+      JSON.stringify({
+        success: false,
+        error: error.message || 'Internal server error',
+        error_category: category,
+        timestamp: new Date().toISOString(),
+        version: CONFIG.VERSION
+      }),
+      {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status
       }
     );
   }
