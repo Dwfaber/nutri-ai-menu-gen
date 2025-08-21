@@ -412,9 +412,26 @@ async function generateIntelligentMenu(processedData: any): Promise<MenuGenerati
       shopping_items: shoppingList.length
     });
     
+    // Formatar cardápio para compatibilidade com frontend
+    const weekDays = ['segunda-feira', 'terça-feira', 'quarta-feira', 'quinta-feira', 'sexta-feira', 'sábado', 'domingo'];
+    const cardapioFormatted = weekDays.map((dia, index) => ({
+      dia,
+      receitas: recipesWithCosts.slice(index, index + 1).map(recipe => ({
+        nome: recipe.nome_receita || recipe.nome,
+        categoria: recipe.categoria_descricao || recipe.categoria_receita || 'Prato Principal',
+        custo_total: recipe.custo_ajustado || 0,
+        receita_id: recipe.receita_id_legado || recipe.id,
+        tempo_preparo: recipe.tempo_preparo || 30,
+        porcoes: recipe.porcoes || recipe.quantidade_refeicoes || 1
+      }))
+    })).filter(day => day.receitas.length > 0);
+
     return {
       success: true,
       recipes: recipesWithCosts,
+      menu: {
+        cardapio: cardapioFormatted
+      },
       shopping_list: shoppingList,
       total_cost: totalCost,
       cost_per_meal: costPerMeal
