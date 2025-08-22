@@ -537,22 +537,50 @@ export const useIntegratedMenuGeneration = () => {
 
       const receitasCardapio: MenuRecipe[] = [];
       if (cardapioV1.length) {
-        for (const dia of cardapioV1) {
-          const dayName = dayLabelToTitle(dia.dia_label || dia.dia);
-          const itens = Array.isArray(dia.itens) ? dia.itens : [];
-          for (const it of itens) {
-            const rid = it.receita_id_legado || it.receita_id;
+        // Verificar se cardapioV1 é um array de receitas simples (novo formato) ou dias (formato legado)
+        const isSimpleRecipeFormat = cardapioV1.some(item => 
+          item && typeof item === 'object' && 
+          ('nome' in item || 'categoria' in item || 'custo_por_refeicao' in item) &&
+          !('dia' in item || 'itens' in item)
+        );
+
+        if (isSimpleRecipeFormat) {
+          // Novo formato: array direto de receitas
+          for (const receita of cardapioV1) {
+            if (!receita || typeof receita !== 'object') continue;
+            const rid = receita.id || receita.receita_id_legado || receita.receita_id;
             if (!rid) continue;
+            
             receitasCardapio.push({
               id: String(rid),
-              name: String(it.nome || ''),
-              day: dayName,
-              category: mapCategory(it.categoria || it.slot || ''),
-              cost: Number(it.custo_por_refeicao || 0),
+              name: String(receita.nome || ''),
+              day: 'Segunda-feira', // Dia padrão para estrutura fixa
+              category: mapCategory(receita.categoria || receita.tipo || ''),
+              cost: Number(receita.custo_por_refeicao || 0),
               servings: mpdFromSummary,
               ingredients: [],
               nutritionalInfo: {}
             });
+          }
+        } else {
+          // Formato legado: dias com itens
+          for (const dia of cardapioV1) {
+            const dayName = dayLabelToTitle(dia.dia_label || dia.dia);
+            const itens = Array.isArray(dia.itens) ? dia.itens : [];
+            for (const it of itens) {
+              const rid = it.receita_id_legado || it.receita_id;
+              if (!rid) continue;
+              receitasCardapio.push({
+                id: String(rid),
+                name: String(it.nome || ''),
+                day: dayName,
+                category: mapCategory(it.categoria || it.slot || ''),
+                cost: Number(it.custo_por_refeicao || 0),
+                servings: mpdFromSummary,
+                ingredients: [],
+                nutritionalInfo: {}
+              });
+            }
           }
         }
       } else if (daysV2.length) {
