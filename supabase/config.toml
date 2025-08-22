@@ -55,5 +55,8 @@ verify_jwt = false
 [functions.sync-legacy-views]
 verify_jwt = false
 
+[functions.hybrid-sync-manager]
+verify_jwt = false
+
 [edge-runtime]
 inspector_port = 8083

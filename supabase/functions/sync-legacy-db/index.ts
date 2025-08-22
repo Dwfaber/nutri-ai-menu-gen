@@ -290,133 +290,109 @@ async function fetchRealLegacyData(operation: string) {
 }
 
 async function syncProducts(supabaseClient: any, products: LegacyProduct[]) {
-  let count = 0;
+  console.log(`Starting products sync with TRUNCATE+INSERT strategy: ${products.length} products to process`);
   
-  console.log(`Starting products sync: ${products.length} products to process`);
-  
-  for (const product of products) {
-    try {
-      // Validate required fields
-      if (!product.id || !product.nome || !product.unidade) {
-        console.warn(`Skipping invalid product:`, { 
-          id: product.id, 
-          nome: product.nome, 
-          unidade: product.unidade 
-        });
-        continue;
-      }
+  // Usar hybrid sync manager para produtos
+  const hybridResponse = await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/hybrid-sync-manager`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      action: 'sync_table',
+      targetTable: 'produtos_legado',
+      data: products.map(product => ({
+        produto_id_legado: product.id,
+        nome: product.nome?.trim() || '',
+        categoria: product.categoria?.trim() || null,
+        unidade: product.unidade?.trim() || '',
+        preco_unitario: Math.max(0, product.preco_unitario || 0),
+        peso_unitario: Math.max(0, product.peso_unitario || 0),
+        disponivel: Boolean(product.disponivel),
+        sync_at: new Date().toISOString()
+      }))
+    })
+  });
 
-      const { error } = await supabaseClient
-        .from('produtos_legado')
-        .upsert({
-          produto_id_legado: product.id,
-          nome: product.nome.trim(),
-          categoria: product.categoria?.trim() || null,
-          unidade: product.unidade.trim(),
-          preco_unitario: Math.max(0, product.preco_unitario || 0),
-          peso_unitario: Math.max(0, product.peso_unitario || 0),
-          disponivel: Boolean(product.disponivel)
-        }, {
-          onConflict: 'produto_id_legado'
-        });
-      
-      if (error) {
-        console.error(`Error syncing product ${product.id}:`, error);
-      } else {
-        count++;
-      }
-    } catch (error) {
-      console.error(`Exception syncing product ${product.id}:`, error);
-    }
+  const result = await hybridResponse.json();
+  
+  if (!result.success) {
+    throw new Error(`Products sync failed: ${result.error}`);
   }
   
-  console.log(`Products sync completed: ${count}/${products.length} products synced successfully`);
-  return count;
+  console.log(`Products sync completed: ${result.processedRecords}/${products.length} products synced using ${result.strategy}`);
+  return result.processedRecords;
 }
 
 async function syncRecipes(supabaseClient: any, recipes: LegacyRecipe[]) {
-  let count = 0;
+  console.log(`Starting recipes sync with UPSERT strategy: ${recipes.length} recipes to process`);
   
-  console.log(`Starting recipes sync: ${recipes.length} recipes to process`);
-  
-  for (const recipe of recipes) {
-    try {
-      // Validate required fields
-      if (!recipe.id || !recipe.nome_receita) {
-        console.warn(`Skipping invalid recipe:`, { 
-          id: recipe.id, 
-          nome_receita: recipe.nome_receita 
-        });
-        continue;
-      }
+  // Usar hybrid sync manager para receitas
+  const hybridResponse = await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/hybrid-sync-manager`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      action: 'sync_table',
+      targetTable: 'receitas_legado',
+      data: recipes.map(recipe => ({
+        receita_id_legado: recipe.id,
+        nome_receita: recipe.nome_receita?.trim() || '',
+        categoria_receita: recipe.categoria_receita?.trim() || null,
+        modo_preparo: recipe.modo_preparo?.trim() || null,
+        tempo_preparo: Math.max(0, recipe.tempo_preparo || 0),
+        porcoes: Math.max(1, recipe.porcoes || 1),
+        custo_total: Math.max(0, recipe.custo_total || 0),
+        sync_at: new Date().toISOString()
+      }))
+    })
+  });
 
-      const { error } = await supabaseClient
-        .from('receitas_legado')
-        .upsert({
-          receita_id_legado: recipe.id,
-          nome_receita: recipe.nome_receita.trim(),
-          categoria_receita: recipe.categoria_receita?.trim() || null,
-          modo_preparo: recipe.modo_preparo?.trim() || null,
-          tempo_preparo: Math.max(0, recipe.tempo_preparo || 0),
-          porcoes: Math.max(1, recipe.porcoes || 1),
-          custo_total: Math.max(0, recipe.custo_total || 0)
-        }, {
-          onConflict: 'receita_id_legado'
-        });
-      
-      if (error) {
-        console.error(`Error syncing recipe ${recipe.id}:`, error);
-      } else {
-        count++;
-      }
-    } catch (error) {
-      console.error(`Exception syncing recipe ${recipe.id}:`, error);
-    }
+  const result = await hybridResponse.json();
+  
+  if (!result.success) {
+    throw new Error(`Recipes sync failed: ${result.error}`);
   }
   
-  console.log(`Recipes sync completed: ${count}/${recipes.length} recipes synced successfully`);
-  return count;
+  console.log(`Recipes sync completed: ${result.processedRecords}/${recipes.length} recipes synced using ${result.strategy}`);
+  return result.processedRecords;
 }
 
 async function syncClients(supabaseClient: any, clients: LegacyClient[]) {
-  let count = 0;
+  console.log(`Starting clients sync with UPSERT strategy: ${clients.length} clients to process`);
   
-  console.log(`Starting clients sync: ${clients.length} clients to process`);
-  
-  for (const client of clients) {
-    try {
-      // Validate required fields
-      if (!client.id || !client.nome_empresa) {
-        console.warn(`Skipping invalid client:`, { 
-          id: client.id, 
-          nome_empresa: client.nome_empresa 
-        });
-        continue;
-      }
+  // Usar hybrid sync manager para contratos
+  const hybridResponse = await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/hybrid-sync-manager`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      action: 'sync_table',
+      targetTable: 'contratos_corporativos',
+      data: clients.map(client => ({
+        cliente_id_legado: client.id,
+        nome_fantasia: client.nome_empresa?.trim() || '',
+        razao_social: client.nome_empresa?.trim() || '',
+        total_funcionarios: Math.max(0, client.total_funcionarios || 0),
+        custo_maximo_refeicao: Math.max(0, client.custo_maximo_refeicao || 0),
+        restricoes_alimentares: Array.isArray(client.restricoes_alimentares) ? client.restricoes_alimentares : [],
+        total_refeicoes_mes: Math.max(0, client.total_refeicoes_mes || 0),
+        sync_at: new Date().toISOString()
+      }))
+    })
+  });
 
-      const { error } = await supabaseClient
-        .from('contratos_corporativos')
-        .upsert({
-          cliente_id_legado: client.id,
-          nome_empresa: client.nome_empresa.trim(),
-          total_funcionarios: Math.max(0, client.total_funcionarios || 0),
-          custo_maximo_refeicao: Math.max(0, client.custo_maximo_refeicao || 0),
-          restricoes_alimentares: Array.isArray(client.restricoes_alimentares) ? client.restricoes_alimentares : [],
-          total_refeicoes_mes: Math.max(0, client.total_refeicoes_mes || 0)
-        }, {
-          onConflict: 'cliente_id_legado'
-        });
-      
-      if (error) {
-        console.error(`Error syncing client ${client.id}:`, error);
-      } else {
-        count++;
-      }
-    } catch (error) {
-      console.error(`Exception syncing client ${client.id}:`, error);
-    }
+  const result = await hybridResponse.json();
+  
+  if (!result.success) {
+    throw new Error(`Clients sync failed: ${result.error}`);
   }
   
-  console.log(`Clients sync completed: ${count}/${clients.length} clients synced successfully`);
-  return count;
+  console.log(`Clients sync completed: ${result.processedRecords}/${clients.length} clients synced using ${result.strategy}`);
+  return result.processedRecords;
 }

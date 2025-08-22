@@ -309,78 +309,59 @@ async function processViewData(supabaseClient: any, viewName: string, data: any[
   const mapping = VIEW_MAPPING[viewName as keyof typeof VIEW_MAPPING];
   let processedCount = 0;
 
-  // PROCESSAMENTO SIMPLIFICADO para vwCoSolicitacaoFilialCusto - mapeamento direto
+  // PROCESSAMENTO HÍBRIDO para vwCoSolicitacaoFilialCusto - usar strategy UPSERT_CLEANUP
   if (viewName === 'vwCoSolicitacaoFilialCusto') {
-    console.log(`Processamento simplificado de custos de filiais - ${data.length} registros`);
+    console.log(`Processamento híbrido de custos de filiais - ${data.length} registros`);
     
-    for (const record of data) {
-      try {
-        // LOG DETALHADO: Ver o que está chegando
-        console.log(`Processando registro ${processedCount + 1}:`, {
-          cliente_id_legado: record.cliente_id_legado,
-          filial_id: record.filial_id,
-          RefCustoSegunda: record.RefCustoSegunda,
-          custo_total: record.custo_total
-        });
+    // Mapear dados para formato correto
+    const mappedData = data.map(record => ({
+      cliente_id_legado: record.cliente_id_legado ? parseInt(record.cliente_id_legado.toString()) : record.filial_id ? parseInt(record.filial_id.toString()) : null,
+      filial_id: record.filial_id ? parseInt(record.filial_id.toString()) : null,
+      nome_filial: record.nome_filial || record.nome_empresa || null,
+      custo_total: record.custo_total ? parseFloat(record.custo_total.toString()) : null,
+      RefCustoSegunda: record.RefCustoSegunda ? parseFloat(record.RefCustoSegunda.toString()) : null,
+      RefCustoTerca: record.RefCustoTerca ? parseFloat(record.RefCustoTerca.toString()) : null,
+      RefCustoQuarta: record.RefCustoQuarta ? parseFloat(record.RefCustoQuarta.toString()) : null,
+      RefCustoQuinta: record.RefCustoQuinta ? parseFloat(record.RefCustoQuinta.toString()) : null,
+      RefCustoSexta: record.RefCustoSexta ? parseFloat(record.RefCustoSexta.toString()) : null,
+      RefCustoSabado: record.RefCustoSabado ? parseFloat(record.RefCustoSabado.toString()) : null,
+      RefCustoDomingo: record.RefCustoDomingo ? parseFloat(record.RefCustoDomingo.toString()) : null,
+      RefCustoDiaEspecial: record.RefCustoDiaEspecial ? parseFloat(record.RefCustoDiaEspecial.toString()) : null,
+      QtdeRefeicoesUsarMediaValidarSimNao: record.QtdeRefeicoesUsarMediaValidarSimNao === true || record.QtdeRefeicoesUsarMediaValidarSimNao === 'true' || record.QtdeRefeicoesUsarMediaValidarSimNao === 1,
+      PorcentagemLimiteAcimaMedia: record.PorcentagemLimiteAcimaMedia ? parseInt(record.PorcentagemLimiteAcimaMedia.toString()) : null,
+      custo_medio_semanal: record.custo_medio_semanal ? parseFloat(record.custo_medio_semanal.toString()) : null,
+      solicitacao_filial_custo_id: record.solicitacao_filial_custo_id ? parseInt(record.solicitacao_filial_custo_id.toString()) : null,
+      solicitacao_compra_tipo_id: record.solicitacao_compra_tipo_id ? parseInt(record.solicitacao_compra_tipo_id.toString()) : null,
+      user_name: record.user_name?.toString() || null,
+      user_date_time: record.user_date_time || null,
+      nome_fantasia: record.nome_fantasia?.toString() || null,
+      razao_social: record.razao_social?.toString() || null,
+      solicitacao_compra_tipo_descricao: record.solicitacao_compra_tipo_descricao?.toString() || null,
+      sync_at: new Date().toISOString()
+    }));
 
-        // MAPEAMENTO DIRETO - sem conversões complexas, apenas conversões de tipo básicas
-        const dataToInsert = {
-          cliente_id_legado: record.cliente_id_legado ? parseInt(record.cliente_id_legado.toString()) : record.filial_id ? parseInt(record.filial_id.toString()) : null,
-          filial_id: record.filial_id ? parseInt(record.filial_id.toString()) : null,
-          nome_filial: record.nome_filial || record.nome_empresa || null,
-          custo_total: record.custo_total ? parseFloat(record.custo_total.toString()) : null,
-          // Mapeamento direto dos campos RefCusto*
-          RefCustoSegunda: record.RefCustoSegunda ? parseFloat(record.RefCustoSegunda.toString()) : null,
-          RefCustoTerca: record.RefCustoTerca ? parseFloat(record.RefCustoTerca.toString()) : null,
-          RefCustoQuarta: record.RefCustoQuarta ? parseFloat(record.RefCustoQuarta.toString()) : null,
-          RefCustoQuinta: record.RefCustoQuinta ? parseFloat(record.RefCustoQuinta.toString()) : null,
-          RefCustoSexta: record.RefCustoSexta ? parseFloat(record.RefCustoSexta.toString()) : null,
-          RefCustoSabado: record.RefCustoSabado ? parseFloat(record.RefCustoSabado.toString()) : null,
-          RefCustoDomingo: record.RefCustoDomingo ? parseFloat(record.RefCustoDomingo.toString()) : null,
-          RefCustoDiaEspecial: record.RefCustoDiaEspecial ? parseFloat(record.RefCustoDiaEspecial.toString()) : null,
-          // Campos adicionais - mapeamento direto
-          QtdeRefeicoesUsarMediaValidarSimNao: record.QtdeRefeicoesUsarMediaValidarSimNao === true || record.QtdeRefeicoesUsarMediaValidarSimNao === 'true' || record.QtdeRefeicoesUsarMediaValidarSimNao === 1,
-          PorcentagemLimiteAcimaMedia: record.PorcentagemLimiteAcimaMedia ? parseInt(record.PorcentagemLimiteAcimaMedia.toString()) : null,
-          custo_medio_semanal: record.custo_medio_semanal ? parseFloat(record.custo_medio_semanal.toString()) : null,
-          solicitacao_filial_custo_id: record.solicitacao_filial_custo_id ? parseInt(record.solicitacao_filial_custo_id.toString()) : null,
-          solicitacao_compra_tipo_id: record.solicitacao_compra_tipo_id ? parseInt(record.solicitacao_compra_tipo_id.toString()) : null,
-          user_name: record.user_name?.toString() || null,
-          user_date_time: record.user_date_time || null,
-          nome_fantasia: record.nome_fantasia?.toString() || null,
-          razao_social: record.razao_social?.toString() || null,
-          solicitacao_compra_tipo_descricao: record.solicitacao_compra_tipo_descricao?.toString() || null,
-          sync_at: new Date().toISOString()
-        };
+    // Usar hybrid sync manager para custos
+    const hybridResponse = await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/hybrid-sync-manager`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        action: 'sync_table',
+        targetTable: 'custos_filiais',
+        data: mappedData
+      })
+    });
 
-        console.log(`Dados para inserção:`, {
-          cliente_id_legado: dataToInsert.cliente_id_legado,
-          RefCustoSegunda: dataToInsert.RefCustoSegunda,
-          custo_total: dataToInsert.custo_total
-        });
-
-        // CORREÇÃO: Usar upsert com onConflict para evitar erro de chave duplicada
-        const { error } = await supabaseClient
-          .from('custos_filiais')
-          .upsert(dataToInsert, { onConflict: 'cliente_id_legado,filial_id' });
-
-        if (error) {
-          console.error(`Erro ao processar custo de filial:`, error);
-          console.error(`Dados que causaram erro:`, dataToInsert);
-        } else {
-          processedCount++;
-          
-          if (processedCount % 1000 === 0) {
-            console.log(`Processados ${processedCount} registros de custos de filiais`);
-          }
-        }
-      } catch (error) {
-        console.error(`Erro ao processar registro de custo:`, error);
-        console.error(`Registro problemático:`, record);
-      }
+    const result = await hybridResponse.json();
+    
+    if (!result.success) {
+      throw new Error(`Custos sync failed: ${result.error}`);
     }
     
-    console.log(`Processamento de custos concluído: ${processedCount} registros inseridos/atualizados`);
-    return processedCount;
+    console.log(`Custos sync completed: ${result.processedRecords}/${data.length} registros usando ${result.strategy}`);
+    return result.processedRecords;
   }
 
   // Tratamento especial para vwCpReceitaProduto (ingredientes das receitas)
