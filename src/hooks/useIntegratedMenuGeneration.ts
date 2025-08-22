@@ -463,14 +463,46 @@ export const useIntegratedMenuGeneration = () => {
         throw new Error(data?.error || 'Erro na geração do cardápio');
       }
 
-      const aiMenu = data.menu || {};
-      console.log('Cardápio gerado pela IA (formatos compatíveis):', aiMenu);
-
-      const cardapioV1 = Array.isArray(aiMenu.cardapio) ? aiMenu.cardapio : [];
-      const daysV2 = Array.isArray(aiMenu.days) ? aiMenu.days : [];
-      if (!cardapioV1.length && !daysV2.length) {
-        throw new Error('IA não retornou um cardápio válido');
+      // 🔍 DEBUG: Ver estrutura completa da resposta
+      console.log('📦 Resposta completa da Edge Function:', JSON.stringify(data, null, 2));
+      
+      // Verificar diferentes estruturas de resposta
+      const aiMenu = data.menu || data.cardapio || {};
+      console.log('📦 aiMenu extraído:', aiMenu);
+      
+      // Mapear receitas da nova estrutura (data.cardapio.receitas)
+      let receitasExtraidas = [];
+      
+      if (data.cardapio?.receitas && Array.isArray(data.cardapio.receitas)) {
+        console.log('✅ Encontrado data.cardapio.receitas:', data.cardapio.receitas.length, 'receitas');
+        receitasExtraidas = data.cardapio.receitas;
+      } else if (Array.isArray(aiMenu.cardapio)) {
+        console.log('✅ Encontrado aiMenu.cardapio:', aiMenu.cardapio.length, 'receitas');
+        receitasExtraidas = aiMenu.cardapio;
+      } else if (Array.isArray(aiMenu.days)) {
+        console.log('✅ Encontrado aiMenu.days:', aiMenu.days.length, 'dias');
+        // Processar formato de dias (estrutura legada)
+        receitasExtraidas = aiMenu.days.flatMap((day: any) => 
+          (day.receitas || []).map((receita: any) => ({
+            ...receita,
+            dia: day.dia || 'Segunda'
+          }))
+        );
       }
+      
+      console.log('📦 Receitas extraídas:', receitasExtraidas);
+      
+      // Validar se temos receitas
+      if (!receitasExtraidas.length) {
+        console.error('❌ Nenhuma receita encontrada em qualquer formato');
+        console.error('📦 Estrutura data.cardapio:', data.cardapio);
+        console.error('📦 Estrutura aiMenu:', aiMenu);
+        throw new Error('IA não retornou um cardápio válido - nenhuma receita encontrada');
+      }
+      
+      // Criar estruturas compatíveis para o código legado
+      const cardapioV1 = receitasExtraidas;
+      const daysV2 = Array.isArray(aiMenu.days) ? aiMenu.days : [];
 
       const dayLabelToTitle = (lbl: string) => {
         const s = String(lbl || '').toUpperCase();
