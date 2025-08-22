@@ -206,7 +206,11 @@ const ClientSelector = () => {
                   <div className="flex items-center space-x-2 text-sm">
                     <DollarSign className="w-4 h-4 text-gray-500" />
                     <span className="text-gray-600">
-                      Custo médio diário: R$ {client.custo_medio_diario.toFixed(2)}
+                      {clientWithCosts && clientWithCosts.totalBranches > 1 ? (
+                        <>A partir de R$ {client.custo_medio_diario.toFixed(2)}</>
+                      ) : (
+                        <>Custo médio diário: R$ {client.custo_medio_diario.toFixed(2)}</>
+                      )}
                     </span>
                   </div>
                   

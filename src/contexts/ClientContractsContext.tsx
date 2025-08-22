@@ -130,7 +130,11 @@ export const ClientContractsProvider = ({ children }: { children: ReactNode }) =
         const uniqueCompanies = new Map<string, ContractClient>();
         transformedData.forEach(client => {
           const companyKey = client.nome_fantasia;
-          if (!uniqueCompanies.has(companyKey)) {
+          const existingClient = uniqueCompanies.get(companyKey);
+          
+          // Estratégia: pegar o cliente com maior custo médio diário (mais representativo)
+          // ou o primeiro se não existir
+          if (!existingClient || client.custo_medio_diario > existingClient.custo_medio_diario) {
             uniqueCompanies.set(companyKey, client);
           }
         });
