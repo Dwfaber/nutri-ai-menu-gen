@@ -21,13 +21,14 @@ const Sidebar = () => {
   ];
 
   return (
-    <aside className="bg-white w-64 min-h-screen border-r border-gray-200 flex flex-col">
-      <div className="p-6 border-b border-gray-200">
-        <div className="flex items-center space-x-3">
-          <div className="w-10 h-10 bg-green-600 rounded-lg flex items-center justify-center">
-            <Brain className="w-6 h-6 text-white" />
-          </div>
-          <h1 className="text-xl font-bold text-gray-900">Nutr's IA</h1>
+    <aside className="bg-card w-64 min-h-screen border-r border-border flex flex-col">
+      <div className="p-6 border-b border-border">
+        <div className="flex items-center justify-center">
+          <img 
+            src="/src/assets/nutris-logo.png" 
+            alt="Nutri's Logo" 
+            className="h-10 object-contain"
+          />
         </div>
       </div>
       
@@ -40,8 +41,8 @@ const Sidebar = () => {
                 className={({ isActive }) =>
                   `flex items-center space-x-3 px-4 py-3 rounded-lg transition-colors ${
                     isActive
-                      ? 'bg-green-50 text-green-700 border-r-2 border-green-600'
-                      : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                      ? 'bg-primary/10 text-primary border-r-2 border-primary'
+                      : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
                   }`
                 }
               >
@@ -53,9 +54,9 @@ const Sidebar = () => {
         </ul>
       </nav>
       
-      <div className="p-4 border-t border-gray-200">
-        <div className="text-xs text-gray-500 text-center">
-          © 2024 Nutr's IA
+      <div className="p-4 border-t border-border">
+        <div className="text-xs text-muted-foreground text-center">
+          © 2024 Nutri's IA
         </div>
       </div>
     </aside>

@@ -47,7 +47,7 @@ const App = () => {
                 <Route path="/*" element={
                   <ProtectedRoute requireRole="viewer" fallbackPath="/auth">
                     <ClientSelectionWrapper>
-                      <div className="flex min-h-screen w-full bg-gray-50">
+                      <div className="flex min-h-screen w-full bg-background">
                         <Sidebar />
                         <div className="flex-1 flex flex-col">
                           <UserHeader />

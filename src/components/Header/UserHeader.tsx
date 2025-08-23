@@ -31,16 +31,16 @@ export const UserHeader = () => {
   const getRoleColor = (role: string) => {
     switch (role) {
       case 'admin':
-        return 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200';
+        return 'bg-destructive/10 text-destructive border-destructive/20';
       case 'nutritionist':
-        return 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200';
+        return 'bg-primary/10 text-primary border-primary/20';
       default:
-        return 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200';
+        return 'bg-secondary/10 text-secondary-foreground border-secondary/20';
     }
   };
 
   return (
-    <div className="flex items-center gap-4 px-4 py-2 bg-background border-b">
+    <div className="flex items-center gap-4 px-4 py-2 bg-card border-b border-border">
       <div className="flex items-center gap-2">
         {userRoles.map((role) => (
           <Badge 
