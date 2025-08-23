@@ -36,11 +36,18 @@ const Dashboard = () => {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
-          <p className="text-gray-600">
-            {selectedClient ? `Cliente: ${selectedClient.nome_fantasia}` : 'Visão geral do sistema Nutr\'s IA'}
-          </p>
+        <div className="flex items-center gap-4">
+          <img 
+            src="/src/assets/nutris-logo.png" 
+            alt="Nutri's Logo" 
+            className="h-12 object-contain"
+          />
+          <div>
+            <h1 className="text-2xl font-bold text-foreground">Dashboard</h1>
+            <p className="text-muted-foreground">
+              {selectedClient ? `Cliente: ${selectedClient.nome_fantasia}` : 'Visão geral do sistema Nutr\'s IA'}
+            </p>
+          </div>
         </div>
         <div className="w-80">
           <ClientSelectorDropdown />

@@ -19,19 +19,19 @@ const StatsCard = ({ title, value, change, changeType = 'neutral', icon: Icon }:
   };
 
   return (
-    <div className="bg-white p-6 rounded-lg border border-gray-200 hover:shadow-md transition-shadow">
+    <div className="bg-card p-6 rounded-lg border border-border hover:shadow-md transition-shadow card-hover">
       <div className="flex items-center justify-between">
         <div>
-          <p className="text-sm font-medium text-gray-600">{title}</p>
-          <p className="text-2xl font-bold text-gray-900 mt-1">{value}</p>
+          <p className="text-sm font-medium text-muted-foreground">{title}</p>
+          <p className="text-2xl font-bold text-card-foreground mt-1">{value}</p>
           {change && (
             <p className={`text-sm mt-1 ${getChangeColor()}`}>
               {change}
             </p>
           )}
         </div>
-        <div className="w-12 h-12 bg-green-50 rounded-lg flex items-center justify-center">
-          <Icon className="w-6 h-6 text-green-600" />
+        <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center">
+          <Icon className="w-6 h-6 text-primary" />
         </div>
       </div>
     </div>
