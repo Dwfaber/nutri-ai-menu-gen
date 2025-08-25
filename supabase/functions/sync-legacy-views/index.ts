@@ -623,17 +623,23 @@ async function processViewData(supabaseClient: any, viewName: string, data: any[
           sync_at: new Date().toISOString()
         };
         
-        console.log(`Dados mapeados para inserção do produto base:`, {
+        // Validação rigorosa dos dados antes do upsert
+        if (!dataToInsert.produto_base_id) {
+          console.error(`ERRO: produto_base_id é obrigatório mas está ausente:`, record);
+          continue; // Pula este registro inválido
+        }
+
+        console.log(`Dados validados para upsert do produto base:`, {
           id: dataToInsert.produto_base_id,
           descricao: dataToInsert.descricao,
           unidade: dataToInsert.unidade
         });
 
-        // CORREÇÃO: Usar upsert com onConflict para evitar erro de chave duplicada
+        // CORREÇÃO DEFINITIVA: Usar constraint name correto e validação rigorosa
         const { error } = await supabaseClient
           .from('produtos_base')
           .upsert(dataToInsert, { 
-            onConflict: 'produto_base_id',
+            onConflict: 'produtos_base_produto_base_id_key',
             ignoreDuplicates: false 
           });
 
