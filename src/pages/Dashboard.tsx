@@ -41,7 +41,7 @@ const Dashboard = () => {
         <div className="flex items-center gap-4">
           <img 
             src="/nutris-logo.png" 
-            alt="Nutri's Logo" 
+            alt="Nutr's Logo" 
             className="h-12 object-contain"
           />
           <div>

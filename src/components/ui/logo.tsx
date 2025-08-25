@@ -15,7 +15,7 @@ export function Logo({ className, size = "md" }: LogoProps) {
   return (
     <div className={cn("flex items-center gap-2 font-bold", className)}>
       <div className={cn("flex items-center", sizeClasses[size])}>
-        <span className="text-primary">Nutri's</span>
+        <span className="text-primary">Nutr's</span>
         <span className="text-secondary ml-1">IA</span>
       </div>
     </div>

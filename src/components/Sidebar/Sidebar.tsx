@@ -26,7 +26,7 @@ const Sidebar = () => {
         <div className="flex items-center justify-center">
           <img 
             src="/nutris-logo.png" 
-            alt="Nutri's Logo" 
+            alt="Nutr's Logo" 
             className="h-10 object-contain"
           />
         </div>
@@ -56,7 +56,7 @@ const Sidebar = () => {
       
       <div className="p-4 border-t border-border">
         <div className="text-xs text-muted-foreground text-center">
-          © 2024 Nutri's IA
+          © 2024 Nutr's IA
         </div>
       </div>
     </aside>
