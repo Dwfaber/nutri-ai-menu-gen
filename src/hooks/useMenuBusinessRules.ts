@@ -64,21 +64,43 @@ export const useMenuBusinessRules = () => {
     return advanceKeywords.some(keyword => name.includes(keyword));
   };
 
-  // Categorize salad type
+  // Categorize salad type with enhanced intelligence based on available vegetables
   const categorizeSalad = (recipeName: string): 'verduras_folhas' | 'legumes' | 'mista' => {
     const name = recipeName.toLowerCase();
     
-    const verdurasKeywords = ['alface', 'rúcula', 'agrião', 'espinafre', 'couve', 'repolho'];
-    const legumesKeywords = ['tomate', 'pepino', 'cenoura', 'beterraba', 'abobrinha', 'chuchu'];
+    // Verduras de folhas (expandido com base nos produtos disponíveis)
+    const folhosas = [
+      'alface', 'rúcula', 'agrião', 'espinafre', 'couve', 'acelga', 
+      'almeirão', 'chicória', 'endívia', 'mostarda', 'taioba', 'repolho'
+    ];
     
-    const hasVerduras = verdurasKeywords.some(keyword => name.includes(keyword));
-    const hasLegumes = legumesKeywords.some(keyword => name.includes(keyword));
+    // Legumes (expandido com produtos identificados)
+    const legumes = [
+      'tomate', 'cenoura', 'beterraba', 'abobrinha', 'pepino', 'cebola',
+      'pimentão', 'rabanete', 'nabo', 'chuchu', 'quiabo', 'berinjela',
+      'abóbora', 'mandioca', 'batata', 'inhame', 'mandioquinha', 'brócolis'
+    ];
     
-    if (hasVerduras && hasLegumes) return 'mista';
-    if (hasVerduras) return 'verduras_folhas';
+    // Aromáticas e temperos
+    const aromaticas = [
+      'salsa', 'cebolinha', 'coentro', 'manjericão', 'orégano', 'tomilho'
+    ];
+    
+    const hasFolhosas = folhosas.some(item => name.includes(item));
+    const hasLegumes = legumes.some(item => name.includes(item));
+    const hasAromaticas = aromaticas.some(item => name.includes(item));
+    
+    // Lógica melhorada de categorização
+    if (hasFolhosas && hasLegumes) return 'mista';
+    if (hasFolhosas || hasAromaticas) return 'verduras_folhas';
     if (hasLegumes) return 'legumes';
     
-    return 'mista'; // Default for unclear cases
+    // Padrões específicos para saladas
+    if (name.includes('salada verde') || name.includes('folhas')) return 'verduras_folhas';
+    if (name.includes('legumes') || name.includes('raízes')) return 'legumes';
+    
+    // Default para mista se não conseguir classificar especificamente
+    return 'mista';
   };
 
   // Validate protein variety rules
