@@ -629,7 +629,7 @@ async function processViewData(supabaseClient: any, viewName: string, data: any[
           unidade: dataToInsert.unidade
         });
 
-        // Usar upsert com onConflict para evitar erro de chave duplicada
+        // CORREÇÃO: Usar upsert com onConflict para evitar erro de chave duplicada
         const { error } = await supabaseClient
           .from('produtos_base')
           .upsert(dataToInsert, { 
