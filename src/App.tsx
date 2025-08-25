@@ -10,7 +10,9 @@ import { SelectedClientProvider } from "@/contexts/SelectedClientContext";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { UserHeader } from "@/components/Header/UserHeader";
+import { DemoIndicator } from "@/components/ui/demo-indicator";
 import Sidebar from "./components/Sidebar/Sidebar";
+import { AuthProvider } from "@/contexts/AuthContext";
 import Dashboard from "./pages/Dashboard";
 import Cardapios from "./pages/Cardapios";
 import Compras from "./pages/Compras";
@@ -35,12 +37,14 @@ const App = () => {
   return (
     <ErrorBoundary>
       <QueryClientProvider client={queryClient}>
-        <ClientContractsProvider>
-          <SelectedClientProvider>
-            <TooltipProvider>
-            <Toaster />
-            <Sonner />
-            <BrowserRouter>
+        <AuthProvider>
+          <ClientContractsProvider>
+            <SelectedClientProvider>
+              <TooltipProvider>
+                <Toaster />
+                <Sonner />
+                <DemoIndicator />
+                <BrowserRouter>
             <Routes>
               <Route path="/auth" element={<Auth />} />
               <Route path="/reset-password" element={<ResetPassword />} />
@@ -69,10 +73,11 @@ const App = () => {
                   </ProtectedRoute>
                 } />
               </Routes>
-            </BrowserRouter>
-          </TooltipProvider>
-          </SelectedClientProvider>
-        </ClientContractsProvider>
+                </BrowserRouter>
+              </TooltipProvider>
+            </SelectedClientProvider>
+          </ClientContractsProvider>
+        </AuthProvider>
       </QueryClientProvider>
     </ErrorBoundary>
   );

@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
+import { signInAsDemo } from '@/services/demoAuth';
 
 interface Profile {
   id: string;
@@ -26,11 +27,13 @@ interface AuthContextType {
   profile: Profile | null;
   userRoles: UserRole[];
   loading: boolean;
+  isDemoMode: boolean;
   hasRole: (role: 'admin' | 'nutritionist' | 'viewer') => boolean;
   isAdmin: boolean;
   isNutritionist: boolean;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
+  enableDemoMode: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -53,6 +56,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [userRoles, setUserRoles] = useState<UserRole[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isDemoMode, setIsDemoMode] = useState(false);
 
   const hasRole = (role: 'admin' | 'nutritionist' | 'viewer') => {
     return userRoles.some(userRole => userRole.role === role);
@@ -105,6 +109,24 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     if (error) {
       console.error('Error signing out:', error);
     }
+    setIsDemoMode(false);
+  };
+
+  const enableDemoMode = async () => {
+    try {
+      setLoading(true);
+      const result = await signInAsDemo();
+      if (result.success) {
+        setIsDemoMode(true);
+        console.log('Demo mode enabled successfully');
+      } else {
+        console.error('Failed to enable demo mode:', result.error);
+      }
+    } catch (error) {
+      console.error('Error enabling demo mode:', error);
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => {
@@ -116,6 +138,10 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       
       if (session?.user) {
         await fetchProfile(session.user.id);
+        // Check if this is the demo user
+        if (session.user.email === 'demo@nutris.app') {
+          setIsDemoMode(true);
+        }
       }
       
       setLoading(false);
@@ -134,9 +160,14 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
           setTimeout(() => {
             fetchProfile(session.user.id);
           }, 100);
+          // Check if this is the demo user
+          if (session.user.email === 'demo@nutris.app') {
+            setIsDemoMode(true);
+          }
         } else {
           setProfile(null);
           setUserRoles([]);
+          setIsDemoMode(false);
         }
         
         setLoading(false);
@@ -152,11 +183,13 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     profile,
     userRoles,
     loading,
+    isDemoMode,
     hasRole,
     isAdmin,
     isNutritionist,
     signOut,
     refreshProfile,
+    enableDemoMode,
   };
 
   return (

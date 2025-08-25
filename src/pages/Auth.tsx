@@ -8,8 +8,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Loader2 } from "lucide-react";
+import { Loader2, Play } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { useAuth } from "@/contexts/AuthContext";
 
 export default function Auth() {
   const [loading, setLoading] = useState(false);
@@ -23,6 +24,7 @@ export default function Auth() {
   const [isResetDialogOpen, setIsResetDialogOpen] = useState(false);
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { enableDemoMode } = useAuth();
 
   useEffect(() => {
     // Check if user is already logged in
@@ -144,6 +146,25 @@ export default function Auth() {
     }
   };
 
+  const handleDemoAccess = async () => {
+    setLoading(true);
+    try {
+      await enableDemoMode();
+      toast({
+        title: "Modo Demonstração Ativado",
+        description: "Você está navegando em modo de demonstração.",
+      });
+      navigate('/');
+    } catch (error) {
+      toast({
+        title: "Erro ao acessar demo",
+        description: "Não foi possível ativar o modo demonstração.",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background to-muted/50 p-4">
@@ -308,6 +329,30 @@ export default function Auth() {
               </form>
             </TabsContent>
           </Tabs>
+          
+          <div className="mt-6 pt-6 border-t border-border">
+            <div className="text-center space-y-4">
+              <p className="text-sm text-muted-foreground">
+                Quer apenas experimentar o sistema?
+              </p>
+              <Button
+                variant="outline"
+                onClick={handleDemoAccess}
+                disabled={loading}
+                className="w-full"
+              >
+                {loading ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Play className="mr-2 h-4 w-4" />
+                )}
+                Acessar Demonstração
+              </Button>
+              <p className="text-xs text-muted-foreground">
+                Acesso limitado apenas para visualização
+              </p>
+            </div>
+          </div>
         </CardContent>
       </Card>
     </div>
