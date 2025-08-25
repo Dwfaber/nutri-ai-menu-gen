@@ -38,7 +38,7 @@ const Dashboard = () => {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
           <img 
-            src="/src/assets/nutris-logo.png" 
+            src="/nutris-logo.png" 
             alt="Nutri's Logo" 
             className="h-12 object-contain"
           />

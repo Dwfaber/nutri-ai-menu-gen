@@ -25,7 +25,7 @@ const Sidebar = () => {
       <div className="p-6 border-b border-border">
         <div className="flex items-center justify-center">
           <img 
-            src="/src/assets/nutris-logo.png" 
+            src="/nutris-logo.png" 
             alt="Nutri's Logo" 
             className="h-10 object-contain"
           />

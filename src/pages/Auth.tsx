@@ -151,7 +151,7 @@ export default function Auth() {
         <CardHeader className="space-y-4">
           <div className="flex justify-center">
             <img 
-              src="/src/assets/nutris-logo.png" 
+              src="/nutris-logo.png" 
               alt="Nutri's Logo" 
               className="h-20 object-contain"
             />
