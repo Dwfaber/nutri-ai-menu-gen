@@ -1,10 +1,12 @@
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Users, ChefHat, DollarSign, TrendingUp, Clock, ShoppingCart, Building2 } from 'lucide-react';
+import { Users, ChefHat, DollarSign, TrendingUp, Building2 } from 'lucide-react';
 import { useDashboardData } from '@/hooks/useDashboardData';
 import StatsCard from '@/components/Dashboard/StatsCard';
 import { useSelectedClient } from '@/contexts/SelectedClientContext';
 import ClientSelectorDropdown from '@/components/Dashboard/ClientSelectorDropdown';
+import WeeklyCostChart from '@/components/Dashboard/WeeklyCostChart';
+import CostAnalysisCard from '@/components/Dashboard/CostAnalysisCard';
 
 const Dashboard = () => {
   const { metrics, isLoading, error, refetch } = useDashboardData();
@@ -117,78 +119,8 @@ const Dashboard = () => {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Clock className="w-5 h-5" />
-              Atividade Recente
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="h-64 flex items-center justify-center text-gray-500">
-              <div className="text-center">
-                {isLoading ? (
-                  <div className="animate-pulse">
-                    <p className="text-lg font-medium">Carregando atividades...</p>
-                  </div>
-                ) : metrics.generatedMenus > 0 ? (
-                  <div className="space-y-2">
-                    <p className="text-lg font-medium">Última Sincronização</p>
-                    <p className="text-sm">
-                      {metrics.generatedMenus} cardápios processados
-                    </p>
-                    <p className="text-sm">
-                      {metrics.activeClients} clientes ativos
-                    </p>
-                  </div>
-                ) : (
-                  <div>
-                    <p className="text-lg font-medium">Nenhuma atividade encontrada</p>
-                    <p className="text-sm">Configure contratos para visualizar atividades</p>
-                  </div>
-                )}
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <ShoppingCart className="w-5 h-5" />
-              Próximas Ações
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="h-64 flex items-center justify-center text-gray-500">
-              <div className="text-center">
-                {isLoading ? (
-                  <div className="animate-pulse">
-                    <p className="text-lg font-medium">Carregando ações...</p>
-                  </div>
-                ) : metrics.activeClients > 0 ? (
-                  <div className="space-y-2">
-                    <p className="text-lg font-medium">Ações Sugeridas</p>
-                    <p className="text-sm">
-                      • Gerar cardápios para {metrics.activeClients} clientes
-                    </p>
-                    <p className="text-sm">
-                      • Revisar orçamento mensal: R$ {metrics.monthlyBudget.toFixed(2)}
-                    </p>
-                    <p className="text-sm">
-                      • Otimizar custos das {metrics.monthlyMeals} refeições
-                    </p>
-                  </div>
-                ) : (
-                  <div>
-                    <p className="text-lg font-medium">Nenhuma ação pendente</p>
-                    <p className="text-sm">Configure contratos para visualizar ações</p>
-                  </div>
-                )}
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+        <WeeklyCostChart />
+        <CostAnalysisCard />
       </div>
     </div>
   );
