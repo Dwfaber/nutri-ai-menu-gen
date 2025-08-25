@@ -3,6 +3,7 @@ import { Badge } from '@/components/ui/badge';
 import { TrendingUp, TrendingDown, DollarSign, Calendar } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { calculateWeeklyTotalFromDailyCosts, getTopExpensiveClients } from '@/utils/costCalculations';
 
 interface CostAnalysis {
   totalCost: number;
@@ -22,13 +23,13 @@ const CostAnalysisCard = () => {
       try {
         const { data: costData, error } = await supabase
           .from('custos_filiais')
-          .select('*')
-          .order('custo_total', { ascending: false });
+          .select('*');
 
         if (error) throw error;
 
         if (costData && costData.length > 0) {
-          const totalCost = costData.reduce((sum, cost) => sum + Number(cost.custo_total || 0), 0);
+          // Calculate total cost using daily costs instead of custo_total (which is 0.00)
+          const totalCost = costData.reduce((sum, cost) => sum + calculateWeeklyTotalFromDailyCosts(cost), 0);
           const averageCost = totalCost / costData.length;
 
           const costByDay = {
@@ -41,21 +42,15 @@ const CostAnalysisCard = () => {
             Domingo: costData.reduce((sum, cost) => sum + Number(cost.RefCustoDomingo || 0), 0) / costData.length,
           };
 
-          const clientsAboveAverage = costData.filter(cost => Number(cost.custo_total || 0) > averageCost).length;
+          const clientsAboveAverage = costData.filter(cost => calculateWeeklyTotalFromDailyCosts(cost) > averageCost).length;
           
-          const topExpensiveClients = costData
-            .slice(0, 5)
-            .map(cost => ({
-              name: cost.nome_fantasia || cost.razao_social || 'Cliente Desconhecido',
-              cost: Number(cost.custo_total || 0),
-              filial_id: cost.filial_id || 0
-            }));
+          const topExpensiveClients = getTopExpensiveClients(costData, 5);
 
-          // Simple trend calculation (could be improved with historical data)
+          // Simple trend calculation based on daily costs
           const recentCosts = costData.slice(0, Math.min(10, costData.length));
           const oldCosts = costData.slice(-Math.min(10, costData.length));
-          const recentAvg = recentCosts.reduce((sum, cost) => sum + Number(cost.custo_total || 0), 0) / recentCosts.length;
-          const oldAvg = oldCosts.reduce((sum, cost) => sum + Number(cost.custo_total || 0), 0) / oldCosts.length;
+          const recentAvg = recentCosts.reduce((sum, cost) => sum + calculateWeeklyTotalFromDailyCosts(cost), 0) / recentCosts.length;
+          const oldAvg = oldCosts.reduce((sum, cost) => sum + calculateWeeklyTotalFromDailyCosts(cost), 0) / oldCosts.length;
           
           let costTrend: 'up' | 'down' | 'stable' = 'stable';
           if (recentAvg > oldAvg * 1.05) costTrend = 'up';
