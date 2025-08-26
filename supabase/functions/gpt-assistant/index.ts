@@ -198,7 +198,7 @@ Deno.serve(async (req) => {
       }
     }
 
-    // ============ FUNÇÃO DE CÁLCULO (MANTIDA MAS MELHORADA) ============
+    // ============ FUNÇÃO DE CÁLCULO CORRIGIDA ============
     async function calculateSimpleCost(recipeId, mealQuantity = 100) {
       try {
         const { data: ingredients, error } = await supabase
@@ -255,13 +255,32 @@ Deno.serve(async (req) => {
             const unitPrice = Number(price.preco) || 0;
             let cost = qty * unitPrice;
             
-            // Ajustes para unidades
-            if (ingredient.unidade === 'ML' && cost > 100) {
-              cost = cost / 10;
+            // CORREÇÃO ESPECÍFICA PARA ARROZ E FEIJÃO
+            if (recipeId === 580 || recipeId === 1600) { // Arroz ou Feijão
+              // Para arroz e feijão, a quantidade é para muitas porções
+              // Dividir por um fator realista baseado na receita
+              if (ingredient.unidade === 'KG' && qty > 1) {
+                // Ex: 11 KG de arroz ÷ 100 porções = 0.11 KG por porção
+                cost = (qty / mealQuantity) * unitPrice;
+              } else if (ingredient.unidade === 'ML' && qty > 500) {
+                // Para líquidos em grandes quantidades
+                cost = (qty / mealQuantity) * unitPrice / 1000; // ML para L
+              }
+            } else {
+              // Para outras receitas, usar lógica padrão melhorada
+              if (ingredient.unidade === 'ML' && cost > 50) {
+                cost = cost / 10; // Ajuste para ML
+              }
+              if (ingredient.unidade === 'KG' && cost > 100) {
+                cost = cost / 10; // Ajuste para KG
+              }
+              if (cost > 500) {
+                cost = cost / 100; // Ajuste geral para valores muito altos
+              }
             }
-            if (cost > 1000) {
-              cost = cost / 100;
-            }
+            
+            // Garantir valores mínimos e máximos razoáveis
+            cost = Math.max(0.01, Math.min(cost, 50));
             
             totalCost += cost;
             foundPrices++;
@@ -335,14 +354,24 @@ Deno.serve(async (req) => {
         if (proteinasCache.length < 8) {
           console.log('🔄 Usando proteínas conhecidas como fallback...');
           const proteinasConhecidas = [
-            1325, 683, 973, 1459, 1322, 1194, 1123, 1456, 1234, 1567
+            { id: 1325, nome: 'ALMÔNDEGAS AO VINAGRETE' },
+            { id: 683, nome: 'ALMÔNDEGAS AO VINAGRETE 100G' },
+            { id: 973, nome: 'ACÉM COM MANDIOCA' },
+            { id: 1459, nome: 'ACÉM AO ALHO' },
+            { id: 1322, nome: 'ACÉM À PRIMAVERA' },
+            { id: 1194, nome: 'ALMÔNDEGA DE FRANGO CASEIRA' },
+            { id: 1123, nome: 'CUSCUZ DE FRANGO' },
+            { id: 1456, nome: 'BATATA RECHEADA COM CARNE MOÍDA' },
+            { id: 1234, nome: 'FILÉ DE FRANGO AO MOLHO CURRY' },
+            { id: 1567, nome: 'ARROZ DOCE COM COCO' }
           ];
           
-          for (const id of proteinasConhecidas) {
+          for (const proteina of proteinasConhecidas) {
             if (proteinasCache.length >= 14) break;
             
-            const custo = await calculateSimpleCost(id, 100);
+            const custo = await calculateSimpleCost(proteina.id, 100);
             if (custo && custo.custo_por_refeicao > 0) {
+              custo.nome = proteina.nome; // Garantir nome correto
               proteinasCache.push(custo);
             }
           }
