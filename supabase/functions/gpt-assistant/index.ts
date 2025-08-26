@@ -296,102 +296,198 @@ Deno.serve(async (req) => {
       }
     }
 
+    // ============ FUNÇÃO ROBUSTA PARA BUSCAR PROTEÍNAS ============
+    async function buscarProteinasDisponiveis() {
+      console.log('🥩 Buscando proteínas disponíveis...');
+      
+      const proteinasCache = [];
+      
+      try {
+        // Buscar proteínas no banco por palavras-chave
+        const { data: proteinasBanco } = await supabase
+          .from('receita_ingredientes')
+          .select('receita_id_legado, nome')
+          .or('nome.ilike.%FRANGO%,nome.ilike.%CARNE%,nome.ilike.%PEIXE%,nome.ilike.%PORCO%,nome.ilike.%ALMONDEGA%,nome.ilike.%LINGUICA%')
+          .limit(30);
+        
+        if (proteinasBanco && proteinasBanco.length > 0) {
+          // Remover duplicatas e pegar IDs únicos
+          const idsUnicos = [...new Set(proteinasBanco.map(p => p.receita_id_legado))];
+          
+          // Calcular custo de cada proteína
+          for (const id of idsUnicos.slice(0, 20)) {
+            const custo = await calculateSimpleCost(id, 100);
+            if (custo && custo.custo_por_refeicao > 0 && custo.custo_por_refeicao <= 5.00) {
+              proteinasCache.push({
+                ...custo,
+                categoria_proteina: custo.nome.includes('FRANGO') ? 'frango' : 
+                                  custo.nome.includes('CARNE') ? 'carne' : 
+                                  custo.nome.includes('PEIXE') ? 'peixe' : 'outras'
+              });
+            }
+            
+            // Limite para evitar timeout
+            if (proteinasCache.length >= 14) break;
+          }
+        }
+        
+        // Fallback com IDs conhecidos se não encontrou suficientes
+        if (proteinasCache.length < 8) {
+          console.log('🔄 Usando proteínas conhecidas como fallback...');
+          const proteinasConhecidas = [
+            1325, 683, 973, 1459, 1322, 1194, 1123, 1456, 1234, 1567
+          ];
+          
+          for (const id of proteinasConhecidas) {
+            if (proteinasCache.length >= 14) break;
+            
+            const custo = await calculateSimpleCost(id, 100);
+            if (custo && custo.custo_por_refeicao > 0) {
+              proteinasCache.push(custo);
+            }
+          }
+        }
+        
+        console.log(`✅ ${proteinasCache.length} proteínas disponíveis encontradas`);
+        return proteinasCache;
+        
+      } catch (error) {
+        console.error('❌ Erro ao buscar proteínas:', error);
+        return [];
+      }
+    }
+
     // ============ GERAÇÃO DE MENU PRINCIPAL ============
     if (requestData.action === 'generate_menu') {
       const mealQuantity = requestData.refeicoesPorDia || requestData.meal_quantity || 100;
       const filialId = requestData.filialIdLegado || requestData.filial_id || null;
       const clientName = requestData.cliente || requestData.clientName || 'Cliente';
+      const numDays = requestData.numDays || requestData.periodo_dias || 1; // Padrão 1 dia para compatibilidade
       
-      console.log(`🍽️ Gerando cardápio para ${mealQuantity} refeições`);
+      console.log(`🍽️ Gerando cardápio para ${numDays} dia(s), ${mealQuantity} refeições/dia`);
       
       try {
         // PASSO 1: Buscar orçamento da filial
-        let budget = 9.00; // Valor padrão
+        let budget = 9.00;
         let dadosFilial = null;
         
         if (filialId) {
           dadosFilial = await buscarOrcamentoFilial(filialId);
           budget = dadosFilial.custo_diario || 9.00;
-          console.log(`💰 Orçamento da filial ${filialId}: R$ ${budget.toFixed(2)}/dia`);
-        } else {
-          console.log(`💰 Usando orçamento padrão: R$ ${budget.toFixed(2)}/dia`);
+          console.log(`💰 Orçamento: R$ ${budget.toFixed(2)}/refeição`);
         }
         
-        // PASSO 2: Gerar cardápio estruturado
-        const cardapioCompleto = [];
-        let custoTotalAcumulado = 0;
-        const listaCompras = new Map();
+        // PASSO 2: Buscar proteínas disponíveis
+        const proteinasDisponiveis = await buscarProteinasDisponiveis();
         
-        for (const [codigo, config] of Object.entries(ESTRUTURA_CARDAPIO)) {
-          const orcamentoItem = budget * (config.budget_percent / 100);
+        // PASSO 3: Gerar cardápio(s)
+        const cardapiosPorDia = [];
+        let custoTotalGeral = 0;
+        const listaComprasGeral = new Map();
+        const diasSemana = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado', 'Domingo'];
+        
+        for (let dia = 0; dia < numDays; dia++) {
+          const nomeDia = diasSemana[dia % 7];
+          console.log(`\n📅 Gerando ${nomeDia} (Dia ${dia + 1}/${numDays})`);
           
-          console.log(`\n📋 ${codigo}: ${config.categoria} (R$ ${orcamentoItem.toFixed(2)})`);
+          const cardapioDia = [];
+          let custoDia = 0;
           
-          let receita = null;
+          // Estrutura com rotação de proteínas
+          const estruturaDia = {
+            PP1: { 
+              categoria: 'Proteína Principal 1', 
+              budget_percent: 25,
+              proteina_index: dia % Math.max(proteinasDisponiveis.length, 1)
+            },
+            PP2: { 
+              categoria: 'Proteína Principal 2', 
+              budget_percent: 20,
+              proteina_index: (dia + Math.floor(proteinasDisponiveis.length / 2)) % Math.max(proteinasDisponiveis.length, 1)
+            },
+            ARROZ: { categoria: 'Arroz Branco', budget_percent: 15, receita_id: 580 },
+            FEIJAO: { categoria: 'Feijão', budget_percent: 15, receita_id: 1600 },
+            SALADA1: { categoria: 'Salada 1 (Verduras)', budget_percent: 8 },
+            SALADA2: { categoria: 'Salada 2 (Legumes)', budget_percent: 7 },
+            SUCO1: { categoria: 'Suco 1', budget_percent: 5 },
+            SUCO2: { categoria: 'Suco 2', budget_percent: 5 }
+          };
           
-          // Receitas fixas (arroz e feijão)
-          if (config.receita_id) {
-            receita = await calculateSimpleCost(config.receita_id, mealQuantity);
-          } else {
-            // Buscar receita por categoria
-            receita = await buscarReceitasPorCategoria(config.categoria, orcamentoItem, mealQuantity);
-          }
-          
-          if (receita && receita.custo_por_refeicao > 0) {
-            cardapioCompleto.push({
-              codigo: codigo,
-              categoria: config.categoria,
-              receita: receita,
-              orcamento_alocado: orcamentoItem,
-              custo_real: receita.custo_por_refeicao,
-              economia: orcamentoItem - receita.custo_por_refeicao,
-              status: '✅'
-            });
+          for (const [codigo, config] of Object.entries(estruturaDia)) {
+            const orcamentoItem = budget * (config.budget_percent / 100);
+            let receita = null;
             
-            custoTotalAcumulado += receita.custo_por_refeicao;
-            
-            // Adicionar ingredientes à lista de compras
-            if (receita.ingredientes && Array.isArray(receita.ingredientes)) {
-              for (const ing of receita.ingredientes) {
-                const key = ing.nome;
-                if (listaCompras.has(key)) {
-                  const existing = listaCompras.get(key);
-                  existing.quantidade += ing.quantidade;
-                  existing.custo_total += ing.custo_total;
-                } else {
-                  listaCompras.set(key, {
-                    nome: ing.nome,
-                    quantidade: ing.quantidade,
-                    unidade: ing.unidade,
-                    custo_total: ing.custo_total,
-                    produto_mercado: ing.produto_mercado
-                  });
-                }
-              }
+            // Lógica especial para proteínas
+            if ((codigo === 'PP1' || codigo === 'PP2') && proteinasDisponiveis.length > 0) {
+              const proteinaIndex = config.proteina_index;
+              receita = proteinasDisponiveis[proteinaIndex];
+              console.log(`  🥩 ${codigo}: ${receita?.nome || 'N/A'}`);
+            } 
+            // Receitas fixas
+            else if (config.receita_id) {
+              receita = await calculateSimpleCost(config.receita_id, mealQuantity);
+            } 
+            // Outras categorias
+            else {
+              receita = await buscarReceitasPorCategoria(config.categoria, orcamentoItem, mealQuantity);
             }
             
-            console.log(`  ✅ ${receita.nome}: R$ ${receita.custo_por_refeicao.toFixed(2)}`);
-          } else {
-            cardapioCompleto.push({
-              codigo: codigo,
-              categoria: config.categoria,
-              receita: { 
-                nome: `${config.categoria} (não disponível)`, 
-                custo_por_refeicao: 0,
-                ingredientes: []
-              },
-              orcamento_alocado: orcamentoItem,
-              custo_real: 0,
-              economia: orcamentoItem,
-              status: '❌'
-            });
-            
-            console.log(`  ❌ Não encontrada`);
+            if (receita && receita.custo_por_refeicao > 0) {
+              cardapioDia.push({
+                codigo: codigo,
+                categoria: config.categoria,
+                receita: receita,
+                custo_real: receita.custo_por_refeicao
+              });
+              
+              custoDia += receita.custo_por_refeicao;
+              
+              // Adicionar à lista de compras geral
+              if (receita.ingredientes && Array.isArray(receita.ingredientes)) {
+                for (const ing of receita.ingredientes) {
+                  const key = ing.nome;
+                  if (listaComprasGeral.has(key)) {
+                    const existing = listaComprasGeral.get(key);
+                    existing.quantidade += ing.quantidade;
+                    existing.custo_total += ing.custo_total;
+                  } else {
+                    listaComprasGeral.set(key, {...ing});
+                  }
+                }
+              }
+            } else {
+              // Receita não encontrada
+              cardapioDia.push({
+                codigo: codigo,
+                categoria: config.categoria,
+                receita: { 
+                  nome: `${config.categoria} não disponível`,
+                  custo_por_refeicao: 0,
+                  custo: 0
+                },
+                custo_real: 0
+              });
+            }
           }
+          
+          custoTotalGeral += custoDia;
+          
+          cardapiosPorDia.push({
+            dia: nomeDia,
+            data: new Date(Date.now() + dia * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+            receitas: cardapioDia,
+            custo_total_dia: custoDia,
+            custo_por_refeicao: custoDia,
+            dentro_orcamento: custoDia <= budget
+          });
         }
         
-        // PASSO 3: Preparar lista de compras
-        const itensListaCompras = Array.from(listaCompras.values())
+        // PASSO 4: Calcular custos finais
+        const custoMedioPorRefeicao = numDays > 0 ? custoTotalGeral / numDays : 0;
+        const custoTotalPeriodo = custoTotalGeral * mealQuantity;
+        
+        // PASSO 5: Preparar lista de compras
+        const itensListaCompras = Array.from(listaComprasGeral.values())
           .sort((a, b) => b.custo_total - a.custo_total)
           .map(item => ({
             ...item,
@@ -399,60 +495,87 @@ Deno.serve(async (req) => {
             custo_total: item.custo_total.toFixed(2)
           }));
         
-        // PASSO 4: Montar resposta completa
+        // PASSO 6: Validações dinâmicas
+        const validacoes = {
+          estrutura_completa: cardapiosPorDia.every(dia => 
+            dia.receitas.length === 8 && 
+            dia.receitas.filter(r => r.receita.custo_por_refeicao > 0).length >= 6
+          ),
+          tem_proteinas: cardapiosPorDia.every(dia =>
+            dia.receitas.some(r => r.codigo === 'PP1' && r.receita.custo_por_refeicao > 0) &&
+            dia.receitas.some(r => r.codigo === 'PP2' && r.receita.custo_por_refeicao > 0)
+          ),
+          variedade_proteinas: proteinasDisponiveis.length >= 2,
+          dentro_orcamento: custoMedioPorRefeicao <= budget
+        };
+        
+        // PASSO 7: Montar resposta compatível com frontend
         const response = {
           success: true,
-          version: 'CORRIGIDA-COMPLETA-v2.0',
+          version: 'MULTI-SEMANA-v3.0',
           
           solicitacao: {
             cliente: dadosFilial?.nome_filial || clientName,
             filial_id: filialId,
-            quantidade_refeicoes: mealQuantity,
-            orcamento_por_refeicao: budget,
-            orcamento_total: (budget * mealQuantity).toFixed(2)
+            quantidade_refeicoes_dia: mealQuantity,
+            dias_solicitados: numDays,
+            orcamento_por_refeicao: budget
           },
           
+          // Formato compatível com frontend atual (primeiro dia)
           cardapio: {
-            receitas: cardapioCompleto.map((item, index) => ({
+            receitas: cardapiosPorDia.length > 0 ? cardapiosPorDia[0].receitas.map((item, index) => ({
               id: item.receita.id || `${Date.now()}-${index}`,
               nome: item.receita.nome,
               categoria: item.categoria,
               codigo: item.codigo,
               custo_total: (item.receita.custo || 0).toFixed(2),
               custo_por_refeicao: item.custo_real.toFixed(2),
-              orcamento_alocado: item.orcamento_alocado.toFixed(2),
-              economia_item: item.economia.toFixed(2),
               precisao: item.receita.precisao ? `${item.receita.precisao}%` : '0%',
-              status: item.status,
               posicao: index + 1,
               ingredientes_count: item.receita.ingredientes?.length || 0
-            })),
+            })) : [],
             
             resumo: {
-              total_receitas: cardapioCompleto.length,
-              receitas_encontradas: cardapioCompleto.filter(i => i.status === '✅').length,
-              receitas_faltantes: cardapioCompleto.filter(i => i.status === '❌').length
+              total_receitas: cardapiosPorDia.length > 0 ? cardapiosPorDia[0].receitas.length : 0,
+              receitas_encontradas: cardapiosPorDia.length > 0 ? 
+                cardapiosPorDia[0].receitas.filter(r => r.receita.custo_por_refeicao > 0).length : 0,
+              receitas_faltantes: cardapiosPorDia.length > 0 ? 
+                cardapiosPorDia[0].receitas.filter(r => r.receita.custo_por_refeicao <= 0).length : 0
             }
           },
           
+          // Dados multi-semana (extensão)
+          cardapio_multi_semana: cardapiosPorDia.map(dia => ({
+            dia: dia.dia,
+            data: dia.data,
+            receitas: dia.receitas.map((item, index) => ({
+              id: item.receita.id || `${Date.now()}-${index}`,
+              nome: item.receita.nome,
+              categoria: item.categoria,
+              codigo: item.codigo,
+              custo_total: (item.receita.custo || 0).toFixed(2),
+              custo_por_refeicao: item.custo_real.toFixed(2),
+              porcoes: mealQuantity
+            })),
+            custo_total_dia: (dia.custo_total_dia * mealQuantity).toFixed(2),
+            custo_por_refeicao: dia.custo_por_refeicao.toFixed(2)
+          })),
+          
           analise_financeira: {
-            custo_total_cardapio: (custoTotalAcumulado * mealQuantity).toFixed(2),
-            custo_por_refeicao: custoTotalAcumulado.toFixed(2),
-            orcamento_total: budget.toFixed(2),
-            economia_total: ((budget - custoTotalAcumulado) * mealQuantity).toFixed(2),
-            economia_por_refeicao: (budget - custoTotalAcumulado).toFixed(2),
-            economia_percentual: ((budget - custoTotalAcumulado) / budget * 100).toFixed(1) + '%',
-            dentro_orcamento: custoTotalAcumulado <= budget,
-            situacao: custoTotalAcumulado <= budget ? 
-              '✅ Dentro do orçamento' : 
-              `❌ Acima em R$${(custoTotalAcumulado - budget).toFixed(2)}/refeição`
+            custo_total_periodo: custoTotalPeriodo.toFixed(2),
+            custo_medio_por_refeicao: custoMedioPorRefeicao.toFixed(2),
+            custo_medio_por_dia: (custoTotalPeriodo / numDays).toFixed(2),
+            orcamento_total_periodo: (budget * mealQuantity * numDays).toFixed(2),
+            economia_total: ((budget * mealQuantity * numDays) - custoTotalPeriodo).toFixed(2),
+            dentro_orcamento: custoMedioPorRefeicao <= budget
           },
           
           resumo_financeiro: {
-            custo_total: (custoTotalAcumulado * mealQuantity).toFixed(2),
-            custo_por_refeicao: custoTotalAcumulado.toFixed(2),
-            economia: ((budget - custoTotalAcumulado) * mealQuantity).toFixed(2),
-            dentro_orcamento: custoTotalAcumulado <= budget
+            custo_total: custoTotalPeriodo.toFixed(2),
+            custo_por_refeicao: custoMedioPorRefeicao.toFixed(2),
+            economia: ((budget * mealQuantity * numDays) - custoTotalPeriodo).toFixed(2),
+            dentro_orcamento: custoMedioPorRefeicao <= budget
           },
           
           lista_compras: {
@@ -461,6 +584,8 @@ Deno.serve(async (req) => {
               sum + parseFloat(item.custo_total), 0).toFixed(2),
             itens: itensListaCompras
           },
+          
+          validacoes: validacoes,
           
           estrutura_aplicada: {
             descricao: 'PP1, PP2, Arroz, Feijão, Salada 1, Salada 2, Suco 1, Suco 2',
@@ -475,15 +600,15 @@ Deno.serve(async (req) => {
           metadata: {
             data_geracao: new Date().toISOString(),
             tempo_processamento_ms: Date.now() - startTime,
-            fonte_orcamento: filialId ? 'custos_filiais' : 'padrao',
-            versao: 'CORRIGIDA-COMPLETA-v2.0'
+            dias_gerados: numDays,
+            proteinas_disponiveis: proteinasDisponiveis.length,
+            versao: 'MULTI-SEMANA-v3.0'
           }
         };
         
-        console.log(`\n✅ CARDÁPIO GERADO COM SUCESSO`);
-        console.log(`💰 Custo total: R$ ${custoTotalAcumulado.toFixed(2)}/refeição`);
-        console.log(`💰 Orçamento: R$ ${budget.toFixed(2)}/refeição`);
-        console.log(`✅ Economia: R$ ${(budget - custoTotalAcumulado).toFixed(2)}/refeição`);
+        console.log(`\n✅ CARDÁPIO COMPLETO GERADO`);
+        console.log(`📊 ${numDays} dia(s) gerado(s)`);
+        console.log(`💰 Custo médio: R$ ${custoMedioPorRefeicao.toFixed(2)}/refeição`);
         
         return new Response(
           JSON.stringify(response),
