@@ -210,7 +210,36 @@ Deno.serve(async (req) => {
       }
     }
 
-    // ============ FUNÇÃO DE CÁLCULO MELHORADA - FASE 1 ============
+    // ============ CACHE GLOBAL DE PREÇOS ============
+    let pricesCache = new Map();
+    
+    async function loadPricesCache() {
+      if (pricesCache.size > 0) {
+        console.log(`💾 Cache de preços já carregado: ${pricesCache.size} produtos`);
+        return pricesCache;
+      }
+      
+      console.log('🔄 Carregando cache global de preços...');
+      const { data: allPrices, error } = await supabase
+        .from('co_solicitacao_produto_listagem')
+        .select('produto_base_id, preco, descricao, produto_base_quantidade_embalagem, unidade')
+        .gt('preco', 0)
+        .order('preco', { ascending: true });
+      
+      if (!error && allPrices) {
+        allPrices.forEach(price => {
+          const key = price.produto_base_id;
+          if (!pricesCache.has(key) || pricesCache.get(key).preco > price.preco) {
+            pricesCache.set(key, price);
+          }
+        });
+        console.log(`✅ Cache carregado: ${pricesCache.size} produtos únicos`);
+      }
+      
+      return pricesCache;
+    }
+
+    // ============ FUNÇÃO DE CÁLCULO OTIMIZADA COM CACHE ============
     async function calculateSimpleCost(recipeId, mealQuantity = 100) {
       try {
         const { data: ingredients, error } = await supabase
@@ -234,125 +263,102 @@ Deno.serve(async (req) => {
         
         console.log(`📦 ${recipeName}: ${ingredients.length} ingredientes para ${baseQuantity} porções`);
 
-        // Buscar todos os preços de uma vez para eficiência
-        const productIds = ingredients
-          .map(i => i.produto_base_id)
-          .filter(id => id && Number(id) > 0);
-
-        if (productIds.length === 0) {
-          console.warn(`⚠️ Nenhum produto_base_id válido para receita ${recipeId}`);
-          return null;
-        }
-
-        const { data: prices, error: pricesError } = await supabase
-          .from('co_solicitacao_produto_listagem')
-          .select('produto_base_id, preco, descricao, produto_base_quantidade_embalagem, unidade')
-          .in('produto_base_id', productIds)
-          .gt('preco', 0)
-          .order('preco', { ascending: true });
-
-        if (pricesError) {
-          console.error(`❌ Erro ao buscar preços para receita ${recipeId}:`, pricesError);
-          return null;
-        }
-
-        if (!prices || prices.length === 0) {
-          console.warn(`⚠️ Nenhum preço encontrado para ingredientes da receita ${recipeId}`);
-          return null;
-        }
-
+        // Usar cache de preços ao invés de queries individuais
+        await loadPricesCache();
+        
         let totalCost = 0;
         const ingredientesCalculados = [];
-
-        for (const ingredient of ingredients) {
-          const price = prices?.find(p => Number(p.produto_base_id) === Number(ingredient.produto_base_id));
+        
+        // Processar ingredientes em paralelo para melhor performance
+        const costPromises = ingredients.map(async (ingredient) => {
+          const price = pricesCache.get(ingredient.produto_base_id);
           
           if (price && ingredient.quantidade) {
             const qty = parseFloat(ingredient.quantidade) || 0;
             const unitPrice = parseFloat(price.preco) || 0;
-            const packageSize = parseFloat(price.produto_base_quantidade_embalagem) || 1;
             
-            // CONVERSÕES DE UNIDADE ESPECÍFICAS - MELHORADAS
-            let itemCost = 0;
-            const unit = ingredient.unidade?.toUpperCase() || '';
+            let itemCost = await calculateIngredientCost(ingredient, price, qty, unitPrice);
             
-            if (unit === 'KG' || unit === 'KILO') {
-              itemCost = qty * unitPrice;
-            } 
-            else if (unit === 'GR' || unit === 'G') {
-              itemCost = (qty / 1000) * unitPrice;
-            }
-            else if (unit === 'ML') {
-              // Lógica específica para diferentes líquidos
-              if (ingredient.produto_base_descricao?.includes('ÓLEO')) {
-                itemCost = (qty / 900) * unitPrice; // Óleo vendido em 900ml
-              } else if (ingredient.produto_base_descricao?.includes('LEITE')) {
-                itemCost = (qty / 1000) * unitPrice; // Leite em litros
-              } else {
-                itemCost = (qty / 1000) * unitPrice; // Padrão ML para L
-              }
-            }
-            else if (unit === 'L' || unit === 'LT' || unit === 'LITRO') {
-              itemCost = qty * unitPrice;
-            }
-            else if (unit === 'UN' || unit === 'UND' || unit === 'UNIDADE') {
-              itemCost = qty * unitPrice;
-            }
-            else if (unit === 'COLHER' || unit === 'COLHERES') {
-              itemCost = (qty * 15 / 1000) * unitPrice; // 1 colher = ~15ml
-            }
-            else if (unit === 'XÍCARA' || unit === 'XÍCARAS') {
-              itemCost = (qty * 240 / 1000) * unitPrice; // 1 xícara = ~240ml
-            }
-            else {
-              // Fallback proporcional
-              itemCost = qty * unitPrice;
-            }
-            
-            // VALIDAÇÃO DE CUSTOS ALTOS COM CORREÇÃO INTELIGENTE
-            const originalCost = itemCost;
-            
-            if (itemCost > 100) {
-              console.warn(`⚠️ Custo muito alto para ${ingredient.produto_base_descricao}: R$${itemCost.toFixed(2)}`);
-              
-              // Análise do problema baseada na unidade
-              if (unit === 'ML' && itemCost > 100) {
-                itemCost = itemCost / 100;
-                console.log(`🔧 Correção ML aplicada: R$${originalCost.toFixed(2)} → R$${itemCost.toFixed(2)}`);
-              } 
-              else if (unit === 'GR' && itemCost > 50) {
-                itemCost = itemCost / 50;
-                console.log(`🔧 Correção GR aplicada: R$${originalCost.toFixed(2)} → R$${itemCost.toFixed(2)}`);
-              }
-              else if (itemCost > 1000) {
-                itemCost = itemCost / 1000;
-                console.log(`🔧 Correção grave aplicada: R$${originalCost.toFixed(2)} → R$${itemCost.toFixed(2)}`);
-              }
-              else if (itemCost > 200) {
-                itemCost = itemCost / 20;
-                console.log(`🔧 Correção média aplicada: R$${originalCost.toFixed(2)} → R$${itemCost.toFixed(2)}`);
-              }
-            }
-            
-            // Garantir limites razoáveis
-            itemCost = Math.max(0.01, Math.min(itemCost, 50));
-            
-            totalCost += itemCost;
-            
-            ingredientesCalculados.push({
+            return {
               nome: ingredient.produto_base_descricao,
               quantidade: qty,
               unidade: ingredient.unidade,
               preco_unitario: unitPrice,
               custo_item: itemCost,
-              package_size: packageSize,
-              correcao_aplicada: originalCost !== itemCost
-            });
-            
-            console.log(`  ✅ ${ingredient.produto_base_descricao}: ${qty}${ingredient.unidade} = R$${itemCost.toFixed(2)} ${originalCost !== itemCost ? '(corrigido)' : ''}`);
+              encontrado: true
+            };
           } else {
             console.log(`  ❌ ${ingredient.produto_base_descricao}: sem preço encontrado`);
+            return null;
           }
+        });
+        
+        const results = await Promise.all(costPromises);
+        const validResults = results.filter(result => result !== null);
+        
+        totalCost = validResults.reduce((sum, result) => sum + result.custo_item, 0);
+        ingredientesCalculados.push(...validResults);
+
+        // Função auxiliar para calcular custo de ingrediente individual
+        async function calculateIngredientCost(ingredient, price, qty, unitPrice) {
+          const unit = ingredient.unidade?.toUpperCase() || '';
+          let itemCost = 0;
+          
+          // CONVERSÕES DE UNIDADE OTIMIZADAS
+          if (unit === 'KG' || unit === 'KILO') {
+            itemCost = qty * unitPrice;
+          } 
+          else if (unit === 'GR' || unit === 'G') {
+            itemCost = (qty / 1000) * unitPrice;
+          }
+          else if (unit === 'ML') {
+            if (ingredient.produto_base_descricao?.includes('ÓLEO')) {
+              itemCost = (qty / 900) * unitPrice;
+            } else {
+              itemCost = (qty / 1000) * unitPrice;
+            }
+          }
+          else if (unit === 'L' || unit === 'LT' || unit === 'LITRO') {
+            itemCost = qty * unitPrice;
+          }
+          else if (unit === 'UN' || unit === 'UND' || unit === 'UNIDADE') {
+            itemCost = qty * unitPrice;
+          }
+          else if (unit === 'COLHER' || unit === 'COLHERES') {
+            itemCost = (qty * 15 / 1000) * unitPrice;
+          }
+          else if (unit === 'XÍCARA' || unit === 'XÍCARAS') {
+            itemCost = (qty * 240 / 1000) * unitPrice;
+          }
+          else {
+            itemCost = qty * unitPrice;
+          }
+          
+          // CORREÇÃO INTELIGENTE DE CUSTOS ALTOS
+          const originalCost = itemCost;
+          
+          if (itemCost > 100) {
+            console.warn(`⚠️ Custo muito alto para ${ingredient.produto_base_descricao}: R$${itemCost.toFixed(2)}`);
+            
+            if (unit === 'ML' && itemCost > 100) {
+              itemCost = itemCost / 100;
+              console.log(`🔧 Correção ML aplicada: R$${originalCost.toFixed(2)} → R$${itemCost.toFixed(2)}`);
+            } 
+            else if (unit === 'GR' && itemCost > 50) {
+              itemCost = itemCost / 50;
+              console.log(`🔧 Correção GR aplicada: R$${originalCost.toFixed(2)} → R$${itemCost.toFixed(2)}`);
+            }
+            else if (itemCost > 1000) {
+              itemCost = itemCost / 1000;
+              console.log(`🔧 Correção grave aplicada: R$${originalCost.toFixed(2)} → R$${itemCost.toFixed(2)}`);
+            }
+            else if (itemCost > 200) {
+              itemCost = itemCost / 20;
+              console.log(`🔧 Correção média aplicada: R$${originalCost.toFixed(2)} → R$${itemCost.toFixed(2)}`);
+            }
+          }
+          
+          return Math.max(0.01, Math.min(itemCost, 50));
         }
 
         if (ingredientesCalculados.length === 0) {
@@ -395,72 +401,77 @@ Deno.serve(async (req) => {
       }
     }
 
-    // ============ BUSCAR PROTEÍNAS DISPONÍVEIS (MELHORADA COM ROTAÇÃO) ============
-    let proteinasCache = [];
+    // ============ BUSCAR PROTEÍNAS DINÂMICAS DO BANCO ============
+    let proteinasGlobaisCache = [];
     
     async function buscarProteinasDisponiveis() {
       try {
-        console.log('🍖 Buscando proteínas disponíveis com rotação...');
+        console.log('🍖 Buscando proteínas disponíveis dinamicamente...');
         
-        if (proteinasCache.length > 0) {
-          console.log(`🍖 Usando cache de proteínas: ${proteinasCache.length} itens`);
-          return proteinasCache;
+        if (proteinasGlobaisCache.length > 0) {
+          console.log(`🍖 Usando cache de proteínas: ${proteinasGlobaisCache.length} itens`);
+          return proteinasGlobaisCache;
         }
         
-        // Proteínas categorizadas por tipo para rotação - IDs REAIS do banco
-        const proteinasPorTipo = {
-          frango: [
-            { id: 1010, nome: 'CANELLONE DE FRANGO', tipo: 'frango' },
-            { id: 1011, nome: 'FILÉ DE FRANGO AO MOLHO BRANCO 90G', tipo: 'frango' },
-            { id: 1015, nome: 'FILÉ DE FRANGO AO MOLHO DE ERVAS 90G', tipo: 'frango' },
-            { id: 1019, nome: 'PICADINHO DE FRANGO 90G', tipo: 'frango' },
-            { id: 1031, nome: 'COXA DE FRANGO COZIDA 90G', tipo: 'frango' }
-          ],
-          carne: [
-            { id: 1001, nome: 'CARNE LOUCA 90G', tipo: 'carne' },
-            { id: 1005, nome: 'CARNE MOÍDA COM VAGEM 90G', tipo: 'carne' },
-            { id: 1006, nome: 'CARNE MOÍDA COM VAGEM 100G', tipo: 'carne' },
-            { id: 1012, nome: 'CARNE MOÍDA A PARMEGIANA 90G', tipo: 'carne' },
-            { id: 1037, nome: 'CARNE DESFIADA 90G', tipo: 'carne' }
-          ],
-          peixe: [
-            { id: 1050, nome: 'FILÉ DE PEIXE GRELHADO 90G', tipo: 'peixe' },
-            { id: 1051, nome: 'PEIXE AO MOLHO DE TOMATE 90G', tipo: 'peixe' },
-            { id: 1052, nome: 'SALMÃO GRELHADO 90G', tipo: 'peixe' }
-          ],
-          ovos: [
-            { id: 1070, nome: 'OMELETE SIMPLES 90G', tipo: 'ovos' },
-            { id: 1071, nome: 'OVO MEXIDO COM LEGUMES 90G', tipo: 'ovos' }
-          ]
-        };
+        // Buscar proteínas reais do banco por categoria
+        const palavrasChaveProteinas = ['FRANGO', 'CARNE', 'PEIXE', 'BIFE', 'FILÉ', 'PEITO', 'COXA', 'PICADINHO', 'DESFIADA', 'OMELETE'];
         
-        // Calcular custo para proteínas de forma balanceada
-        for (const [tipo, proteinas] of Object.entries(proteinasPorTipo)) {
-          console.log(`🍗 Processando proteínas do tipo ${tipo}: ${proteinas.length} opções`);
-          
-          for (const proteina of proteinas) {
-            if (proteinasCache.length >= 20) break; // Aumentado para mais variedade
-            
-            try {
-              const custo = await calculateSimpleCost(proteina.id, 100);
-              if (custo && custo.custo_por_refeicao > 0 && custo.custo_por_refeicao < 50) {
-                proteinasCache.push({
-                  receita_id: proteina.id,
-                  nome: proteina.nome,
-                  custo_por_refeicao: custo.custo_por_refeicao,
-                  categoria: 'Proteína',
-                  tipo: proteina.tipo
-                });
-                console.log(`  ✅ ${proteina.nome}: R$${custo.custo_por_refeicao.toFixed(2)}`);
-              }
-            } catch (costError) {
-              console.warn(`⚠️ Erro ao calcular custo da proteína ${proteina.nome}:`, costError);
+        const orConditions = palavrasChaveProteinas.map(palavra => `nome.ilike.%${palavra}%`).join(',');
+        
+        const { data: proteinasData, error } = await supabase
+          .from('receita_ingredientes')
+          .select('receita_id_legado, nome, categoria_descricao')
+          .or(orConditions)
+          .limit(50);
+        
+        if (error) {
+          console.error('❌ Erro ao buscar proteínas:', error);
+          throw error;
+        }
+        
+        if (!proteinasData || proteinasData.length === 0) {
+          console.warn('⚠️ Nenhuma proteína encontrada, usando fallback...');
+          // Fallback com algumas receitas conhecidas
+          proteinasGlobaisCache = [
+            { receita_id: '1010', nome: 'FILÉ DE FRANGO GRELHADO', tipo: 'frango', custo_por_refeicao: 2.5 },
+            { receita_id: '1001', nome: 'CARNE MOÍDA REFOGADA', tipo: 'carne', custo_por_refeicao: 3.0 }
+          ];
+          return proteinasGlobaisCache;
+        }
+        
+        // Processar proteínas em paralelo para melhor performance
+        const proteinPromises = proteinasData.slice(0, 20).map(async (proteina) => {
+          try {
+            const custo = await calculateSimpleCost(proteina.receita_id_legado, 100);
+            if (custo && custo.custo_por_refeicao > 0 && custo.custo_por_refeicao < 15) {
+              // Determinar tipo baseado no nome
+              let tipo = 'outros';
+              const nome = proteina.nome.toUpperCase();
+              if (nome.includes('FRANGO') || nome.includes('PEITO') || nome.includes('COXA')) tipo = 'frango';
+              else if (nome.includes('CARNE') || nome.includes('BIFE')) tipo = 'carne';
+              else if (nome.includes('PEIXE') || nome.includes('SALMÃO')) tipo = 'peixe';
+              else if (nome.includes('OVO')) tipo = 'ovos';
+              
+              return {
+                receita_id: proteina.receita_id_legado,
+                nome: proteina.nome,
+                custo_por_refeicao: custo.custo_por_refeicao,
+                categoria: 'Proteína',
+                tipo: tipo
+              };
             }
+            return null;
+          } catch (error) {
+            console.warn(`⚠️ Erro ao calcular custo da proteína ${proteina.nome}:`, error);
+            return null;
           }
-        }
+        });
         
-        console.log(`✅ Cache de proteínas carregado: ${proteinasCache.length} proteínas`);
-        return proteinasCache;
+        const results = await Promise.all(proteinPromises);
+        proteinasGlobaisCache = results.filter(result => result !== null);
+        
+        console.log(`✅ Cache de proteínas carregado: ${proteinasGlobaisCache.length} proteínas dinâmicas`);
+        return proteinasGlobaisCache;
         
       } catch (error) {
         console.error('❌ Erro fatal ao buscar proteínas:', error);
@@ -512,28 +523,78 @@ Deno.serve(async (req) => {
       }
     }
 
+    // ============ IMPLEMENTAR SHOPPING LIST CONSOLIDADA ============
+    function consolidateShoppingList(allRecipes) {
+      const consolidatedItems = new Map();
+      
+      for (const recipe of allRecipes) {
+        if (recipe.ingredientes) {
+          for (const ingredient of recipe.ingredientes) {
+            const key = ingredient.nome;
+            
+            if (consolidatedItems.has(key)) {
+              const existing = consolidatedItems.get(key);
+              existing.quantidade_total += ingredient.quantidade;
+              existing.custo_total += ingredient.custo_item;
+            } else {
+              consolidatedItems.set(key, {
+                produto_base_id: ingredient.produto_base_id || null,
+                nome_produto: ingredient.nome,
+                quantidade_total: ingredient.quantidade,
+                unidade: ingredient.unidade,
+                custo_total: ingredient.custo_item,
+                preco_unitario: ingredient.preco_unitario
+              });
+            }
+          }
+        }
+      }
+      
+      return Array.from(consolidatedItems.values());
+    }
+
+    // ============ CALCULAR PERÍODO DINÂMICO ============
+    function calculateDaysFromPeriod(period) {
+      const periodLower = period.toLowerCase();
+      
+      if (periodLower.includes('semana')) {
+        const weeks = parseInt(periodLower) || 1;
+        return weeks * 7;
+      } else if (periodLower.includes('dia')) {
+        return parseInt(periodLower) || 7;
+      }
+      
+      return 7; // default 1 semana
+    }
+
     // ============ AÇÕES DISPONÍVEIS ============
     if (requestData.action === 'generate_menu') {
       const { filialIdLegado: filialId, clientName = 'Cliente Teste', mealQuantity = 100, period = '1 semana' } = requestData;
+      
+      // Calcular período dinâmico
+      const totalDaysToGenerate = calculateDaysFromPeriod(period);
       
       // Buscar orçamento da filial
       const filialBudget = await buscarOrcamentoFilial(filialId);
       const dailyBudget = filialBudget?.custo_diario || 16.0;
       
       console.log(`🎯 Gerando cardápio para ${clientName}`);
+      console.log(`📅 Período: ${period} (${totalDaysToGenerate} dias)`);
       console.log(`💰 Orçamento: R$ ${dailyBudget.toFixed(2)}/refeição`);
       console.log(`🍽️ Quantidade: ${mealQuantity} refeições`);
       
-      // Buscar proteínas disponíveis
-      const proteinasDisponiveis = await buscarProteinasDisponiveis();
+      // Carregar cache de preços uma vez
+      await loadPricesCache();
       
-      // Gerar cardápio para 14 dias (2 semanas)
+      // Buscar proteínas disponíveis globalmente
+      const proteinasGlobais = await buscarProteinasDisponiveis();
+      
+      // Gerar cardápio para período especificado
       const allRecipes = [];
-      const shoppingList = [];
       let totalCost = 0;
       let estruturaCompleta = true;
       
-      for (let dia = 1; dia <= 14; dia++) {
+      for (let dia = 1; dia <= totalDaysToGenerate; dia++) {
         const diasSemana = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado', 'Domingo'];
         const nomeDia = diasSemana[(dia - 1) % 7];
         
@@ -542,34 +603,33 @@ Deno.serve(async (req) => {
         const dayMenu = [];
         let dayCost = 0;
         
-        // ============ SELEÇÃO INTELIGENTE DE PROTEÍNAS COM ROTAÇÃO ============
-        const proteinasDisponiveis = await buscarProteinasDisponiveis();
+        // ============ SELEÇÃO INTELIGENTE DE PROTEÍNAS COM ROTAÇÃO SEM SHADOWING ============
         let pp1, pp2;
         
-        if (proteinasDisponiveis.length >= 2) {
+        if (proteinasGlobais.length >= 2) {
           // Separar proteínas por tipo para rotação
-          const proteinasPorTipo = proteinasDisponiveis.reduce((acc, p) => {
+          const proteinasPorTipo = proteinasGlobais.reduce((acc, p) => {
             const tipo = p.tipo || 'outros';
             if (!acc[tipo]) acc[tipo] = [];
             acc[tipo].push(p);
             return acc;
           }, {});
           
-          // Selecionar tipos diferentes quando possível
+          // Selecionar tipos diferentes quando possível para evitar monotonia
           const tiposDisponiveis = Object.keys(proteinasPorTipo);
           const tipo1 = tiposDisponiveis[dia % tiposDisponiveis.length];
           const tipo2 = tiposDisponiveis[(dia + 1) % tiposDisponiveis.length];
           
           // Selecionar PP1 e PP2 de tipos diferentes se possível
           pp1 = proteinasPorTipo[tipo1]?.[Math.floor(Math.random() * proteinasPorTipo[tipo1].length)] || 
-                proteinasDisponiveis[Math.floor(Math.random() * proteinasDisponiveis.length)];
+                proteinasGlobais[Math.floor(Math.random() * proteinasGlobais.length)];
           
           pp2 = proteinasPorTipo[tipo2]?.[Math.floor(Math.random() * proteinasPorTipo[tipo2].length)] || 
-                proteinasDisponiveis.find(p => p.receita_id !== pp1.receita_id) || 
-                proteinasDisponiveis[1];
+                proteinasGlobais.find(p => p.receita_id !== pp1.receita_id) || 
+                proteinasGlobais[1];
           
-          console.log(`  🥩 PP1: ${pp1.nome}`);
-          console.log(`  🥩 PP2: ${pp2.nome}`);
+          console.log(`  🥩 PP1: ${pp1.nome} (${pp1.tipo})`);
+          console.log(`  🥩 PP2: ${pp2.nome} (${pp2.tipo})`);
         }
         
         // Adicionar proteínas ao cardápio
@@ -638,12 +698,15 @@ Deno.serve(async (req) => {
         totalCost += dayCost;
       }
       
-      const totalDays = 14;
-      const averageCost = totalDays > 0 ? totalCost / totalDays : 0;
+      const averageCost = totalDaysToGenerate > 0 ? totalCost / totalDaysToGenerate : 0;
+      
+      // Gerar shopping list consolidada
+      const shoppingList = consolidateShoppingList(allRecipes);
       
       console.log(`\n✅ CARDÁPIO COMPLETO GERADO`);
-      console.log(`📊 ${totalDays} dia(s) gerado(s)`);
+      console.log(`📊 ${totalDaysToGenerate} dia(s) gerado(s)`);
       console.log(`💰 Custo médio: R$ ${averageCost.toFixed(2)}/refeição`);
+      console.log(`🛒 Lista de compras: ${shoppingList.length} itens únicos`);
       
       return new Response(JSON.stringify({
         success: true,
@@ -651,12 +714,15 @@ Deno.serve(async (req) => {
           receitas: allRecipes,
           filial_info: filialBudget,
           resumo: {
-            total_dias: totalDays,
+            total_dias: totalDaysToGenerate,
             total_receitas: allRecipes.length,
             custo_total_periodo: totalCost,
             custo_medio_por_refeicao: averageCost,
-            custo_por_refeicao: averageCost, // Campo adicional para compatibilidade
-            estrutura_completa: estruturaCompleta
+            custo_por_refeicao: averageCost,
+            estrutura_completa: estruturaCompleta,
+            periodo_solicitado: period,
+            queries_otimizadas: true,
+            cache_utilizado: pricesCache.size > 0
           }
         },
         lista_compras: shoppingList
