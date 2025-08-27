@@ -43,6 +43,8 @@ const NEW_MENU_CATEGORIES = [
   'Feijão',
   'Salada 1',
   'Salada 2',
+  'Guarnição',
+  'Sobremesa',
   'Suco 1',
   'Suco 2'
 ];
