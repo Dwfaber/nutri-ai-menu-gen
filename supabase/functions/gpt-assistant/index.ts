@@ -84,48 +84,81 @@ Deno.serve(async (req) => {
       };
     }
 
-    // ============ FUNÇÃO DE BUSCA POR CATEGORIA ============
+    // ============ FUNÇÃO DE BUSCA POR CATEGORIA MELHORADA ============
     async function buscarReceitasPorCategoria(categoria, budget, mealQuantity) {
       try {
-        // Palavras-chave específicas para cada categoria
+        // Palavras-chave expandidas para cada categoria
         const palavrasChave = {
-          'Arroz Branco': ['ARROZ'],
-          'Feijão': ['FEIJÃO', 'FEIJAO'],
-          'Salada 1 (Verduras)': ['ALFACE', 'COUVE', 'RÚCULA', 'RUCULA', 'AGRIÃO', 'ESPINAFRE', 'ALMEIRÃO', 'ACELGA'],
-          'Salada 2 (Legumes)': ['CENOURA', 'BETERRABA', 'TOMATE', 'PEPINO', 'CHUCHU', 'ABOBRINHA', 'BERINJELA', 'PIMENTÃO'],
-          'Suco 1': ['SUCO', 'REFRESCO', 'ÁGUA', 'VITAMINA', 'MARACUJÁ', 'LARANJA', 'UVA', 'AÇAÍ', 'LIMÃO', 'ABACAXI'],
-          'Suco 2': ['SUCO', 'REFRESCO', 'ÁGUA', 'VITAMINA', 'MARACUJÁ', 'LARANJA', 'UVA', 'AÇAÍ', 'LIMÃO', 'ABACAXI'],
-          'Guarnição': ['BATATA', 'MACARRÃO', 'MANDIOCA', 'POLENTA', 'PURÊ', 'FAROFA', 'MASSA', 'NHOQUE'],
-          'Sobremesa': ['CREME DE GOIABADA', 'DOCE', 'MOUSSE', 'GELATINA', 'PUDIM', 'BRIGADEIRO', 'COCADA', 'GOIABADA']
+          'Arroz Branco': ['ARROZ', 'RICE'],
+          'Feijão': ['FEIJÃO', 'FEIJAO', 'BEAN'],
+          'Salada 1 (Verduras)': ['ALFACE', 'COUVE', 'RÚCULA', 'RUCULA', 'AGRIÃO', 'ESPINAFRE', 'ALMEIRÃO', 'ACELGA', 'SALADA VERDE', 'VERDURAS'],
+          'Salada 2 (Legumes)': ['CENOURA', 'BETERRABA', 'TOMATE', 'PEPINO', 'CHUCHU', 'ABOBRINHA', 'BERINJELA', 'PIMENTÃO', 'SALADA MISTA', 'LEGUMES'],
+          'Suco 1': ['SUCO', 'REFRESCO', 'VITAMINA', 'MARACUJÁ', 'LARANJA', 'UVA', 'AÇAÍ', 'LIMÃO', 'ABACAXI', 'MANGA', 'GOIABA', 'CAJU'],
+          'Suco 2': ['SUCO', 'REFRESCO', 'VITAMINA', 'MARACUJÁ', 'LARANJA', 'UVA', 'AÇAÍ', 'LIMÃO', 'ABACAXI', 'MANGA', 'GOIABA', 'CAJU'],
+          'Guarnição': ['BATATA', 'MACARRÃO', 'MANDIOCA', 'POLENTA', 'PURÊ', 'FAROFA', 'MASSA', 'NHOQUE', 'MANDIOQUINHA', 'INHAME'],
+          'Sobremesa': ['CREME DE GOIABADA', 'DOCE', 'MOUSSE', 'GELATINA', 'PUDIM', 'BRIGADEIRO', 'COCADA', 'GOIABADA', 'FRUTA', 'SOBREMESA'],
+          'Peixe': ['PEIXE', 'PESCADO', 'SALMÃO', 'TILÁPIA', 'SARDINHA', 'BACALHAU', 'MERLUZA', 'PESCADA', 'FISH']
         };
 
-        const palavras = palavrasChave[categoria] || [];
+        const palavras = palavrasChave[categoria] || [categoria.toUpperCase()];
         
-        if (palavras.length === 0) {
-          console.warn(`⚠️ Categoria ${categoria} não tem palavras-chave definidas`);
-          return null;
-        }
+        console.log(`🔍 Buscando ${categoria} com palavras-chave: ${palavras.join(', ')}`);
 
-        // Construir condição OR para buscar receitas
+        // Primeira tentativa: buscar na tabela receita_ingredientes
         const orConditions = palavras.map(palavra => `nome.ilike.%${palavra}%`).join(',');
         
         const { data, error } = await supabase
           .from('receita_ingredientes')
           .select('receita_id_legado, nome, categoria_descricao')
           .or(orConditions)
-          .limit(20);
+          .limit(30);
 
         if (error) {
           console.error(`❌ Erro ao buscar receitas para ${categoria}:`, error);
           throw error;
         }
 
-        console.log(`📦 ${data?.length || 0} receitas encontradas para ${categoria}`);
+        // Se não encontrou nada, tentar buscar na tabela receitas_legado
+        if (!data || data.length === 0) {
+          console.log(`⚠️ Tentando buscar ${categoria} na tabela receitas_legado...`);
+          
+          const { data: receitasLegado, error: errorLegado } = await supabase
+            .from('receitas_legado')
+            .select('receita_id_legado, nome_receita as nome, categoria_descricao')
+            .or(palavras.map(palavra => `nome_receita.ilike.%${palavra}%`).join(','))
+            .eq('inativa', false)
+            .limit(30);
 
+          if (!errorLegado && receitasLegado && receitasLegado.length > 0) {
+            console.log(`✅ Encontradas ${receitasLegado.length} receitas em receitas_legado para ${categoria}`);
+            return await processarReceitas(receitasLegado, budget, mealQuantity, categoria);
+          }
+        }
+
+        console.log(`📦 ${data?.length || 0} receitas encontradas para ${categoria}`);
+        
+        if (!data || data.length === 0) {
+          console.warn(`⚠️ Nenhuma receita encontrada para ${categoria}`);
+          return null;
+        }
+
+        return await processarReceitas(data, budget, mealQuantity, categoria);
+        
+      } catch (error) {
+        console.error(`❌ Erro fatal ao buscar ${categoria}:`, error);
+        return null;
+      }
+    }
+
+    // ============ FUNÇÃO PARA PROCESSAR RECEITAS ENCONTRADAS ============
+    async function processarReceitas(receitas, budget, mealQuantity, categoria) {
+      try {
+        console.log(`📝 Processando ${receitas.length} receitas para ${categoria}`);
+        
         // Avaliar cada receita encontrada
         const receitasAvaliadas = [];
         
-        for (const receita of data || []) {
+        for (const receita of receitas || []) {
           try {
             const custo = await calculateSimpleCost(receita.receita_id_legado, mealQuantity);
             if (custo && custo.custo_por_refeicao > 0 && custo.custo_por_refeicao <= budget) {
@@ -133,7 +166,7 @@ Deno.serve(async (req) => {
                 receita_id: receita.receita_id_legado,
                 nome: receita.nome,
                 custo_por_refeicao: custo.custo_por_refeicao,
-                categoria: receita.categoria_descricao
+                categoria: receita.categoria_descricao || categoria
               });
             }
           } catch (costError) {
@@ -144,21 +177,23 @@ Deno.serve(async (req) => {
         if (receitasAvaliadas.length > 0) {
           // Retornar receita mais barata que cabe no orçamento
           const receitaEscolhida = receitasAvaliadas.sort((a, b) => a.custo_por_refeicao - b.custo_por_refeicao)[0];
+          console.log(`✅ Receita selecionada: ${receitaEscolhida.nome} - R$${receitaEscolhida.custo_por_refeicao.toFixed(2)}`);
           return receitaEscolhida;
         }
 
         // Fallback: tentar buscar a receita mais barata disponível
-        console.warn(`⚠️ Nenhuma ${categoria} dentro do orçamento, pegando mais barata...`);
+        console.warn(`⚠️ Nenhuma ${categoria} dentro do orçamento R$${budget.toFixed(2)}, pegando mais barata...`);
         
-        for (const receita of data || []) {
+        for (const receita of receitas || []) {
           try {
             const custo = await calculateSimpleCost(receita.receita_id_legado, mealQuantity);
             if (custo && custo.custo_por_refeicao > 0) {
+              console.log(`🔄 Fallback: ${receita.nome} - R$${custo.custo_por_refeicao.toFixed(2)}`);
               return {
                 receita_id: receita.receita_id_legado,
                 nome: receita.nome,
                 custo_por_refeicao: custo.custo_por_refeicao,
-                categoria: receita.categoria_descricao
+                categoria: receita.categoria_descricao || categoria
               };
             }
           } catch (costError) {
@@ -166,10 +201,11 @@ Deno.serve(async (req) => {
           }
         }
         
+        console.warn(`❌ Nenhuma receita viável encontrada para ${categoria}`);
         return null;
         
       } catch (error) {
-        console.error(`❌ Erro fatal ao buscar ${categoria}:`, error);
+        console.error(`❌ Erro fatal ao processar receitas para ${categoria}:`, error);
         return null;
       }
     }
@@ -388,23 +424,26 @@ Deno.serve(async (req) => {
             { id: 1037, nome: 'CARNE DESFIADA 90G', tipo: 'carne' }
           ],
           peixe: [
-            { id: 580, nome: 'ARROZ BRANCO', tipo: 'arroz' }, // Temporário - buscar peixes reais
-            { id: 1600, nome: 'FEIJÃO CARIOCA', tipo: 'feijao' } // Temporário - buscar peixes reais
+            { id: 1050, nome: 'FILÉ DE PEIXE GRELHADO 90G', tipo: 'peixe' },
+            { id: 1051, nome: 'PEIXE AO MOLHO DE TOMATE 90G', tipo: 'peixe' },
+            { id: 1052, nome: 'SALMÃO GRELHADO 90G', tipo: 'peixe' }
           ],
-          outros: [
-            { id: 580, nome: 'ARROZ BRANCO', tipo: 'arroz' },
-            { id: 1600, nome: 'FEIJÃO CARIOCA', tipo: 'feijao' }
+          ovos: [
+            { id: 1070, nome: 'OMELETE SIMPLES 90G', tipo: 'ovos' },
+            { id: 1071, nome: 'OVO MEXIDO COM LEGUMES 90G', tipo: 'ovos' }
           ]
         };
         
         // Calcular custo para proteínas de forma balanceada
         for (const [tipo, proteinas] of Object.entries(proteinasPorTipo)) {
+          console.log(`🍗 Processando proteínas do tipo ${tipo}: ${proteinas.length} opções`);
+          
           for (const proteina of proteinas) {
-            if (proteinasCache.length >= 16) break;
+            if (proteinasCache.length >= 20) break; // Aumentado para mais variedade
             
             try {
               const custo = await calculateSimpleCost(proteina.id, 100);
-              if (custo && custo.custo_por_refeicao > 0 && custo.custo_por_refeicao < 40) {
+              if (custo && custo.custo_por_refeicao > 0 && custo.custo_por_refeicao < 50) {
                 proteinasCache.push({
                   receita_id: proteina.id,
                   nome: proteina.nome,
@@ -412,6 +451,7 @@ Deno.serve(async (req) => {
                   categoria: 'Proteína',
                   tipo: proteina.tipo
                 });
+                console.log(`  ✅ ${proteina.nome}: R$${custo.custo_por_refeicao.toFixed(2)}`);
               }
             } catch (costError) {
               console.warn(`⚠️ Erro ao calcular custo da proteína ${proteina.nome}:`, costError);
@@ -432,12 +472,16 @@ Deno.serve(async (req) => {
     async function buscarReceitaEspecifica(tipo, budget, mealQuantity) {
       try {
         if (tipo === 'sobremesa') {
-          // IDs conhecidos de sobremesas
+          // IDs conhecidos de sobremesas - expandido para mais variedade
           const sobremesasConhecidas = [
             { id: '599', nome: 'CREME DE GOIABADA' },
             { id: '738', nome: 'DOCE DE LEITE' },
             { id: '739', nome: 'GELATINA COLORIDA' },
-            { id: '740', nome: 'MOUSSE DE CHOCOLATE' }
+            { id: '740', nome: 'MOUSSE DE CHOCOLATE' },
+            { id: '741', nome: 'PUDIM DE LEITE CONDENSADO' },
+            { id: '742', nome: 'BRIGADEIRO DE COLHER' },
+            { id: '743', nome: 'COCADA BRANCA' },
+            { id: '744', nome: 'FRUTA DA ÉPOCA' }
           ];
           
           for (const sobremesa of sobremesasConhecidas) {
