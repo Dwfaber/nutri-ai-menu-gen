@@ -53,7 +53,7 @@ serve(async (req) => {
 
   try {
     const requestData = await req.json();
-    console.log(`📊 Requisição recebida:`, requestData);
+    console.log(`📊 Requisição recebida:`, JSON.stringify(requestData, null, 2));
 
     // Inicializar cliente Supabase
     const supabaseUrl = Deno.env.get('SUPABASE_URL');
@@ -90,11 +90,10 @@ serve(async (req) => {
       
       const { data: produtos, error } = await supabase
         .from('co_solicitacao_produto_listagem')
-        .select('produto_base_id, preco_reais, descricao, disponivel_sim_nao, em_promocao_sim_nao')
-        .eq('disponivel_sim_nao', true)
-        .not('preco_reais', 'is', null)
-        .gt('preco_reais', 0)
-        .order('preco_reais', { ascending: true });
+        .select('produto_base_id, preco, descricao, em_promocao_sim_nao')
+        .not('preco', 'is', null)
+        .gt('preco', 0)
+        .order('preco', { ascending: true });
 
       if (error) {
         console.error('❌ Erro ao carregar cache de preços:', error);
@@ -106,7 +105,7 @@ serve(async (req) => {
 
       // Popular cache excluindo produtos não-alimentícios
       produtos?.forEach(produto => {
-        if (produto.produto_base_id && produto.preco_reais > 0) {
+        if (produto.produto_base_id && produto.preco > 0) {
           // Filtrar produtos não-alimentícios
           if (isNonFoodProduct(produto.descricao || '')) {
             filteredCount++;
@@ -115,8 +114,8 @@ serve(async (req) => {
 
           // Se já existe no cache, manter o menor preço (mais barato)
           const precoAtual = pricesCache.get(produto.produto_base_id);
-          if (!precoAtual || produto.preco_reais < precoAtual) {
-            pricesCache.set(produto.produto_base_id, produto.preco_reais);
+          if (!precoAtual || produto.preco < precoAtual) {
+            pricesCache.set(produto.produto_base_id, produto.preco);
             validCount++;
           }
         }
@@ -127,13 +126,13 @@ serve(async (req) => {
     }
 
     // Função otimizada para buscar orçamento da filial
-    async function buscarOrcamentoFilial(filialId) {
-      console.log(`💰 Buscando orçamento para filial ${filialId}`);
+    async function buscarOrcamentoFilial(filialIdLegado) {
+      console.log(`💰 Buscando orçamento para filial legado ${filialIdLegado}`);
       
       const { data: custoData, error } = await supabase
         .from('custos_filiais')
         .select('*')
-        .eq('filial_id', filialId)
+        .eq('filial_id', filialIdLegado)
         .order('created_at', { ascending: false })
         .limit(1);
 
@@ -229,14 +228,15 @@ serve(async (req) => {
           // Se não está no cache, buscar no banco uma única vez
           const { data: produtoData, error: produtoError } = await supabase
             .from('co_solicitacao_produto_listagem')
-            .select('preco_reais, descricao')
+            .select('preco, descricao')
             .eq('produto_base_id', produto_base_id)
-            .eq('disponivel_sim_nao', true)
-            .order('preco_reais', { ascending: true })
+            .not('preco', 'is', null)
+            .gt('preco', 0)
+            .order('preco', { ascending: true })
             .limit(1)
             .single();
 
-          if (produtoError || !produtoData?.preco_reais) {
+          if (produtoError || !produtoData?.preco) {
             return { cost: 0, found: false, isZero: false };
           }
 
@@ -245,7 +245,7 @@ serve(async (req) => {
             return { cost: 0, found: true, isZero: true };
           }
 
-          preco = produtoData.preco_reais;
+          preco = produtoData.preco;
           cache.set(produto_base_id, preco);
         }
 
@@ -445,7 +445,7 @@ serve(async (req) => {
       // Carregar cache global uma única vez
       await loadPricesCache();
       
-      const filialBudget = await buscarOrcamentoFilial(requestData.filialId);
+      const filialBudget = await buscarOrcamentoFilial(requestData.filialIdLegado);
       const proteinasDisponiveis = await buscarProteinasDisponiveis();
       
       // Calcular período dinamicamente
