@@ -490,7 +490,19 @@ export const useIntegratedMenuGeneration = () => {
         );
       }
       
+      // DEBUG: Log das receitas extraídas
+      console.log('🔍 Receitas extraídas detalhadas:');
+      receitasExtraidas.forEach((receita, index) => {
+        console.log(`${index + 1}. ${receita.nome} (${receita.categoria}) - R$${receita.custo_por_refeicao}`);
+      });
+      
       console.log('📦 Receitas extraídas:', receitasExtraidas);
+      
+      // DEBUG: Log das receitas extraídas
+      console.log('🔍 Receitas extraídas detalhadas:');
+      receitasExtraidas.forEach((receita, index) => {
+        console.log(`${index + 1}. ${receita.nome} (${receita.categoria}) - R$${receita.custo_por_refeicao}`);
+      });
       
       // Validar se temos receitas
       if (!receitasExtraidas.length) {

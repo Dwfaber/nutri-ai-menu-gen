@@ -51,7 +51,9 @@ const NEW_MENU_CATEGORIES = [
   'Salada 1',
   'Salada 2',
   'Suco 1',
-  'Suco 2'
+  'Suco 2',
+  'Guarnição',
+  'Sobremesa'
 ];
 
 const CATEGORY_DISPLAY_NAMES = {
@@ -63,6 +65,8 @@ const CATEGORY_DISPLAY_NAMES = {
   'Salada 2': 'SALADA 2 (LEGUMES)',
   'Suco 1': 'SUCO 1',
   'Suco 2': 'SUCO 2',
+  'Guarnição': 'GUARNIÇÃO',
+  'Sobremesa': 'SOBREMESA',
 };
 
 const CATEGORY_COLORS = {
@@ -74,6 +78,8 @@ const CATEGORY_COLORS = {
   'Salada 2': 'bg-teal-100 text-teal-800 border-teal-200',
   'Suco 1': 'bg-orange-100 text-orange-800 border-orange-200',
   'Suco 2': 'bg-red-100 text-red-800 border-red-200',
+  'Guarnição': 'bg-indigo-100 text-indigo-800 border-indigo-200',
+  'Sobremesa': 'bg-pink-100 text-pink-800 border-pink-200',
 };
 
 const WeeklyMenuView: React.FC<WeeklyMenuViewProps> = ({
@@ -257,8 +263,8 @@ const WeeklyMenuView: React.FC<WeeklyMenuViewProps> = ({
                            {NEW_MENU_CATEGORIES.map((category) => {
                              const categoryRecipes = day.recipes.filter(recipe => recipe.category === category);
                              
-                             // SEMPRE MOSTRAR ARROZ E FEIJÃO, mesmo sem receitas
-                             if (categoryRecipes.length === 0 && !['ARROZ BRANCO', 'FEIJÃO'].includes(category)) return null;
+                              // SEMPRE MOSTRAR ARROZ E FEIJÃO, mesmo sem receitas
+                              if (categoryRecipes.length === 0 && !['Arroz Branco', 'Feijão'].includes(category)) return null;
                             
                              return (
                                <div key={category} className="space-y-2">
@@ -314,9 +320,9 @@ const WeeklyMenuView: React.FC<WeeklyMenuViewProps> = ({
                                        </div>
                                      </div>
                                    ))
-                                 ) : (
-                                   /* Placeholder para ARROZ E FEIJÃO quando não há receitas */
-                                   ['ARROZ BRANCO', 'FEIJÃO'].includes(category) && (
+                                  ) : (
+                                    /* Placeholder para ARROZ E FEIJÃO quando não há receitas */
+                                    ['Arroz Branco', 'Feijão'].includes(category) && (
                                      <div className="flex items-center justify-between p-3 rounded-lg border bg-amber-50 border-amber-200">
                                        <div className="flex items-center gap-3 flex-1">
                                          <Badge 
@@ -326,11 +332,11 @@ const WeeklyMenuView: React.FC<WeeklyMenuViewProps> = ({
                                            {CATEGORY_DISPLAY_NAMES[category] || category}
                                          </Badge>
                                          
-                                         <div className="flex-1">
-                                           <p className="font-medium leading-tight text-amber-800">
-                                             {category === 'ARROZ BRANCO' ? 'ARROZ BRANCO' : 'FEIJÃO MIX - CARIOCA + BANDINHA 50%'}
-                                             <span className="ml-2 text-xs">(Receita não encontrada)</span>
-                                           </p>
+                                          <div className="flex-1">
+                                            <p className="font-medium leading-tight text-amber-800">
+                                              {category === 'Arroz Branco' ? 'ARROZ BRANCO' : 'FEIJÃO MIX - CARIOCA + BANDINHA 50%'}
+                                              <span className="ml-2 text-xs">(Receita não encontrada)</span>
+                                            </p>
                                            <p className="text-sm text-amber-600">
                                              ⚠️ Aguardando configuração de receita
                                            </p>

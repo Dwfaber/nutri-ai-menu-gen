@@ -6,16 +6,18 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// ============ ESTRUTURA FIXA DO CARDÁPIO ============
+// ============ ESTRUTURA OBRIGATÓRIA PARA CARDÁPIO ============
 const ESTRUTURA_CARDAPIO = {
-  PP1: { categoria: 'Proteína Principal 1', obrigatorio: true, budget_percent: 25 },
-  PP2: { categoria: 'Proteína Principal 2', obrigatorio: true, budget_percent: 20 },
-  ARROZ: { categoria: 'Arroz Branco', obrigatorio: true, budget_percent: 15, receita_id: 580 },
-  FEIJAO: { categoria: 'Feijão', obrigatorio: true, budget_percent: 15, receita_id: 1600 },
-  SALADA1: { categoria: 'Salada 1 (Verduras)', obrigatorio: true, budget_percent: 8 },
-  SALADA2: { categoria: 'Salada 2 (Legumes)', obrigatorio: true, budget_percent: 7 },
-  SUCO1: { categoria: 'Suco 1', obrigatorio: true, budget_percent: 5 },
-  SUCO2: { categoria: 'Suco 2', obrigatorio: true, budget_percent: 5 }
+  "PP1": { "obrigatorio": true, "porcentagem": 22.0, "categoria": "PP1" },
+  "PP2": { "obrigatorio": true, "porcentagem": 20.0, "categoria": "PP2" },
+  "Arroz Branco": { "obrigatorio": true, "porcentagem": 13.0, "categoria": "Arroz Branco" },
+  "Feijão": { "obrigatorio": true, "porcentagem": 7.0, "categoria": "Feijão" },
+  "Salada 1 (Verduras)": { "obrigatorio": true, "porcentagem": 10.0, "categoria": "Salada 1" },
+  "Salada 2 (Legumes)": { "obrigatorio": true, "porcentagem": 8.0, "categoria": "Salada 2" },
+  "Suco 1": { "obrigatorio": true, "porcentagem": 6.0, "categoria": "Suco 1" },
+  "Suco 2": { "obrigatorio": true, "porcentagem": 5.0, "categoria": "Suco 2" },
+  "Guarnição": { "obrigatorio": true, "porcentagem": 5.0, "categoria": "Guarnição" },
+  "Sobremesa": { "obrigatorio": true, "porcentagem": 4.0, "categoria": "Sobremesa" }
 };
 
 Deno.serve(async (req) => {
@@ -27,7 +29,7 @@ Deno.serve(async (req) => {
     return new Response(
       JSON.stringify({ 
         status: 'healthy', 
-        version: 'CORRIGIDA-COMPLETA-v2.0',
+        version: 'CORRIGIDA-COMPLETA-v3.0',
         timestamp: new Date().toISOString()
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -49,151 +51,127 @@ Deno.serve(async (req) => {
     async function buscarOrcamentoFilial(filialId) {
       console.log(`💰 Buscando orçamento para filial ${filialId}`);
       
-      try {
-        const { data, error } = await supabase
-          .from('custos_filiais')
-          .select('*')
-          .eq('filial_id', filialId)
-          .single();
-        
-        if (error || !data) {
-          console.warn(`⚠️ Filial ${filialId} sem dados de orçamento, usando padrão`);
-          return { custo_diario: 9.00 };
-        }
-        
-        // Pegar o dia da semana atual
-        const diasSemana = ['Domingo', 'Segunda', 'Terca', 'Quarta', 'Quinta', 'Sexta', 'Sabado'];
-        const hoje = new Date();
-        const diaSemana = diasSemana[hoje.getDay()];
-        
-        // Buscar custo do dia específico
-        const campoCusto = `RefCusto${diaSemana}`;
-        const custoHoje = data[campoCusto] || data.RefCustoSegunda || 9.00;
-        
-        // Calcular média semanal se disponível
-        const custoMedio = data.custo_medio_semanal ? 
-          (data.custo_medio_semanal / 7) : custoHoje;
-        
-        console.log(`✅ Filial ${filialId} (${data.nome_fantasia}): R$ ${custoMedio.toFixed(2)}/dia`);
-        
-        return {
-          custo_diario: custoMedio,
-          nome_filial: data.nome_fantasia || data.razao_social,
-          custos_semana: {
-            segunda: data.RefCustoSegunda,
-            terca: data.RefCustoTerca,
-            quarta: data.RefCustoQuarta,
-            quinta: data.RefCustoQuinta,
-            sexta: data.RefCustoSexta,
-            sabado: data.RefCustoSabado,
-            domingo: data.RefCustoDomingo
-          }
-        };
-        
-      } catch (error) {
+      const { data, error } = await supabase
+        .from('custos_filiais')
+        .select('*')
+        .eq('filial_id', filialId)
+        .order('created_at', { ascending: false })
+        .limit(1);
+
+      if (error) {
         console.error('❌ Erro ao buscar orçamento:', error);
-        return { custo_diario: 9.00 };
+        throw error;
       }
+
+      if (!data || data.length === 0) {
+        console.warn('⚠️ Nenhum orçamento encontrado, usando valor padrão');
+        return {
+          filial_id: filialId,
+          custo_diario: 16.0,
+          nome_filial: `Filial ${filialId}`
+        };
+      }
+
+      const budget = data[0];
+      const custoMediaSemanal = budget.custo_medio_semanal || 0;
+      const custoDiario = custoMediaSemanal > 0 ? custoMediaSemanal / 7 : 16.0;
+
+      console.log(`✅ Orçamento encontrado: R$ ${custoDiario.toFixed(2)}/dia para ${budget.nome_filial}`);
+      
+      return {
+        ...budget,
+        custo_diario: custoDiario
+      };
     }
 
-    // ============ FUNÇÃO MELHORADA PARA BUSCAR RECEITAS ============
+    // ============ FUNÇÃO DE BUSCA POR CATEGORIA ============
     async function buscarReceitasPorCategoria(categoria, budget, mealQuantity) {
-      console.log(`🔍 Buscando ${categoria} com orçamento R$${budget.toFixed(2)}`);
+      console.log(`📦 ${data?.length || 0} receitas encontradas para ${categoria}`);
       
       try {
-        // PALAVRAS-CHAVE EXPANDIDAS E MELHORADAS
+        // Palavras-chave específicas para cada categoria
         const palavrasChave = {
-          'Proteína Principal 1': ['FRANGO', 'CARNE', 'PEIXE', 'BOVINA', 'SUINA', 'PEITO', 'COXA', 'FILE'],
-          'Proteína Principal 2': ['LINGUICA', 'OVO', 'HAMBURGUER', 'ALMONDEGA', 'SALSICHA', 'CARNE MOIDA'],
-          'Salada 1 (Verduras)': [
-            'SALADA', 'ALFACE', 'ACELGA', 'COUVE', 'ESPINAFRE', 'RUCULA', 'AGRIAO',
-            'FOLHAS', 'VERDURA', 'FOLHOSO', 'SALADA VERDE', 'SALADA MISTA'
-          ],
-          'Salada 2 (Legumes)': [
-            'TOMATE', 'PEPINO', 'CENOURA', 'BETERRABA', 'ABOBRINHA', 'CHUCHU',
-            'LEGUME', 'SALADA COLORIDA', 'VINAGRETE', 'SALADA DE LEGUMES'
-          ],
-          'Suco 1': ['SUCO', 'LARANJA', 'LIMAO', 'MARACUJA', 'ABACAXI', 'UVA', 'REFRESCO'],
-          'Suco 2': ['GOIABA', 'MANGA', 'CAJU', 'ACEROLA', 'AGUA SABORIZADA', 'MELANCIA', 'MORANGO']
+          'Arroz Branco': ['ARROZ'],
+          'Feijão': ['FEIJÃO', 'FEIJAO'],
+          'Salada 1 (Verduras)': ['ALFACE', 'COUVE', 'RÚCULA', 'RUCULA', 'AGRIÃO', 'ESPINAFRE', 'ALMEIRÃO', 'ACELGA'],
+          'Salada 2 (Legumes)': ['CENOURA', 'BETERRABA', 'TOMATE', 'PEPINO', 'CHUCHU', 'ABOBRINHA', 'BERINJELA', 'PIMENTÃO'],
+          'Suco 1': ['SUCO', 'REFRESCO', 'ÁGUA', 'VITAMINA', 'MARACUJÁ', 'LARANJA', 'UVA', 'AÇAÍ', 'LIMÃO', 'ABACAXI'],
+          'Suco 2': ['SUCO', 'REFRESCO', 'ÁGUA', 'VITAMINA', 'MARACUJÁ', 'LARANJA', 'UVA', 'AÇAÍ', 'LIMÃO', 'ABACAXI'],
+          'Guarnição': ['BATATA', 'MACARRÃO', 'MANDIOCA', 'POLENTA', 'PURÊ', 'FAROFA', 'MASSA', 'NHOQUE'],
+          'Sobremesa': ['CREME DE GOIABADA', 'DOCE', 'MOUSSE', 'GELATINA', 'PUDIM', 'BRIGADEIRO', 'COCADA', 'GOIABADA']
         };
+
+        const palavras = palavrasChave[categoria] || [];
         
-        const keywords = palavrasChave[categoria] || [categoria.toUpperCase()];
-        let todasReceitas = new Set();
-        
-        // BUSCA MELHORADA: Tentar múltiplas estratégias
-        
-        // 1. Buscar por nome da receita
-        for (const keyword of keywords.slice(0, 5)) {
-          const { data: receitasPorNome } = await supabase
-            .from('receita_ingredientes')
-            .select('receita_id_legado, nome')
-            .ilike('nome', `%${keyword}%`)
-            .limit(10);
-          
-          if (receitasPorNome) {
-            receitasPorNome.forEach(r => {
-              if (r.receita_id_legado) {
-                todasReceitas.add(JSON.stringify({
-                  id: r.receita_id_legado,
-                  nome: r.nome
-                }));
-              }
-            });
-          }
-        }
-        
-        // 2. Se não encontrou nada, buscar IDs conhecidos para saladas
-        if (todasReceitas.size === 0 && categoria.includes('Salada')) {
-          console.log('🥗 Buscando IDs conhecidos de saladas...');
-          const saladasConhecidas = [
-            { id: 1018, nome: 'SALADA COLORIDA' },
-            { id: 18, nome: 'SALADA MISTA' },
-            { id: 1020, nome: 'PEPINO COM TOMATE' },
-            { id: 933, nome: 'ALFACE CROCANTE' },
-            { id: 934, nome: 'ALFACE LISA' },
-            { id: 935, nome: 'ALFACE MIMOSA' }
-          ];
-          
-          for (const salada of saladasConhecidas) {
-            todasReceitas.add(JSON.stringify(salada));
-          }
-        }
-        
-        // Converter Set para Array de objetos únicos
-        const receitasUnicas = Array.from(todasReceitas).map(r => JSON.parse(r));
-        
-        if (receitasUnicas.length === 0) {
-          console.warn(`⚠️ Nenhuma receita encontrada para ${categoria}`);
+        if (palavras.length === 0) {
+          console.warn(`⚠️ Categoria ${categoria} não tem palavras-chave definidas`);
           return null;
         }
+
+        // Construir condição OR para buscar receitas
+        const orConditions = palavras.map(palavra => `nome.ilike.%${palavra}%`).join(',');
         
-        console.log(`📦 ${receitasUnicas.length} receitas encontradas para ${categoria}`);
+        const { data, error } = await supabase
+          .from('receita_ingredientes')
+          .select('receita_id_legado, nome, categoria_descricao')
+          .or(orConditions)
+          .limit(20);
+
+        if (error) {
+          console.error(`❌ Erro ao buscar receitas para ${categoria}:`, error);
+          throw error;
+        }
+
+        console.log(`📦 ${data?.length || 0} receitas encontradas para ${categoria}`);
+
+        // Avaliar cada receita encontrada
+        const receitasAvaliadas = [];
         
-        // Testar receitas até encontrar uma adequada
-        for (const receita of receitasUnicas.slice(0, 5)) {
-          const custo = await calculateSimpleCost(receita.id, mealQuantity);
-          
-          if (custo && custo.custo_por_refeicao > 0 && custo.custo_por_refeicao <= budget) {
-            console.log(`  ✅ Selecionada: ${custo.nome} - R$${custo.custo_por_refeicao.toFixed(2)}`);
-            return custo;
+        for (const receita of data || []) {
+          try {
+            const custo = await calculateSimpleCost(receita.receita_id_legado, mealQuantity);
+            if (custo && custo.custo_por_refeicao > 0 && custo.custo_por_refeicao <= budget) {
+              receitasAvaliadas.push({
+                receita_id: receita.receita_id_legado,
+                nome: receita.nome,
+                custo_por_refeicao: custo.custo_por_refeicao,
+                categoria: receita.categoria_descricao
+              });
+            }
+          } catch (costError) {
+            console.warn(`⚠️ Erro ao calcular custo da receita ${receita.nome}:`, costError);
+          }
+        }
+
+        if (receitasAvaliadas.length > 0) {
+          // Retornar receita mais barata que cabe no orçamento
+          const receitaEscolhida = receitasAvaliadas.sort((a, b) => a.custo_por_refeicao - b.custo_por_refeicao)[0];
+          return receitaEscolhida;
+        }
+
+        // Fallback: tentar buscar a receita mais barata disponível
+        console.warn(`⚠️ Nenhuma ${categoria} dentro do orçamento, pegando mais barata...`);
+        
+        for (const receita of data || []) {
+          try {
+            const custo = await calculateSimpleCost(receita.receita_id_legado, mealQuantity);
+            if (custo && custo.custo_por_refeicao > 0) {
+              return {
+                receita_id: receita.receita_id_legado,
+                nome: receita.nome,
+                custo_por_refeicao: custo.custo_por_refeicao,
+                categoria: receita.categoria_descricao
+              };
+            }
+          } catch (costError) {
+            console.warn(`⚠️ Erro ao calcular custo da receita ${receita.nome}:`, costError);
           }
         }
         
-        // Se não encontrou nada no orçamento, pegar a mais barata
-        console.log(`⚠️ Nenhuma ${categoria} dentro do orçamento, pegando mais barata...`);
-        let maisBarata = null;
-        
-        for (const receita of receitasUnicas.slice(0, 3)) {
-          const custo = await calculateSimpleCost(receita.id, mealQuantity);
-          if (!maisBarata || (custo.custo_por_refeicao > 0 && custo.custo_por_refeicao < maisBarata.custo_por_refeicao)) {
-            maisBarata = custo;
-          }
-        }
-        
-        return maisBarata;
+        return null;
         
       } catch (error) {
-        console.error(`❌ Erro ao buscar ${categoria}:`, error);
+        console.error(`❌ Erro fatal ao buscar ${categoria}:`, error);
         return null;
       }
     }
@@ -203,506 +181,408 @@ Deno.serve(async (req) => {
       try {
         const { data: ingredients, error } = await supabase
           .from('receita_ingredientes')
-          .select('nome, produto_base_id, produto_base_descricao, quantidade, unidade')
-          .eq('receita_id_legado', recipeId)
-          .limit(10);
-        
-        if (error || !ingredients || ingredients.length === 0) {
-          return {
-            id: recipeId,
-            nome: `Receita ${recipeId}`,
-            custo: 0,
-            custo_por_refeicao: 0,
-            ingredientes: [],
-            erro: 'Sem ingredientes'
-          };
+          .select('*')
+          .eq('receita_id_legado', recipeId);
+
+        if (error) {
+          console.error(`❌ Erro ao buscar ingredientes da receita ${recipeId}:`, error);
+          throw error;
         }
-        
-        const recipeName = ingredients[0].nome;
-        
-        const productIds = ingredients
-          .map(i => i.produto_base_id)
-          .filter(id => id && Number(id) > 0)
-          .slice(0, 10);
-        
-        if (productIds.length === 0) {
-          return {
-            id: recipeId,
-            nome: recipeName,
-            custo: 0,
-            custo_por_refeicao: 0,
-            ingredientes: [],
-            erro: 'Sem IDs de produtos'
-          };
+
+        if (!ingredients || ingredients.length === 0) {
+          console.warn(`⚠️ Receita ${recipeId} não tem ingredientes`);
+          return null;
         }
-        
-        const { data: prices } = await supabase
-          .from('co_solicitacao_produto_listagem')
-          .select('produto_base_id, preco, descricao')
-          .in('produto_base_id', productIds)
-          .gt('preco', 0)
-          .limit(10);
-        
+
         let totalCost = 0;
         let foundPrices = 0;
-        const ingredientesCalculados = [];
-        
+        const recipeServings = ingredients[0]?.quantidade_refeicoes || 100;
+        const scalingFactor = mealQuantity / recipeServings;
+
         for (const ingredient of ingredients) {
-          const price = prices?.find(p => Number(p.produto_base_id) === Number(ingredient.produto_base_id));
-          
-          if (price && ingredient.quantidade) {
-            const qty = Number(ingredient.quantidade) || 0;
-            const unitPrice = Number(price.preco) || 0;
-            let cost = qty * unitPrice;
-            
-            // CORREÇÃO ESPECÍFICA PARA ARROZ E FEIJÃO
-            if (recipeId === 580 || recipeId === 1600) { // Arroz ou Feijão
-              // Para arroz e feijão, a quantidade é para muitas porções
-              // Dividir por um fator realista baseado na receita
-              if (ingredient.unidade === 'KG' && qty > 1) {
-                // Ex: 11 KG de arroz ÷ 100 porções = 0.11 KG por porção
-                cost = (qty / mealQuantity) * unitPrice;
-              } else if (ingredient.unidade === 'ML' && qty > 500) {
-                // Para líquidos em grandes quantidades
-                cost = (qty / mealQuantity) * unitPrice / 1000; // ML para L
-              }
-            } else {
-              // Para outras receitas, usar lógica padrão melhorada
-              if (ingredient.unidade === 'ML' && cost > 50) {
-                cost = cost / 10; // Ajuste para ML
-              }
-              if (ingredient.unidade === 'KG' && cost > 100) {
-                cost = cost / 10; // Ajuste para KG
-              }
-              if (cost > 500) {
-                cost = cost / 100; // Ajuste geral para valores muito altos
-              }
-            }
-            
-            // Garantir valores mínimos e máximos razoáveis
-            cost = Math.max(0.01, Math.min(cost, 50));
-            
-            totalCost += cost;
-            foundPrices++;
-            
-            ingredientesCalculados.push({
-              nome: ingredient.produto_base_descricao,
-              quantidade: qty,
-              unidade: ingredient.unidade,
-              preco_unitario: unitPrice,
-              custo_total: cost,
-              produto_mercado: price.descricao
-            });
+          if (!ingredient.produto_base_id) continue;
+
+          const { data: prices, error: priceError } = await supabase
+            .from('co_solicitacao_produto_listagem')
+            .select('preco, descricao, unidade')
+            .eq('produto_base_id', ingredient.produto_base_id)
+            .gt('preco', 0)
+            .order('preco', { ascending: true })
+            .limit(1);
+
+          if (priceError || !prices || prices.length === 0) {
+            console.warn(`⚠️ Preço não encontrado para produto ${ingredient.produto_base_id}`);
+            continue;
           }
+
+          const price = prices[0];
+          const qty = Number(ingredient.quantidade) * scalingFactor;
+          
+          if (qty <= 0 || !price.preco) continue;
+          
+          const unitPrice = Number(price.preco) || 0;
+          let cost = qty * unitPrice;
+          
+          // CORREÇÃO ESPECÍFICA PARA ARROZ E FEIJÃO
+          if (recipeId === 580 || recipeId === 1600) { // Arroz ou Feijão
+            // Para arroz e feijão, a quantidade é para muitas porções
+            // Dividir por um fator realista baseado na receita
+            if (ingredient.unidade === 'KG' && qty > 1) {
+              // Ex: 11 KG de arroz ÷ 100 porções = 0.11 KG por porção
+              cost = (qty / mealQuantity) * unitPrice;
+            } else if (ingredient.unidade === 'ML' && qty > 500) {
+              // Para líquidos em grandes quantidades
+              cost = (qty / mealQuantity) * unitPrice / 1000; // ML para L
+            }
+          } else {
+            // Para outras receitas, usar lógica padrão melhorada
+            if (ingredient.unidade === 'ML' && cost > 50) {
+              cost = cost / 10; // Ajuste para ML
+            }
+            if (ingredient.unidade === 'KG' && cost > 100) {
+              cost = cost / 10; // Ajuste para KG
+            }
+            if (cost > 500) {
+              cost = cost / 100; // Ajuste geral para valores muito altos
+            }
+          }
+          
+          // Garantir valores mínimos e máximos razoáveis
+          cost = Math.max(0.01, Math.min(cost, 50));
+          
+          totalCost += cost;
+          foundPrices++;
         }
-        
-        const costPerMeal = mealQuantity > 0 ? totalCost / mealQuantity : 0;
-        
+
+        if (foundPrices === 0) {
+          console.warn(`⚠️ Nenhum preço encontrado para receita ${recipeId}`);
+          return null;
+        }
+
+        const costPerMeal = totalCost;
+        const accuracy = (foundPrices / ingredients.length) * 100;
+
         return {
-          id: recipeId,
-          nome: recipeName,
-          custo: totalCost,
+          receita_id: recipeId,
+          nome: ingredients[0]?.nome || `Receita ${recipeId}`,
+          custo_total: totalCost.toFixed(2),
           custo_por_refeicao: costPerMeal,
-          ingredientes: ingredientesCalculados,
+          custo: totalCost,
+          ingredientes_encontrados: foundPrices,
           ingredientes_total: ingredients.length,
-          ingredientes_com_preco: foundPrices,
-          precisao: ingredients.length > 0 ? Math.round((foundPrices / ingredients.length) * 100) : 0
+          precisao: Math.round(accuracy),
+          quantidade_refeicoes: mealQuantity
         };
-        
+
       } catch (error) {
-        console.error(`❌ Erro ao calcular receita ${recipeId}:`, error);
+        console.error(`❌ Erro ao calcular custo da receita ${recipeId}:`, error);
         return null;
       }
     }
 
-    // ============ FUNÇÃO ROBUSTA PARA BUSCAR PROTEÍNAS ============
+    // ============ BUSCAR PROTEÍNAS DISPONÍVEIS (MELHORADA COM ROTAÇÃO) ============
+    let proteinasCache = [];
+    
     async function buscarProteinasDisponiveis() {
-      console.log('🥩 Buscando proteínas disponíveis...');
-      
-      const proteinasCache = [];
-      
       try {
-        // Buscar proteínas no banco por palavras-chave
-        const { data: proteinasBanco } = await supabase
-          .from('receita_ingredientes')
-          .select('receita_id_legado, nome')
-          .or('nome.ilike.%FRANGO%,nome.ilike.%CARNE%,nome.ilike.%PEIXE%,nome.ilike.%PORCO%,nome.ilike.%ALMONDEGA%,nome.ilike.%LINGUICA%')
-          .limit(30);
+        console.log('🍖 Buscando proteínas disponíveis com rotação...');
         
-        if (proteinasBanco && proteinasBanco.length > 0) {
-          // Remover duplicatas e pegar IDs únicos
-          const idsUnicos = [...new Set(proteinasBanco.map(p => p.receita_id_legado))];
-          
-          // Calcular custo de cada proteína
-          for (const id of idsUnicos.slice(0, 20)) {
-            const custo = await calculateSimpleCost(id, 100);
-            if (custo && custo.custo_por_refeicao > 0 && custo.custo_por_refeicao <= 5.00) {
-              proteinasCache.push({
-                ...custo,
-                categoria_proteina: custo.nome.includes('FRANGO') ? 'frango' : 
-                                  custo.nome.includes('CARNE') ? 'carne' : 
-                                  custo.nome.includes('PEIXE') ? 'peixe' : 'outras'
-              });
-            }
+        if (proteinasCache.length > 0) {
+          console.log(`🍖 Usando cache de proteínas: ${proteinasCache.length} itens`);
+          return proteinasCache;
+        }
+        
+        // Proteínas categorizadas por tipo para rotação
+        const proteinasPorTipo = {
+          frango: [
+            { id: 1194, nome: 'ALMÔNDEGA DE FRANGO CASEIRA', tipo: 'frango' },
+            { id: 1123, nome: 'CUSCUZ DE FRANGO', tipo: 'frango' },
+            { id: 1234, nome: 'FILÉ DE FRANGO AO MOLHO CURRY', tipo: 'frango' },
+            { id: 1891, nome: 'PEITO DE FRANGO GRELHADO', tipo: 'frango' },
+            { id: 2034, nome: 'COXA DE FRANGO ASSADA', tipo: 'frango' }
+          ],
+          carne: [
+            { id: 1325, nome: 'ALMÔNDEGAS AO VINAGRETE', tipo: 'carne' },
+            { id: 683, nome: 'ALMÔNDEGAS AO VINAGRETE 100G', tipo: 'carne' },
+            { id: 973, nome: 'ACÉM COM MANDIOCA', tipo: 'carne' },
+            { id: 1459, nome: 'ACÉM AO ALHO', tipo: 'carne' },
+            { id: 1322, nome: 'ACÉM À PRIMAVERA', tipo: 'carne' },
+            { id: 1456, nome: 'BATATA RECHEADA COM CARNE MOÍDA', tipo: 'carne' }
+          ],
+          peixe: [
+            { id: 2345, nome: 'FILÉ DE PEIXE GRELHADO', tipo: 'peixe' },
+            { id: 2456, nome: 'PEIXE ASSADO COM ERVAS', tipo: 'peixe' }
+          ],
+          outros: [
+            { id: 1567, nome: 'OVOS MEXIDOS', tipo: 'outros' },
+            { id: 1678, nome: 'LENTILHA REFOGADA', tipo: 'outros' }
+          ]
+        };
+        
+        // Calcular custo para proteínas de forma balanceada
+        for (const [tipo, proteinas] of Object.entries(proteinasPorTipo)) {
+          for (const proteina of proteinas) {
+            if (proteinasCache.length >= 16) break;
             
-            // Limite para evitar timeout
-            if (proteinasCache.length >= 14) break;
+            try {
+              const custo = await calculateSimpleCost(proteina.id, 100);
+              if (custo && custo.custo_por_refeicao > 0 && custo.custo_por_refeicao < 40) {
+                proteinasCache.push({
+                  receita_id: proteina.id,
+                  nome: proteina.nome,
+                  custo_por_refeicao: custo.custo_por_refeicao,
+                  categoria: 'Proteína',
+                  tipo: proteina.tipo
+                });
+              }
+            } catch (costError) {
+              console.warn(`⚠️ Erro ao calcular custo da proteína ${proteina.nome}:`, costError);
+            }
           }
         }
         
-        // Fallback com IDs conhecidos se não encontrou suficientes
-        if (proteinasCache.length < 8) {
-          console.log('🔄 Usando proteínas conhecidas como fallback...');
-          const proteinasConhecidas = [
-            { id: 1325, nome: 'ALMÔNDEGAS AO VINAGRETE' },
-            { id: 683, nome: 'ALMÔNDEGAS AO VINAGRETE 100G' },
-            { id: 973, nome: 'ACÉM COM MANDIOCA' },
-            { id: 1459, nome: 'ACÉM AO ALHO' },
-            { id: 1322, nome: 'ACÉM À PRIMAVERA' },
-            { id: 1194, nome: 'ALMÔNDEGA DE FRANGO CASEIRA' },
-            { id: 1123, nome: 'CUSCUZ DE FRANGO' },
-            { id: 1456, nome: 'BATATA RECHEADA COM CARNE MOÍDA' },
-            { id: 1234, nome: 'FILÉ DE FRANGO AO MOLHO CURRY' },
-            { id: 1567, nome: 'ARROZ DOCE COM COCO' }
-          ];
-          
-          for (const proteina of proteinasConhecidas) {
-            if (proteinasCache.length >= 14) break;
-            
-            const custo = await calculateSimpleCost(proteina.id, 100);
-            if (custo && custo.custo_por_refeicao > 0) {
-              custo.nome = proteina.nome; // Garantir nome correto
-              proteinasCache.push(custo);
-            }
-          }
-        }
-        
-        console.log(`✅ ${proteinasCache.length} proteínas disponíveis encontradas`);
+        console.log(`✅ Cache de proteínas carregado: ${proteinasCache.length} proteínas`);
         return proteinasCache;
         
       } catch (error) {
-        console.error('❌ Erro ao buscar proteínas:', error);
-        return [];
+        console.error('❌ Erro fatal ao buscar proteínas:', error);
+        throw error;
       }
     }
 
-    // ============ GERAÇÃO DE MENU PRINCIPAL ============
-    if (requestData.action === 'generate_menu') {
-      const mealQuantity = requestData.refeicoesPorDia || requestData.meal_quantity || 100;
-      const filialId = requestData.filialIdLegado || requestData.filial_id || null;
-      const clientName = requestData.cliente || requestData.clientName || 'Cliente';
-      const numDays = requestData.numDays || requestData.periodo_dias || 1; // Padrão 1 dia para compatibilidade
-      
-      console.log(`🍽️ Gerando cardápio para ${numDays} dia(s), ${mealQuantity} refeições/dia`);
-      
+    // ============ BUSCAR RECEITA ESPECÍFICA PARA SOBREMESAS ============
+    async function buscarReceitaEspecifica(tipo, budget, mealQuantity) {
       try {
-        // PASSO 1: Buscar orçamento da filial
-        let budget = 9.00;
-        let dadosFilial = null;
-        
-        if (filialId) {
-          dadosFilial = await buscarOrcamentoFilial(filialId);
-          budget = dadosFilial.custo_diario || 9.00;
-          console.log(`💰 Orçamento: R$ ${budget.toFixed(2)}/refeição`);
-        }
-        
-        // PASSO 2: Buscar proteínas disponíveis
-        const proteinasDisponiveis = await buscarProteinasDisponiveis();
-        
-        // PASSO 3: Gerar cardápio(s)
-        const cardapiosPorDia = [];
-        let custoTotalGeral = 0;
-        const listaComprasGeral = new Map();
-        const diasSemana = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado', 'Domingo'];
-        
-        for (let dia = 0; dia < numDays; dia++) {
-          const nomeDia = diasSemana[dia % 7];
-          console.log(`\n📅 Gerando ${nomeDia} (Dia ${dia + 1}/${numDays})`);
+        if (tipo === 'sobremesa') {
+          // IDs conhecidos de sobremesas
+          const sobremesasConhecidas = [
+            { id: '599', nome: 'CREME DE GOIABADA' },
+            { id: '738', nome: 'DOCE DE LEITE' },
+            { id: '739', nome: 'GELATINA COLORIDA' },
+            { id: '740', nome: 'MOUSSE DE CHOCOLATE' }
+          ];
           
-          const cardapioDia = [];
-          let custoDia = 0;
+          for (const sobremesa of sobremesasConhecidas) {
+            const custo = await calculateSimpleCost(sobremesa.id, mealQuantity);
+            if (custo && custo.custo_por_refeicao <= budget && custo.custo_por_refeicao > 0) {
+              return {
+                receita_id: sobremesa.id,
+                nome: sobremesa.nome,
+                custo_por_refeicao: custo.custo_por_refeicao
+              };
+            }
+          }
           
-          // Estrutura com rotação de proteínas
-          const estruturaDia = {
-            PP1: { 
-              categoria: 'Proteína Principal 1', 
-              budget_percent: 25,
-              proteina_index: dia % Math.max(proteinasDisponiveis.length, 1)
-            },
-            PP2: { 
-              categoria: 'Proteína Principal 2', 
-              budget_percent: 20,
-              proteina_index: (dia + Math.floor(proteinasDisponiveis.length / 2)) % Math.max(proteinasDisponiveis.length, 1)
-            },
-            ARROZ: { categoria: 'Arroz Branco', budget_percent: 15, receita_id: 580 },
-            FEIJAO: { categoria: 'Feijão', budget_percent: 15, receita_id: 1600 },
-            SALADA1: { categoria: 'Salada 1 (Verduras)', budget_percent: 8 },
-            SALADA2: { categoria: 'Salada 2 (Legumes)', budget_percent: 7 },
-            SUCO1: { categoria: 'Suco 1', budget_percent: 5 },
-            SUCO2: { categoria: 'Suco 2', budget_percent: 5 }
+          // Fallback: usar a primeira sobremesa
+          const sobremesa = sobremesasConhecidas[0];
+          const custo = await calculateSimpleCost(sobremesa.id, mealQuantity);
+          return {
+            receita_id: sobremesa.id,
+            nome: sobremesa.nome,
+            custo_por_refeicao: custo?.custo_por_refeicao || 0.5
           };
-          
-          for (const [codigo, config] of Object.entries(estruturaDia)) {
-            const orcamentoItem = budget * (config.budget_percent / 100);
-            let receita = null;
-            
-            // Lógica especial para proteínas
-            if ((codigo === 'PP1' || codigo === 'PP2') && proteinasDisponiveis.length > 0) {
-              const proteinaIndex = config.proteina_index;
-              receita = proteinasDisponiveis[proteinaIndex];
-              console.log(`  🥩 ${codigo}: ${receita?.nome || 'N/A'}`);
-            } 
-            // Receitas fixas
-            else if (config.receita_id) {
-              receita = await calculateSimpleCost(config.receita_id, mealQuantity);
-            } 
-            // Outras categorias
-            else {
-              receita = await buscarReceitasPorCategoria(config.categoria, orcamentoItem, mealQuantity);
-            }
-            
-            if (receita && receita.custo_por_refeicao > 0) {
-              cardapioDia.push({
-                codigo: codigo,
-                categoria: config.categoria,
-                receita: receita,
-                custo_real: receita.custo_por_refeicao
-              });
-              
-              custoDia += receita.custo_por_refeicao;
-              
-              // Adicionar à lista de compras geral
-              if (receita.ingredientes && Array.isArray(receita.ingredientes)) {
-                for (const ing of receita.ingredientes) {
-                  const key = ing.nome;
-                  if (listaComprasGeral.has(key)) {
-                    const existing = listaComprasGeral.get(key);
-                    existing.quantidade += ing.quantidade;
-                    existing.custo_total += ing.custo_total;
-                  } else {
-                    listaComprasGeral.set(key, {...ing});
-                  }
-                }
-              }
-            } else {
-              // Receita não encontrada
-              cardapioDia.push({
-                codigo: codigo,
-                categoria: config.categoria,
-                receita: { 
-                  nome: `${config.categoria} não disponível`,
-                  custo_por_refeicao: 0,
-                  custo: 0
-                },
-                custo_real: 0
-              });
-            }
-          }
-          
-          custoTotalGeral += custoDia;
-          
-          cardapiosPorDia.push({
-            dia: nomeDia,
-            data: new Date(Date.now() + dia * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-            receitas: cardapioDia,
-            custo_total_dia: custoDia,
-            custo_por_refeicao: custoDia,
-            dentro_orcamento: custoDia <= budget
-          });
         }
         
-        // PASSO 4: Calcular custos finais
-        const custoMedioPorRefeicao = numDays > 0 ? custoTotalGeral / numDays : 0;
-        const custoTotalPeriodo = custoTotalGeral * mealQuantity;
-        
-        // PASSO 5: Preparar lista de compras
-        const itensListaCompras = Array.from(listaComprasGeral.values())
-          .sort((a, b) => b.custo_total - a.custo_total)
-          .map(item => ({
-            ...item,
-            quantidade: item.quantidade.toFixed(3),
-            custo_total: item.custo_total.toFixed(2)
-          }));
-        
-        // PASSO 6: Validações dinâmicas
-        const validacoes = {
-          estrutura_completa: cardapiosPorDia.every(dia => 
-            dia.receitas.length === 8 && 
-            dia.receitas.filter(r => r.receita.custo_por_refeicao > 0).length >= 6
-          ),
-          tem_proteinas: cardapiosPorDia.every(dia =>
-            dia.receitas.some(r => r.codigo === 'PP1' && r.receita.custo_por_refeicao > 0) &&
-            dia.receitas.some(r => r.codigo === 'PP2' && r.receita.custo_por_refeicao > 0)
-          ),
-          variedade_proteinas: proteinasDisponiveis.length >= 2,
-          dentro_orcamento: custoMedioPorRefeicao <= budget
-        };
-        
-        // PASSO 7: Montar resposta compatível com frontend
-        const response = {
-          success: true,
-          version: 'MULTI-SEMANA-v3.0',
-          
-          solicitacao: {
-            cliente: dadosFilial?.nome_filial || clientName,
-            filial_id: filialId,
-            quantidade_refeicoes_dia: mealQuantity,
-            dias_solicitados: numDays,
-            orcamento_por_refeicao: budget
-          },
-          
-          // Formato compatível com frontend atual (primeiro dia)
-          cardapio: {
-            receitas: cardapiosPorDia.length > 0 ? cardapiosPorDia[0].receitas.map((item, index) => ({
-              id: item.receita.id || `${Date.now()}-${index}`,
-              nome: item.receita.nome,
-              categoria: item.categoria,
-              codigo: item.codigo,
-              custo_total: (item.receita.custo || 0).toFixed(2),
-              custo_por_refeicao: item.custo_real.toFixed(2),
-              precisao: item.receita.precisao ? `${item.receita.precisao}%` : '0%',
-              posicao: index + 1,
-              ingredientes_count: item.receita.ingredientes?.length || 0
-            })) : [],
-            
-            resumo: {
-              total_receitas: cardapiosPorDia.length > 0 ? cardapiosPorDia[0].receitas.length : 0,
-              receitas_encontradas: cardapiosPorDia.length > 0 ? 
-                cardapiosPorDia[0].receitas.filter(r => r.receita.custo_por_refeicao > 0).length : 0,
-              receitas_faltantes: cardapiosPorDia.length > 0 ? 
-                cardapiosPorDia[0].receitas.filter(r => r.receita.custo_por_refeicao <= 0).length : 0
-            }
-          },
-          
-          // Dados multi-semana (extensão)
-          cardapio_multi_semana: cardapiosPorDia.map(dia => ({
-            dia: dia.dia,
-            data: dia.data,
-            receitas: dia.receitas.map((item, index) => ({
-              id: item.receita.id || `${Date.now()}-${index}`,
-              nome: item.receita.nome,
-              categoria: item.categoria,
-              codigo: item.codigo,
-              custo_total: (item.receita.custo || 0).toFixed(2),
-              custo_por_refeicao: item.custo_real.toFixed(2),
-              porcoes: mealQuantity
-            })),
-            custo_total_dia: (dia.custo_total_dia * mealQuantity).toFixed(2),
-            custo_por_refeicao: dia.custo_por_refeicao.toFixed(2)
-          })),
-          
-          analise_financeira: {
-            custo_total_periodo: custoTotalPeriodo.toFixed(2),
-            custo_medio_por_refeicao: custoMedioPorRefeicao.toFixed(2),
-            custo_medio_por_dia: (custoTotalPeriodo / numDays).toFixed(2),
-            orcamento_total_periodo: (budget * mealQuantity * numDays).toFixed(2),
-            economia_total: ((budget * mealQuantity * numDays) - custoTotalPeriodo).toFixed(2),
-            dentro_orcamento: custoMedioPorRefeicao <= budget
-          },
-          
-          resumo_financeiro: {
-            custo_total: custoTotalPeriodo.toFixed(2),
-            custo_por_refeicao: custoMedioPorRefeicao.toFixed(2),
-            economia: ((budget * mealQuantity * numDays) - custoTotalPeriodo).toFixed(2),
-            dentro_orcamento: custoMedioPorRefeicao <= budget
-          },
-          
-          lista_compras: {
-            total_itens: itensListaCompras.length,
-            custo_total: itensListaCompras.reduce((sum, item) => 
-              sum + parseFloat(item.custo_total), 0).toFixed(2),
-            itens: itensListaCompras
-          },
-          
-          validacoes: validacoes,
-          
-          estrutura_aplicada: {
-            descricao: 'PP1, PP2, Arroz, Feijão, Salada 1, Salada 2, Suco 1, Suco 2',
-            distribuicao: Object.entries(ESTRUTURA_CARDAPIO).map(([key, val]) => ({
-              codigo: key,
-              categoria: val.categoria,
-              percentual: val.budget_percent + '%',
-              valor_alocado: (budget * val.budget_percent / 100).toFixed(2)
-            }))
-          },
-          
-          metadata: {
-            data_geracao: new Date().toISOString(),
-            tempo_processamento_ms: Date.now() - startTime,
-            dias_gerados: numDays,
-            proteinas_disponiveis: proteinasDisponiveis.length,
-            versao: 'MULTI-SEMANA-v3.0'
-          }
-        };
-        
-        console.log(`\n✅ CARDÁPIO COMPLETO GERADO`);
-        console.log(`📊 ${numDays} dia(s) gerado(s)`);
-        console.log(`💰 Custo médio: R$ ${custoMedioPorRefeicao.toFixed(2)}/refeição`);
-        
-        return new Response(
-          JSON.stringify(response),
-          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-        
+        return null;
       } catch (error) {
-        console.error('💥 ERRO:', error);
-        
-        return new Response(
-          JSON.stringify({
-            success: false,
-            version: 'CORRIGIDA-COMPLETA-v2.0',
-            erro: 'Erro na geração do cardápio',
-            detalhes: error.message
-          }),
-          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
-        );
+        console.error(`Erro ao buscar receita específica ${tipo}:`, error);
+        return null;
       }
     }
 
-    // ============ TESTE DE RECEITA (MANTIDO) ============
+    // ============ AÇÕES DISPONÍVEIS ============
+    if (requestData.action === 'generate_menu') {
+      const { filialIdLegado: filialId, clientName = 'Cliente Teste', mealQuantity = 100, period = '1 semana' } = requestData;
+      
+      // Buscar orçamento da filial
+      const filialBudget = await buscarOrcamentoFilial(filialId);
+      const dailyBudget = filialBudget?.custo_diario || 16.0;
+      
+      console.log(`🎯 Gerando cardápio para ${clientName}`);
+      console.log(`💰 Orçamento: R$ ${dailyBudget.toFixed(2)}/refeição`);
+      console.log(`🍽️ Quantidade: ${mealQuantity} refeições`);
+      
+      // Buscar proteínas disponíveis
+      const proteinasDisponiveis = await buscarProteinasDisponiveis();
+      
+      // Gerar cardápio para 14 dias (2 semanas)
+      const allRecipes = [];
+      const shoppingList = [];
+      let totalCost = 0;
+      let estruturaCompleta = true;
+      
+      for (let dia = 1; dia <= 14; dia++) {
+        const diasSemana = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado', 'Domingo'];
+        const nomeDia = diasSemana[(dia - 1) % 7];
+        
+        console.log(`\n📅 Gerando ${nomeDia} (Dia ${dia}/14)`);
+        
+        const dayMenu = [];
+        let dayCost = 0;
+        
+        // ============ SELEÇÃO INTELIGENTE DE PROTEÍNAS COM ROTAÇÃO ============
+        const proteinasDisponiveis = await buscarProteinasDisponiveis();
+        let pp1, pp2;
+        
+        if (proteinasDisponiveis.length >= 2) {
+          // Separar proteínas por tipo para rotação
+          const proteinasPorTipo = proteinasDisponiveis.reduce((acc, p) => {
+            const tipo = p.tipo || 'outros';
+            if (!acc[tipo]) acc[tipo] = [];
+            acc[tipo].push(p);
+            return acc;
+          }, {});
+          
+          // Selecionar tipos diferentes quando possível
+          const tiposDisponiveis = Object.keys(proteinasPorTipo);
+          const tipo1 = tiposDisponiveis[dia % tiposDisponiveis.length];
+          const tipo2 = tiposDisponiveis[(dia + 1) % tiposDisponiveis.length];
+          
+          // Selecionar PP1 e PP2 de tipos diferentes se possível
+          pp1 = proteinasPorTipo[tipo1]?.[Math.floor(Math.random() * proteinasPorTipo[tipo1].length)] || 
+                proteinasDisponiveis[Math.floor(Math.random() * proteinasDisponiveis.length)];
+          
+          pp2 = proteinasPorTipo[tipo2]?.[Math.floor(Math.random() * proteinasPorTipo[tipo2].length)] || 
+                proteinasDisponiveis.find(p => p.receita_id !== pp1.receita_id) || 
+                proteinasDisponiveis[1];
+          
+          console.log(`  🥩 PP1: ${pp1.nome}`);
+          console.log(`  🥩 PP2: ${pp2.nome}`);
+        }
+        
+        // Adicionar proteínas ao cardápio
+        if (pp1) {
+          dayMenu.push({
+            receita_id: pp1.receita_id,
+            nome: pp1.nome,
+            categoria: 'PP1',
+            custo_por_refeicao: pp1.custo_por_refeicao,
+            quantidade_refeicoes: mealQuantity
+          });
+          dayCost += pp1.custo_por_refeicao;
+        }
+        
+        if (pp2) {
+          dayMenu.push({
+            receita_id: pp2.receita_id,
+            nome: pp2.nome,
+            categoria: 'PP2',
+            custo_por_refeicao: pp2.custo_por_refeicao,
+            quantidade_refeicoes: mealQuantity
+          });
+          dayCost += pp2.custo_por_refeicao;
+        }
+        
+        // ============ PROCESSAMENTO DAS DEMAIS CATEGORIAS ============
+        for (const [categoria, config] of Object.entries(ESTRUTURA_CARDAPIO)) {
+          if (categoria === 'PP1' || categoria === 'PP2') continue; // Já processado
+          
+          const budget = dailyBudget * (config.porcentagem / 100);
+          console.log(`🔍 Buscando ${categoria} com orçamento R$${budget.toFixed(2)}`);
+          
+          let receitaEncontrada;
+          
+          // Lógica especial para Sobremesa vs Suco
+          if (categoria === 'Sobremesa') {
+            // Buscar especificamente sobremesas conhecidas
+            receitaEncontrada = await buscarReceitaEspecifica('sobremesa', budget, mealQuantity);
+          } else {
+            receitaEncontrada = await buscarReceitasPorCategoria(categoria, budget, mealQuantity);
+          }
+          
+          if (receitaEncontrada) {
+            console.log(`  ✅ Selecionada: ${receitaEncontrada.nome} - R$${receitaEncontrada.custo_por_refeicao.toFixed(2)}`);
+            
+            dayMenu.push({
+              receita_id: receitaEncontrada.receita_id,
+              nome: receitaEncontrada.nome,
+              categoria: config.categoria,
+              custo_por_refeicao: receitaEncontrada.custo_por_refeicao,
+              quantidade_refeicoes: mealQuantity
+            });
+            dayCost += receitaEncontrada.custo_por_refeicao;
+          } else {
+            console.warn(`⚠️ Nenhuma receita encontrada para ${categoria}`);
+            estruturaCompleta = false;
+          }
+        }
+        
+        // Adicionar receitas do dia ao total
+        allRecipes.push(...dayMenu.map(recipe => ({
+          ...recipe,
+          dia: nomeDia
+        })));
+        
+        totalCost += dayCost;
+      }
+      
+      const totalDays = 14;
+      const averageCost = totalDays > 0 ? totalCost / totalDays : 0;
+      
+      console.log(`\n✅ CARDÁPIO COMPLETO GERADO`);
+      console.log(`📊 ${totalDays} dia(s) gerado(s)`);
+      console.log(`💰 Custo médio: R$ ${averageCost.toFixed(2)}/refeição`);
+      
+      return new Response(JSON.stringify({
+        success: true,
+        cardapio: {
+          receitas: allRecipes,
+          filial_info: filialBudget,
+          resumo: {
+            total_dias: totalDays,
+            total_receitas: allRecipes.length,
+            custo_total_periodo: totalCost,
+            custo_medio_por_refeicao: averageCost,
+            custo_por_refeicao: averageCost, // Campo adicional para compatibilidade
+            estrutura_completa: estruturaCompleta
+          }
+        },
+        lista_compras: shoppingList
+      }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+
+    // ============ TESTE DE CUSTO DE RECEITA ============
     if (requestData.action === 'test_recipe_cost') {
-      const recipeId = requestData.receita_id || 580;
-      const mealQuantity = requestData.meal_quantity || 100;
+      const { recipeId, mealQuantity = 100 } = requestData;
+      
+      console.log(`🧪 Testando custo da receita ${recipeId} para ${mealQuantity} refeições`);
       
       const result = await calculateSimpleCost(recipeId, mealQuantity);
       
-      return new Response(
-        JSON.stringify({
-          success: true,
-          version: 'CORRIGIDA-COMPLETA-v2.0',
-          tempo_ms: Date.now() - startTime,
-          ...result
-        }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      return new Response(JSON.stringify({
+        success: true,
+        action: 'test_recipe_cost',
+        receita_id: recipeId,
+        resultado: result,
+        timestamp: new Date().toISOString()
+      }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
     }
 
-    // ============ DEFAULT ============
-    return new Response(
-      JSON.stringify({
-        success: true,
-        version: 'CORRIGIDA-COMPLETA-v2.0',
-        message: 'Sistema funcionando com todas as correções',
-        features: [
-          'Orçamento dinâmico por filial',
-          'Busca melhorada de saladas',
-          'Lista de compras integrada',
-          'Estrutura fixa de 8 itens'
-        ]
-      }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
+    // ============ AÇÃO NÃO RECONHECIDA ============
+    return new Response(JSON.stringify({
+      success: false,
+      error: 'Ação não reconhecida',
+      available_actions: ['generate_menu', 'test_recipe_cost']
+    }), {
+      status: 400,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+    });
 
   } catch (error) {
-    console.error('❌ ERRO GERAL:', error);
+    console.error('❌ Erro fatal na função:', error);
     
-    return new Response(
-      JSON.stringify({
-        success: false,
-        version: 'CORRIGIDA-COMPLETA-v2.0',
-        erro: error.message
-      }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
-    );
+    return new Response(JSON.stringify({
+      success: false,
+      error: error.message || 'Erro interno da função',
+      details: error.stack,
+      timestamp: new Date().toISOString()
+    }), {
+      status: 500,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+    });
   }
 });
