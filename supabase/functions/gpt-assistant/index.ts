@@ -86,8 +86,6 @@ Deno.serve(async (req) => {
 
     // ============ FUNÇÃO DE BUSCA POR CATEGORIA ============
     async function buscarReceitasPorCategoria(categoria, budget, mealQuantity) {
-      console.log(`📦 ${data?.length || 0} receitas encontradas para ${categoria}`);
-      
       try {
         // Palavras-chave específicas para cada categoria
         const palavrasChave = {
@@ -292,30 +290,29 @@ Deno.serve(async (req) => {
           return proteinasCache;
         }
         
-        // Proteínas categorizadas por tipo para rotação
+        // Proteínas categorizadas por tipo para rotação - IDs REAIS do banco
         const proteinasPorTipo = {
           frango: [
-            { id: 1194, nome: 'ALMÔNDEGA DE FRANGO CASEIRA', tipo: 'frango' },
-            { id: 1123, nome: 'CUSCUZ DE FRANGO', tipo: 'frango' },
-            { id: 1234, nome: 'FILÉ DE FRANGO AO MOLHO CURRY', tipo: 'frango' },
-            { id: 1891, nome: 'PEITO DE FRANGO GRELHADO', tipo: 'frango' },
-            { id: 2034, nome: 'COXA DE FRANGO ASSADA', tipo: 'frango' }
+            { id: 1010, nome: 'CANELLONE DE FRANGO', tipo: 'frango' },
+            { id: 1011, nome: 'FILÉ DE FRANGO AO MOLHO BRANCO 90G', tipo: 'frango' },
+            { id: 1015, nome: 'FILÉ DE FRANGO AO MOLHO DE ERVAS 90G', tipo: 'frango' },
+            { id: 1019, nome: 'PICADINHO DE FRANGO 90G', tipo: 'frango' },
+            { id: 1031, nome: 'COXA DE FRANGO COZIDA 90G', tipo: 'frango' }
           ],
           carne: [
-            { id: 1325, nome: 'ALMÔNDEGAS AO VINAGRETE', tipo: 'carne' },
-            { id: 683, nome: 'ALMÔNDEGAS AO VINAGRETE 100G', tipo: 'carne' },
-            { id: 973, nome: 'ACÉM COM MANDIOCA', tipo: 'carne' },
-            { id: 1459, nome: 'ACÉM AO ALHO', tipo: 'carne' },
-            { id: 1322, nome: 'ACÉM À PRIMAVERA', tipo: 'carne' },
-            { id: 1456, nome: 'BATATA RECHEADA COM CARNE MOÍDA', tipo: 'carne' }
+            { id: 1001, nome: 'CARNE LOUCA 90G', tipo: 'carne' },
+            { id: 1005, nome: 'CARNE MOÍDA COM VAGEM 90G', tipo: 'carne' },
+            { id: 1006, nome: 'CARNE MOÍDA COM VAGEM 100G', tipo: 'carne' },
+            { id: 1012, nome: 'CARNE MOÍDA A PARMEGIANA 90G', tipo: 'carne' },
+            { id: 1037, nome: 'CARNE DESFIADA 90G', tipo: 'carne' }
           ],
           peixe: [
-            { id: 2345, nome: 'FILÉ DE PEIXE GRELHADO', tipo: 'peixe' },
-            { id: 2456, nome: 'PEIXE ASSADO COM ERVAS', tipo: 'peixe' }
+            { id: 580, nome: 'ARROZ BRANCO', tipo: 'arroz' }, // Temporário - buscar peixes reais
+            { id: 1600, nome: 'FEIJÃO CARIOCA', tipo: 'feijao' } // Temporário - buscar peixes reais
           ],
           outros: [
-            { id: 1567, nome: 'OVOS MEXIDOS', tipo: 'outros' },
-            { id: 1678, nome: 'LENTILHA REFOGADA', tipo: 'outros' }
+            { id: 580, nome: 'ARROZ BRANCO', tipo: 'arroz' },
+            { id: 1600, nome: 'FEIJÃO CARIOCA', tipo: 'feijao' }
           ]
         };
         
