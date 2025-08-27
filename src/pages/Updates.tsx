@@ -2,7 +2,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { CheckCircle, Clock, Code, Database, Cpu, GitBranch, Zap, Bug, Plus, Calendar } from "lucide-react";
+import { ConnectivityTest } from '@/components/Monitoring/ConnectivityTest';
+import { CheckCircle, Clock, Code, Database, Cpu, GitBranch, Zap, Bug, Plus, Calendar, Activity, AlertTriangle } from "lucide-react";
 
 export default function Updates() {
   const recentUpdates = [
@@ -227,7 +228,11 @@ export default function Updates() {
       </div>
 
       <Tabs defaultValue="recent" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-3">
+        <TabsList className="grid w-full grid-cols-4">
+          <TabsTrigger value="monitoring" className="flex items-center gap-2">
+            <Activity className="h-4 w-4" />
+            Monitoramento
+          </TabsTrigger>
           <TabsTrigger value="recent" className="flex items-center gap-2">
             <Clock className="h-4 w-4" />
             Últimas Atualizações
@@ -241,6 +246,65 @@ export default function Updates() {
             Roadmap
           </TabsTrigger>
         </TabsList>
+
+        <TabsContent value="monitoring" className="space-y-6">
+          <div className="grid gap-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Activity className="w-5 h-5" />
+                  Status do Sistema
+                </CardTitle>
+                <CardDescription>
+                  Monitoramento em tempo real da conectividade e saúde do sistema
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <ConnectivityTest />
+              </CardContent>
+            </Card>
+            
+            <Card>
+              <CardHeader>
+                <CardTitle>Diagnóstico Rápido</CardTitle>
+                <CardDescription>
+                  Problemas identificados e correções implementadas hoje
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex items-center justify-between p-3 rounded-lg bg-green-50 border border-green-200">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle className="w-4 h-4 text-green-600" />
+                    <span className="font-medium">Routing Corrigido</span>
+                  </div>
+                  <Badge variant="outline" className="text-green-600 border-green-600">
+                    Ativo
+                  </Badge>
+                </div>
+                
+                <div className="flex items-center justify-between p-3 rounded-lg bg-blue-50 border border-blue-200">
+                  <div className="flex items-center gap-2">
+                    <Activity className="w-4 h-4 text-blue-600" />
+                    <span className="font-medium">Connectivity Test</span>
+                  </div>
+                  <Badge variant="outline" className="text-blue-600 border-blue-600">
+                    Implementado
+                  </Badge>
+                </div>
+                
+                <div className="flex items-center justify-between p-3 rounded-lg bg-orange-50 border border-orange-200">
+                  <div className="flex items-center gap-2">
+                    <AlertTriangle className="w-4 h-4 text-orange-600" />
+                    <span className="font-medium">Edge Functions Health</span>
+                  </div>
+                  <Badge variant="outline" className="text-orange-600 border-orange-600">
+                    Monitorando
+                  </Badge>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
 
         <TabsContent value="recent" className="space-y-6">
           <div className="space-y-4">
