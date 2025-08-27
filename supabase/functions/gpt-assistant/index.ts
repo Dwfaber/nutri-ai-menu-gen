@@ -208,12 +208,22 @@ Deno.serve(async (req) => {
           return null;
         }
 
-        const { data: prices } = await supabase
+        const { data: prices, error: pricesError } = await supabase
           .from('co_solicitacao_produto_listagem')
           .select('produto_base_id, preco, descricao, produto_base_quantidade_embalagem, unidade')
           .in('produto_base_id', productIds)
           .gt('preco', 0)
           .order('preco', { ascending: true });
+
+        if (pricesError) {
+          console.error(`❌ Erro ao buscar preços para receita ${recipeId}:`, pricesError);
+          return null;
+        }
+
+        if (!prices || prices.length === 0) {
+          console.warn(`⚠️ Nenhum preço encontrado para ingredientes da receita ${recipeId}`);
+          return null;
+        }
 
         let totalCost = 0;
         const ingredientesCalculados = [];
