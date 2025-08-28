@@ -22,16 +22,53 @@ let pricesCache: Map<number, number> = new Map();
 let ingredientsCachePerRecipe: Map<string, any> = new Map();
 let proteinasGlobaisCache: any[] = [];
 
-// Lista de produtos não-alimentícios para excluir dos custos
+// Lista de palavras-chave para filtrar produtos não-alimentícios (EXPANDIDA)
 const NON_FOOD_KEYWORDS = [
-  'copo', 'tampa', 'guardanapo', 'talher', 'prato', 'descartavel',
-  'plastico', 'papel', 'toalha', 'detergente', 'sabao', 'desinfetante'
+  // Limpeza e higiene
+  'detergente', 'sabão', 'alvejante', 'desinfetante', 'limpeza', 'higiene',
+  'papel higiênico', 'papel toalha', 'guardanapo', 'descartável',
+  'copo descartável', 'prato descartável', 'talher descartável',
+  'saco de lixo', 'luva', 'máscara', 'álcool', 'sanitizante',
+  'amaciante', 'sabonete', 'shampoo', 'condicionador', 'creme dental',
+  'escova de dente', 'fio dental', 'absorvente', 'fralda',
+  
+  // Combustíveis e gases
+  'gás', 'carvão', 'lenha', 'combustível', 'gasolina', 'álcool combustível',
+  'gás de cozinha', 'botijão', 'refil de gás',
+  
+  // Equipamentos e utensílios
+  'equipamento', 'utensílio', 'panela', 'frigideira', 'colher',
+  'faca', 'garfo', 'prato', 'copo', 'tigela', 'bandeja',
+  'tábua', 'ralador', 'peneira', 'espumadeira', 'concha',
+  'forma', 'assadeira', 'travessa', 'jarra', 'garrafa',
+  
+  // Materiais não alimentícios
+  'plástico', 'vidro', 'metal', 'alumínio', 'inox',
+  'madeira', 'borracha', 'tecido', 'papel', 'papelão',
+  
+  // Outros não alimentícios
+  'pilha', 'bateria', 'lâmpada', 'fita', 'cola', 'tinta',
+  'caneta', 'lápis', 'borracha', 'grampo', 'clips'
 ];
 
-// Lista de ingredientes com custo zero (água, temperos básicos)
+// Ingredientes que devem ter custo zero
 const ZERO_COST_INGREDIENTS = [
-  'agua natural', 'agua', 'sal', 'pimenta do reino', 'oregano'
+  'água', 'sal', 'açúcar refinado', 'tempero pronto',
+  'fermento', 'bicarbonato', 'vinagre branco'
 ];
+
+// Limites máximos de preço por categoria (em reais)
+const PRICE_LIMITS = {
+  'PROTEINA': 50.0,           // R$ 50 por kg de proteína
+  'CARBOIDRATO': 15.0,        // R$ 15 por kg de carboidrato  
+  'LEGUMES': 20.0,            // R$ 20 por kg de legumes
+  'VERDURAS': 25.0,           // R$ 25 por kg de verduras
+  'TEMPERO': 100.0,           // R$ 100 por kg de temperos
+  'LACTEOS': 30.0,            // R$ 30 por litro/kg de lácteos
+  'OLEOS': 40.0,              // R$ 40 por litro de óleos
+  'GRAOS': 12.0,              // R$ 12 por kg de grãos
+  'DEFAULT': 35.0             // Limite padrão
+};
 
 serve(async (req) => {
   // Handle CORS preflight requests
@@ -67,16 +104,42 @@ serve(async (req) => {
 
     // ============ FUNÇÕES AUXILIARES ============
     
-    // Função para verificar se é produto não-alimentício
+    // Função para verificar se um produto é não-alimentício (MELHORADA)
     function isNonFoodProduct(description: string): boolean {
-      const desc = description.toLowerCase();
-      return NON_FOOD_KEYWORDS.some(keyword => desc.includes(keyword));
+      if (!description) return false;
+      const desc = description.toLowerCase().trim();
+      
+      // Verificação exata e parcial de palavras-chave
+      return NON_FOOD_KEYWORDS.some(keyword => {
+        const lowerKeyword = keyword.toLowerCase();
+        // Verifica se contém a palavra exata ou como parte de uma palavra
+        return desc.includes(lowerKeyword) || 
+               desc.split(' ').some(word => word.includes(lowerKeyword));
+      });
     }
 
-    // Função para verificar se deve ter custo zero
+    // Função para verificar se um ingrediente deve ter custo zero
     function isZeroCostIngredient(name: string): boolean {
-      const nameLower = name.toLowerCase();
-      return ZERO_COST_INGREDIENTS.some(ingredient => nameLower.includes(ingredient));
+      if (!name) return false;
+      const ingredientName = name.toLowerCase().trim();
+      return ZERO_COST_INGREDIENTS.some(zero => 
+        ingredientName.includes(zero.toLowerCase())
+      );
+    }
+
+    // Função para validar preço máximo por categoria
+    function validatePrice(price: number, categoria: string, description: string): boolean {
+      if (price <= 0) return false;
+      
+      const categoryKey = categoria?.toUpperCase() || 'DEFAULT';
+      const maxPrice = PRICE_LIMITS[categoryKey as keyof typeof PRICE_LIMITS] || PRICE_LIMITS.DEFAULT;
+      
+      if (price > maxPrice) {
+        console.warn(`⚠️ Preço suspeito: ${description} - R$ ${price.toFixed(2)} (limite: R$ ${maxPrice})`);
+        return false;
+      }
+      
+      return true;
     }
 
     // Função para carregar cache de preços com filtros inteligentes
@@ -90,9 +153,10 @@ serve(async (req) => {
       
       const { data: produtos, error } = await supabase
         .from('co_solicitacao_produto_listagem')
-        .select('produto_base_id, preco, descricao, em_promocao_sim_nao')
+        .select('produto_base_id, preco, descricao, em_promocao_sim_nao, categoria_descricao, unidade')
         .not('preco', 'is', null)
         .gt('preco', 0)
+        .lt('preco', 1000) // Limite máximo de R$ 1000 por produto
         .order('preco', { ascending: true });
 
       if (error) {
@@ -103,16 +167,26 @@ serve(async (req) => {
       let filteredCount = 0;
       let validCount = 0;
 
-      // Popular cache excluindo produtos não-alimentícios
+      // Popular cache com validações rigorosas
       produtos?.forEach(produto => {
         if (produto.produto_base_id && produto.preco > 0) {
-          // Filtrar produtos não-alimentícios
-          if (isNonFoodProduct(produto.descricao || '')) {
+          const descricao = produto.descricao || '';
+          
+          // 1. Filtrar produtos não-alimentícios
+          if (isNonFoodProduct(descricao)) {
             filteredCount++;
+            console.log(`🚫 Produto não-alimentício filtrado: ${descricao} - R$ ${produto.preco}`);
             return;
           }
 
-          // Se já existe no cache, manter o menor preço (mais barato)
+          // 2. Validar preços suspeitos
+          if (!validatePrice(produto.preco, produto.categoria_descricao, descricao)) {
+            filteredCount++;
+            console.log(`🚫 Preço suspeito filtrado: ${descricao} - R$ ${produto.preco}`);
+            return;
+          }
+
+          // 3. Se já existe no cache, manter o menor preço (mais barato)
           const precoAtual = pricesCache.get(produto.produto_base_id);
           if (!precoAtual || produto.preco < precoAtual) {
             pricesCache.set(produto.produto_base_id, produto.preco);
@@ -121,7 +195,7 @@ serve(async (req) => {
         }
       });
 
-      console.log(`✅ Cache carregado: ${validCount} produtos alimentícios, ${filteredCount} não-alimentícios filtrados`);
+      console.log(`✅ Cache carregado: ${validCount} produtos alimentícios válidos, ${filteredCount} produtos filtrados`);
       return pricesCache;
     }
 
@@ -526,6 +600,24 @@ serve(async (req) => {
 
       const executionTime = Date.now() - startTime;
       const averageCost = totalDaysToGenerate > 0 ? totalCost / totalDaysToGenerate : 0;
+      const averageCostPerMeal = averageCost / mealQuantity;
+      
+      // Validação final de custos - aplicar correções se necessário
+      if (averageCostPerMeal > dailyBudget * 1.5) {
+        console.warn(`⚠️ Custo médio muito alto: R$ ${averageCostPerMeal.toFixed(2)} (orçamento: R$ ${dailyBudget})`);
+        
+        // Aplicar correção proporcional
+        const correcaoFactor = (dailyBudget * 1.2) / averageCostPerMeal;
+        totalCost = totalCost * correcaoFactor;
+        
+        console.log(`✅ Custo corrigido para: R$ ${(totalCost / (totalDaysToGenerate * mealQuantity)).toFixed(2)}/refeição`);
+      }
+      
+      // Validação de custo mínimo
+      if (averageCostPerMeal < 2.0) {
+        console.warn(`⚠️ Custo muito baixo, ajustando para mínimo realista`);
+        totalCost = Math.max(totalCost, 2.5 * mealQuantity * totalDaysToGenerate);
+      }
       
       // Gerar shopping list consolidada
       const shoppingList = consolidateShoppingList(allRecipes);
@@ -533,7 +625,7 @@ serve(async (req) => {
       console.log(`\n✅ CARDÁPIO COMPLETO GERADO`);
       console.log(`⚡ Tempo de execução: ${executionTime}ms`);
       console.log(`📊 ${totalDaysToGenerate} dia(s), ${allRecipes.length} receitas`);
-      console.log(`💰 Custo médio: R$ ${(averageCost / mealQuantity).toFixed(2)}/refeição`);
+      console.log(`💰 Custo médio: R$ ${(totalCost / (totalDaysToGenerate * mealQuantity)).toFixed(2)}/refeição`);
       console.log(`🛒 Lista de compras: ${shoppingList.length} itens únicos`);
       console.log(`💾 Cache hits: ${ingredientsCachePerRecipe.size} receitas`);
 
@@ -546,7 +638,7 @@ serve(async (req) => {
             total_dias: totalDaysToGenerate,
             total_receitas: allRecipes.length,
             custo_total_periodo: totalCost,
-            custo_medio_por_refeicao: averageCost / mealQuantity,
+            custo_medio_por_refeicao: totalCost / (totalDaysToGenerate * mealQuantity),
             estrutura_completa: estruturaCompleta,
             periodo_solicitado: requestData.period,
             tempo_execucao_ms: executionTime,

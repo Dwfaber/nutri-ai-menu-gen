@@ -197,7 +197,7 @@ export function calculateIngredientCost(
         embalagensNecessarias = necessidadeNaUnidadeProduto / tamanhoEmbalagem;
       }
       
-      const custoTotal = embalagensNecessarias * produto.preco_reais;
+      const custoTotal = embalagensNecessarias * produto.preco;
       const custoEfetivo = produto.em_promocao_sim_nao ? custoTotal * 0.9 : custoTotal;
       
       const detalhes = {
@@ -206,7 +206,7 @@ export function calculateIngredientCost(
         conversao: conversao.conversao,
         embalagem: `${tamanhoEmbalagem} ${produto.embalagem_unidade}`,
         embalagens_necessarias: embalagensNecessarias,
-        preco_embalagem: produto.preco_reais,
+        preco_embalagem: produto.preco,
         custo_total: custoTotal,
         promocao: produto.em_promocao_sim_nao,
         pode_fracionado: !produto.apenas_valor_inteiro_sim_nao,
@@ -228,7 +228,7 @@ export function calculateIngredientCost(
       nome: ingrediente.produto_base_descricao || ingrediente.nome || 'Ingrediente desconhecido',
       quantidade_necessaria: quantidadeNecessaria,
       unidade: ingrediente.unidade || '',
-      preco_embalagem: melhorProduto.preco_reais,
+      preco_embalagem: melhorProduto.preco,
       embalagem_tamanho: melhorProduto.embalagem_tamanho,
       embalagem_unidade: melhorProduto.embalagem_unidade,
       embalagens_necessarias: melhorDetalhes.embalagens_necessarias,

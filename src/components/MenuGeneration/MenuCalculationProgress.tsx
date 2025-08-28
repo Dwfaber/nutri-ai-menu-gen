@@ -5,7 +5,13 @@
 import { Progress } from '@/components/ui/progress';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { type MenuCalculationProgress } from '@/hooks/useMenuCalculation';
+// Type definitions moved here since useMenuCalculation was removed
+export interface MenuCalculationProgress {
+  stage: 'fetching_products' | 'calculating_costs' | 'processing_recipes' | 'finalizing';
+  current: number;
+  total: number;
+  message: string;
+}
 
 interface MenuCalculationProgressProps {
   progress: MenuCalculationProgress;

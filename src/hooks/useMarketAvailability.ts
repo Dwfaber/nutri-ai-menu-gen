@@ -46,6 +46,9 @@ export const useMarketAvailability = () => {
           em_promocao_sim_nao,
           produto_base_quantidade_embalagem
         `)
+        .not('preco', 'is', null)
+        .gt('preco', 0)
+        .lt('preco', 1000)
         .not('produto_base_id', 'is', null)
         .order('categoria_descricao');
 

@@ -5,7 +5,7 @@
 import { useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { useMenuCalculation } from './useMenuCalculation';
+// Removed useMenuCalculation - using optimized Edge Function instead
 import { useSelectedClient } from '@/contexts/SelectedClientContext';
 import { useMenuBusinessRules } from './useMenuBusinessRules';
 import { format, addDays } from 'date-fns';
@@ -30,7 +30,7 @@ export function useSimplifiedMenuGeneration() {
   const [generatedMenu, setGeneratedMenu] = useState<GeneratedMenu | null>(null);
   const [error, setError] = useState<string | null>(null);
   const { selectedClient } = useSelectedClient();
-  const { calculateMenuCosts, progress } = useMenuCalculation();
+  // Using optimized Edge Function instead of local calculations
   const { validateMenu, violations } = useMenuBusinessRules();
   const { toast } = useToast();
 
@@ -106,8 +106,23 @@ export function useSimplifiedMenuGeneration() {
         throw new Error('IA não conseguiu gerar receitas');
       }
 
-      // Step 2: Calculate costs locally
-      const calculatedMenu = await calculateMenuCosts(recipes, mealQuantity);
+      // Step 2: Calculate costs using Edge Function
+      const { data: costData, error: costError } = await supabase.functions.invoke('gpt-assistant', {
+        body: {
+          action: 'test_recipe_cost',
+          recipes: recipes,
+          mealQuantity: mealQuantity
+        }
+      });
+
+      if (costError) throw costError;
+      
+      const calculatedMenu = {
+        recipes: recipes,
+        totalCost: costData?.total_cost || 0,
+        costPerMeal: costData?.cost_per_meal || 0,
+        violatedIngredients: costData?.violated_ingredients || []
+      };
 
       // Step 3: Validate business rules
       const businessRules = validateMenu(calculatedMenu.recipes);
@@ -180,7 +195,7 @@ export function useSimplifiedMenuGeneration() {
     isGenerating,
     generatedMenu,
     error,
-    progress,
+    progress: null, // Edge Function handles progress internally
     generateMenu,
     clearGeneratedMenu: () => setGeneratedMenu(null),
     clearError: () => setError(null)
