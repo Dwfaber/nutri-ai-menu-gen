@@ -109,7 +109,7 @@ export function useSimplifiedMenuGeneration() {
       // Step 2: Calculate costs using Edge Function
       const { data: costData, error: costError } = await supabase.functions.invoke('gpt-assistant', {
         body: {
-          action: 'test_recipe_cost',
+          action: 'calculate_recipes_cost',
           recipes: recipes,
           mealQuantity: mealQuantity
         }

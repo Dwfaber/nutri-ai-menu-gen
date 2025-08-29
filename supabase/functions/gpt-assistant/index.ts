@@ -674,11 +674,107 @@ serve(async (req) => {
       });
     }
 
+    // ============ CÁLCULO DE CUSTO DE MÚLTIPLAS RECEITAS ============
+    if (requestData.action === 'calculate_recipes_cost') {
+      const { recipes, mealQuantity = 100 } = requestData;
+      
+      console.log(`💰 Calculando custo de ${recipes?.length || 0} receitas para ${mealQuantity} refeições`);
+      
+      if (!Array.isArray(recipes) || recipes.length === 0) {
+        return new Response(JSON.stringify({
+          success: false,
+          error: 'Array de receitas inválido ou vazio',
+          received: typeof recipes
+        }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
+      await loadPricesCache();
+      
+      let totalCost = 0;
+      let violatedIngredients = [];
+      const recipeResults = [];
+      
+      // Processar cada receita
+      for (const recipe of recipes) {
+        const recipeId = recipe.receita_id_legado || recipe.id;
+        
+        if (!recipeId) {
+          console.warn(`⚠️ Receita sem ID válido:`, recipe);
+          continue;
+        }
+        
+        try {
+          console.log(`📊 Calculando receita: ${recipe.nome || recipeId}`);
+          
+          const result = await calculateSimpleCost(recipeId, mealQuantity);
+          
+          if (result && result.custo_total > 0) {
+            totalCost += result.custo_total;
+            recipeResults.push({
+              receita_id: recipeId,
+              nome: recipe.nome,
+              custo: result.custo_total,
+              custo_por_refeicao: result.custo_total / mealQuantity,
+              ingredientes_processados: result.ingredientes_processados?.length || 0
+            });
+            
+            // Verificar ingredientes violados
+            if (result.ingredientes_nao_encontrados) {
+              violatedIngredients.push(...result.ingredientes_nao_encontrados);
+            }
+          } else {
+            console.warn(`⚠️ Receita ${recipeId} retornou custo inválido:`, result);
+            recipeResults.push({
+              receita_id: recipeId,
+              nome: recipe.nome,
+              custo: 0,
+              custo_por_refeicao: 0,
+              erro: 'Custo não calculado'
+            });
+          }
+        } catch (error) {
+          console.error(`❌ Erro ao calcular receita ${recipeId}:`, error);
+          recipeResults.push({
+            receita_id: recipeId,
+            nome: recipe.nome,
+            custo: 0,
+            custo_por_refeicao: 0,
+            erro: error.message
+          });
+        }
+      }
+      
+      const costPerMeal = totalCost / mealQuantity;
+      
+      console.log(`✅ Cálculo concluído: R$ ${totalCost.toFixed(2)} total, R$ ${costPerMeal.toFixed(2)}/refeição`);
+      
+      return new Response(JSON.stringify({
+        success: true,
+        action: 'calculate_recipes_cost',
+        total_cost: totalCost,
+        cost_per_meal: costPerMeal,
+        meal_quantity: mealQuantity,
+        recipes_processed: recipeResults.length,
+        violated_ingredients: violatedIngredients,
+        recipe_details: recipeResults,
+        cache_stats: {
+          prices_cached: pricesCache.size,
+          recipes_cached: ingredientsCachePerRecipe.size
+        },
+        timestamp: new Date().toISOString()
+      }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+
     // ============ AÇÃO NÃO RECONHECIDA ============
     return new Response(JSON.stringify({
       success: false,
       error: 'Ação não reconhecida',
-      available_actions: ['generate_menu', 'test_recipe_cost']
+      available_actions: ['generate_menu', 'test_recipe_cost', 'calculate_recipes_cost']
     }), {
       status: 400,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
