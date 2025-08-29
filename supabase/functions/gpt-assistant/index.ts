@@ -7,14 +7,13 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// Estrutura principal do cardápio por categoria
+// Estrutura do cardápio com percentuais de orçamento
 const ESTRUTURA_CARDAPIO = {
-  CARBOIDRATO: { obrigatorio: true, percentual_orcamento: 15, categoria: 'Carboidrato' },
-  PROTEINA_PRINCIPAL: { obrigatorio: true, percentual_orcamento: 40, categoria: 'Proteína Principal' },
-  PROTEINA_SECUNDARIA: { obrigatorio: false, percentual_orcamento: 20, categoria: 'Proteína Secundária' },
-  GUARNICAO: { obrigatorio: true, percentual_orcamento: 10, categoria: 'Guarnição' },
-  SALADA: { obrigatorio: true, percentual_orcamento: 8, categoria: 'Salada' },
-  SOBREMESA: { obrigatorio: false, percentual_orcamento: 7, categoria: 'Sobremesa' }
+  PROTEINA_PRINCIPAL: 0.40,    // 40% do orçamento para proteína principal
+  CARBOIDRATO: 0.25,           // 25% para carboidratos
+  GUARNICAO: 0.15,             // 15% para guarnições
+  SALADA: 0.10,                // 10% para saladas
+  SOBREMESA: 0.10              // 10% para sobremesas
 };
 
 // Cache global para preços dos produtos e ingredientes
@@ -373,21 +372,26 @@ serve(async (req) => {
     // Função para buscar receitas por categoria com cache otimizado
     async function buscarReceitasPorCategoria(categoria, budget, mealQuantity) {
       const palavrasChave = {
-        CARBOIDRATO: ['ARROZ', 'FEIJÃO', 'MACARRÃO', 'BATATA', 'POLENTA', 'PURÊ'],
-        GUARNICAO: ['REFOGADO', 'COZIDO', 'GRATINADO', 'FAROFA', 'VINAGRETE'],
-        SALADA: ['SALADA', 'TOMATE', 'ALFACE', 'REPOLHO', 'CENOURA'],
-        SOBREMESA: ['DOCE', 'PUDIM', 'GELATINA', 'FRUTA', 'BRIGADEIRO']
+        CARBOIDRATO: ['ARROZ', 'FEIJÃO', 'MACARRÃO', 'BATATA', 'POLENTA', 'PURÊ', 'FARINHA', 'INHAME', 'MANDIOCA', 'QUINOA'],
+        GUARNICAO: ['REFOGADO', 'COZIDO', 'GRATINADO', 'FAROFA', 'VINAGRETE', 'MOLHO', 'TEMPERO', 'CEBOLA', 'ALHO'],
+        SALADA: ['SALADA', 'TOMATE', 'ALFACE', 'REPOLHO', 'CENOURA', 'PEPINO', 'BETERRABA', 'RÚCULA', 'COUVE'],
+        SOBREMESA: ['DOCE', 'PUDIM', 'GELATINA', 'FRUTA', 'BRIGADEIRO', 'MOUSSE', 'TORTA', 'BOLO', 'COMPOTA'],
+        PROTEINA_SECUNDARIA: ['OVO', 'QUEIJO', 'IOGURTE', 'LEITE', 'RICOTA', 'REQUEIJÃO']
       };
 
       const palavras = palavrasChave[categoria] || ['RECEITA'];
-      const orConditions = palavras.map(palavra => `nome_receita.ilike.%${palavra}%`).join(',');
-
+      console.log(`🔍 Buscando receitas para ${categoria} com palavras-chave:`, palavras);
+      
+      // Buscar por nome da receita OU categoria_descricao
+      const nameConditions = palavras.map(palavra => `nome_receita.ilike.%${palavra}%`).join(',');
+      const categoryConditions = palavras.map(palavra => `categoria_descricao.ilike.%${palavra}%`).join(',');
+      
       const { data: receitas, error } = await supabase
         .from('receitas_legado')
-        .select('receita_id_legado, nome_receita, categoria_descricao')
-        .or(orConditions)
+        .select('receita_id_legado, nome_receita, categoria_descricao, modo_preparo')
+        .or(`${nameConditions},${categoryConditions}`)
         .eq('inativa', false)
-        .limit(20);
+        .limit(30);
 
       if (error) {
         console.error(`❌ Erro ao buscar receitas de ${categoria}:`, error);
@@ -396,9 +400,23 @@ serve(async (req) => {
 
       if (!receitas || receitas.length === 0) {
         console.warn(`⚠️ Nenhuma receita encontrada para ${categoria}`);
+        
+        // Fallback: buscar qualquer receita que não seja proteína principal
+        if (categoria !== 'PROTEINA_PRINCIPAL') {
+          const { data: fallbackReceitas } = await supabase
+            .from('receitas_legado')
+            .select('receita_id_legado, nome_receita, categoria_descricao, modo_preparo')
+            .eq('inativa', false)
+            .limit(10);
+            
+          console.log(`🔄 Fallback: encontradas ${fallbackReceitas?.length || 0} receitas genéricas para ${categoria}`);
+          return fallbackReceitas || [];
+        }
+        
         return [];
       }
 
+      console.log(`✅ Encontradas ${receitas.length} receitas para ${categoria}`);
       return receitas;
     }
 
@@ -500,15 +518,37 @@ serve(async (req) => {
 
     // Função para calcular dias do período
     function calculateDaysFromPeriod(period: string): number {
-      const periodLower = period.toLowerCase();
+      if (!period) return 7;
       
+      const periodLower = period.toLowerCase().trim();
+      console.log(`📅 Processando período: "${period}" -> "${periodLower}"`);
+      
+      // Detectar diferentes formatos de período
       if (periodLower.includes('semana')) {
         const weeks = parseInt(period.match(/\d+/)?.[0] || '1');
-        return weeks * 7;
+        const days = weeks * 7;
+        console.log(`🗓️ ${weeks} semana(s) = ${days} dias`);
+        return days;
       } else if (periodLower.includes('dia')) {
-        return parseInt(period.match(/\d+/)?.[0] || '7');
+        const days = parseInt(period.match(/\d+/)?.[0] || '7');
+        console.log(`🗓️ ${days} dia(s) detectado`);
+        return days;
+      } else if (periodLower.includes('mês') || periodLower.includes('mes')) {
+        const months = parseInt(period.match(/\d+/)?.[0] || '1');
+        const days = months * 30;
+        console.log(`🗓️ ${months} mês(es) = ${days} dias`);
+        return days;
       }
       
+      // Tentar extrair apenas número
+      const numberMatch = period.match(/\d+/);
+      if (numberMatch) {
+        const days = parseInt(numberMatch[0]);
+        console.log(`🗓️ Número detectado: ${days} dias`);
+        return days;
+      }
+      
+      console.log(`🗓️ Período não reconhecido, usando padrão: 7 dias`);
       return 7; // padrão: 1 semana
     }
 
@@ -557,22 +597,29 @@ serve(async (req) => {
           }
         }
 
-        // Buscar outras categorias em paralelo
+        // Buscar outras categorias em paralelo com orçamento específico
         const categoriesPromises = Object.keys(ESTRUTURA_CARDAPIO)
           .filter(cat => cat !== 'PROTEINA_PRINCIPAL')
           .map(async (categoria) => {
-            const receitas = await buscarReceitasPorCategoria(categoria, dailyBudget, mealQuantity);
+            const budgetPorCategoria = dailyBudget * ESTRUTURA_CARDAPIO[categoria];
+            console.log(`💰 ${categoria}: Orçamento R$ ${budgetPorCategoria.toFixed(2)}/refeição`);
+            
+            const receitas = await buscarReceitasPorCategoria(categoria, budgetPorCategoria, mealQuantity);
             if (receitas.length > 0) {
+              // Rotação inteligente das receitas
               const receitaIndex = (dia - 1) % receitas.length;
               const receita = receitas[receitaIndex];
               const custo = await calculateSimpleCost(receita.receita_id_legado, mealQuantity);
               
-              if (custo && custo.custo_por_refeicao > 0) {
+              if (custo && custo.custo_por_refeicao > 0 && custo.custo_por_refeicao <= budgetPorCategoria * 1.5) {
+                console.log(`✅ ${categoria}: ${receita.nome_receita} - R$ ${custo.custo_por_refeicao.toFixed(2)}/refeição`);
                 return {
                   ...receita,
                   categoria,
                   custo_calculado: custo
                 };
+              } else {
+                console.warn(`⚠️ ${categoria}: Custo muito alto R$ ${custo?.custo_por_refeicao?.toFixed(2) || 'N/A'}/refeição`);
               }
             }
             return null;
