@@ -233,13 +233,16 @@ serve(async (req) => {
       return budget;
     }
 
-    // Função para calcular custo simples otimizado
+    // Função para calcular custo simples otimizado com correções críticas
     async function calculateSimpleCost(recipeId: number, mealQuantity: number = 100) {
       const cacheKey = `${recipeId}_${mealQuantity}`;
+      
+      console.log(`💰 Calculando custo para receita ${recipeId} (${mealQuantity} refeições)`);
       
       // Verificar cache de resultados
       if (ingredientsCachePerRecipe.has(cacheKey)) {
         const cached = ingredientsCachePerRecipe.get(cacheKey);
+        console.log(`📋 Cache hit: R$ ${cached.custo_por_refeicao?.toFixed(2) || 0}/refeição`);
         return cached;
       }
 
@@ -247,20 +250,25 @@ serve(async (req) => {
       const { data: ingredientes, error } = await supabase
         .from('receita_ingredientes')
         .select('produto_base_id, quantidade, unidade, nome, produto_base_descricao')
-        .eq('receita_id_legado', recipeId);
+        .eq('receita_id_legado', recipeId.toString());
 
       if (error || !ingredientes) {
         console.error('❌ Erro ao buscar ingredientes da receita:', error);
         return { custo_total: 0, custo_por_refeicao: 0, ingredientes_encontrados: 0 };
       }
 
-      // Dedupilicar ingredientes por produto_base_id
+      console.log(`🔍 Encontrados ${ingredientes.length} ingredientes para receita ${recipeId}`);
+
+      // Deduplificar ingredientes por produto_base_id
       const uniqueIngredientes = ingredientes.reduce((acc, ing) => {
         const existing = acc.find(item => item.produto_base_id === ing.produto_base_id);
         if (existing) {
-          existing.quantidade += ing.quantidade || 0;
+          existing.quantidade += Number(ing.quantidade) || 0;
         } else {
-          acc.push({ ...ing });
+          acc.push({ 
+            ...ing, 
+            quantidade: Number(ing.quantidade) || 0 
+          });
         }
         return acc;
       }, [] as any[]);
@@ -273,35 +281,41 @@ serve(async (req) => {
       // Buscar nome da receita
       const { data: recipeData } = await supabase
         .from('receitas_legado')
-        .select('nome_receita')
-        .eq('receita_id_legado', recipeId)
+        .select('nome_receita, quantidade_refeicoes')
+        .eq('receita_id_legado', recipeId.toString())
         .limit(1)
         .single();
 
       const recipeName = recipeData?.nome_receita || `Receita ${recipeId}`;
+      const baseServings = Number(recipeData?.quantidade_refeicoes) || 100;
 
-      // Calcular custo para cada ingrediente em paralelo
-      const ingredientPromises = uniqueIngredientes.map(async (ingrediente) => {
-        const { produto_base_id, quantidade, nome } = ingrediente;
+      console.log(`📖 Receita: ${recipeName} (base: ${baseServings} porções)`);
+
+      // Calcular custo para cada ingrediente
+      for (const ingrediente of uniqueIngredientes) {
+        const { produto_base_id, quantidade, nome, unidade } = ingrediente;
         
-        if (!produto_base_id || !quantidade) {
-          return { cost: 0, found: false, isZero: false };
+        if (!produto_base_id || !quantidade || quantidade <= 0) {
+          console.log(`⚠️ Ingrediente inválido: ${nome} (ID: ${produto_base_id}, Qtd: ${quantidade})`);
+          continue;
         }
 
         // Verificar se é ingrediente de custo zero
         if (isZeroCostIngredient(nome || '')) {
           zeroCostCount++;
-          return { cost: 0, found: true, isZero: true };
+          foundIngredients++;
+          console.log(`💚 Ingrediente gratuito: ${nome}`);
+          continue;
         }
 
         // Buscar preço no cache
         let preco = cache.get(produto_base_id);
         
         if (!preco) {
-          // Se não está no cache, buscar no banco uma única vez
+          // Se não está no cache, buscar no banco
           const { data: produtoData, error: produtoError } = await supabase
             .from('co_solicitacao_produto_listagem')
-            .select('preco, descricao')
+            .select('preco, descricao, unidade')
             .eq('produto_base_id', produto_base_id)
             .not('preco', 'is', null)
             .gt('preco', 0)
@@ -310,58 +324,59 @@ serve(async (req) => {
             .single();
 
           if (produtoError || !produtoData?.preco) {
-            return { cost: 0, found: false, isZero: false };
+            console.log(`❌ Preço não encontrado para: ${nome} (ID: ${produto_base_id})`);
+            continue;
           }
 
           // Verificar se é produto não-alimentício
           if (isNonFoodProduct(produtoData.descricao || '')) {
-            return { cost: 0, found: true, isZero: true };
+            zeroCostCount++;
+            foundIngredients++;
+            console.log(`🚫 Produto não-alimentício ignorado: ${produtoData.descricao}`);
+            continue;
           }
 
-          preco = produtoData.preco;
+          preco = Number(produtoData.preco);
+          
+          // Validar preço usando limites por categoria
+          const categoria = produtoData.descricao?.toLowerCase() || '';
+          if (!validatePrice(preco, categoria, produtoData.descricao || '')) {
+            console.log(`⚠️ Preço suspeito ignorado: R$ ${preco} para ${nome}`);
+            continue;
+          }
+
           cache.set(produto_base_id, preco);
         }
 
+        // Calcular custo do ingrediente
         const custoIngrediente = preco * quantidade;
         
-        // Aplicar correção inteligente baseada na mediana
-        let custoFinal = custoIngrediente;
+        // Aplicar fator de escala baseado nas porções base da receita
+        const scaleFactor = mealQuantity / baseServings;
+        const custoEscalado = custoIngrediente * scaleFactor;
         
-        // Coletar preços similares para calcular mediana
-        const precosSimilares = Array.from(cache.values()).sort((a, b) => a - b);
-        const mediana = precosSimilares[Math.floor(precosSimilares.length / 2)] || 10;
+        totalCost += custoEscalado;
+        foundIngredients++;
         
-        if (custoIngrediente > mediana * 15) {
-          // Custo muito alto comparado à mediana
-          custoFinal = Math.min(custoIngrediente / 20, mediana * quantidade);
-        }
+        console.log(`💰 ${nome}: ${quantidade} ${unidade} × R$ ${preco.toFixed(2)} = R$ ${custoEscalado.toFixed(2)}`);
+      }
 
-        return { cost: custoFinal, found: true, isZero: false };
-      });
-
-      // Executar todas as consultas em paralelo
-      const results = await Promise.all(ingredientPromises);
-      
-      // Somar todos os custos
-      results.forEach(result => {
-        totalCost += result.cost;
-        if (result.found) foundIngredients++;
-      });
-
-      // Escalar custo para a quantidade desejada
-      const scalingFactor = mealQuantity / 100;
-      const scaledCost = totalCost * scalingFactor;
-      const costPerMeal = scaledCost / mealQuantity;
+      // Calcular resultado final
+      const costPerMeal = mealQuantity > 0 ? totalCost / mealQuantity : 0;
 
       const result = {
-        custo_total: scaledCost,
-        custo_por_refeicao: costPerMeal,
+        custo_total: Number(totalCost.toFixed(2)),
+        custo_por_refeicao: Number(costPerMeal.toFixed(2)),
         ingredientes_encontrados: foundIngredients,
         ingredientes_total: uniqueIngredientes.length,
         ingredientes_custo_zero: zeroCostCount,
         receita_id: recipeId,
-        receita_nome: recipeName
+        receita_nome: recipeName,
+        porcoes_base: baseServings
       };
+
+      console.log(`✅ Custo final: R$ ${result.custo_total} total | R$ ${result.custo_por_refeicao}/refeição`);
+      console.log(`📊 Ingredientes: ${foundIngredients}/${uniqueIngredientes.length} encontrados, ${zeroCostCount} gratuitos`);
 
       // Cache do resultado
       ingredientsCachePerRecipe.set(cacheKey, result);
