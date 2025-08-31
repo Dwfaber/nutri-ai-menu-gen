@@ -7,13 +7,15 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// Estrutura do cardápio com percentuais de orçamento
+// Estrutura do cardápio com categorias reais da base de dados
 const ESTRUTURA_CARDAPIO = {
-  PROTEINA_PRINCIPAL: 0.40,    // 40% do orçamento para proteína principal
-  CARBOIDRATO: 0.25,           // 25% para carboidratos
-  GUARNICAO: 0.15,             // 15% para guarnições
-  SALADA: 0.10,                // 10% para saladas
-  SOBREMESA: 0.10              // 10% para sobremesas
+  "Prato Principal 1": 0.30,   // 30% do orçamento para prato principal 1
+  "Prato Principal 2": 0.20,   // 20% do orçamento para prato principal 2
+  "Guarnição": 0.15,           // 15% para guarnições
+  "Arroz": 0.08,               // 8% para arroz
+  "Feijão": 0.07,              // 7% para feijão
+  "Salada": 0.10,              // 10% para saladas
+  "Sobremesa": 0.10            // 10% para sobremesas
 };
 
 // Cache global para preços dos produtos e ingredientes
@@ -384,27 +386,15 @@ serve(async (req) => {
       return result;
     }
 
-    // Função para buscar receitas por categoria com cache otimizado
+    // Função para buscar receitas por categoria (CORRIGIDA para usar categorias reais da base)
     async function buscarReceitasPorCategoria(categoria, budget, mealQuantity) {
-      const palavrasChave = {
-        CARBOIDRATO: ['ARROZ', 'FEIJÃO', 'MACARRÃO', 'BATATA', 'POLENTA', 'PURÊ', 'FARINHA', 'INHAME', 'MANDIOCA', 'QUINOA'],
-        GUARNICAO: ['REFOGADO', 'COZIDO', 'GRATINADO', 'FAROFA', 'VINAGRETE', 'MOLHO', 'TEMPERO', 'CEBOLA', 'ALHO'],
-        SALADA: ['SALADA', 'TOMATE', 'ALFACE', 'REPOLHO', 'CENOURA', 'PEPINO', 'BETERRABA', 'RÚCULA', 'COUVE'],
-        SOBREMESA: ['DOCE', 'PUDIM', 'GELATINA', 'FRUTA', 'BRIGADEIRO', 'MOUSSE', 'TORTA', 'BOLO', 'COMPOTA'],
-        PROTEINA_SECUNDARIA: ['OVO', 'QUEIJO', 'IOGURTE', 'LEITE', 'RICOTA', 'REQUEIJÃO']
-      };
-
-      const palavras = palavrasChave[categoria] || ['RECEITA'];
-      console.log(`🔍 Buscando receitas para ${categoria} com palavras-chave:`, palavras);
+      console.log(`🔍 Buscando receitas para categoria exata: "${categoria}"`);
       
-      // Buscar por nome da receita OU categoria_descricao
-      const nameConditions = palavras.map(palavra => `nome_receita.ilike.%${palavra}%`).join(',');
-      const categoryConditions = palavras.map(palavra => `categoria_descricao.ilike.%${palavra}%`).join(',');
-      
+      // Primeiro, buscar diretamente por categoria_descricao
       const { data: receitas, error } = await supabase
         .from('receitas_legado')
         .select('receita_id_legado, nome_receita, categoria_descricao, modo_preparo')
-        .or(`${nameConditions},${categoryConditions}`)
+        .ilike('categoria_descricao', `%${categoria}%`)
         .eq('inativa', false)
         .limit(30);
 
@@ -413,26 +403,41 @@ serve(async (req) => {
         return [];
       }
 
-      if (!receitas || receitas.length === 0) {
-        console.warn(`⚠️ Nenhuma receita encontrada para ${categoria}`);
-        
-        // Fallback: buscar qualquer receita que não seja proteína principal
-        if (categoria !== 'PROTEINA_PRINCIPAL') {
-          const { data: fallbackReceitas } = await supabase
-            .from('receitas_legado')
-            .select('receita_id_legado, nome_receita, categoria_descricao, modo_preparo')
-            .eq('inativa', false)
-            .limit(10);
-            
-          console.log(`🔄 Fallback: encontradas ${fallbackReceitas?.length || 0} receitas genéricas para ${categoria}`);
-          return fallbackReceitas || [];
-        }
-        
+      if (receitas && receitas.length > 0) {
+        console.log(`✅ Encontradas ${receitas.length} receitas na categoria "${categoria}"`);
+        return receitas;
+      }
+
+      // Fallback: buscar por palavras-chave no nome se não encontrou pela categoria
+      console.log(`⚠️ Nenhuma receita encontrada na categoria "${categoria}", usando fallback...`);
+      
+      const palavrasChaveFallback = {
+        "Prato Principal 1": ['FRANGO', 'CARNE', 'PEIXE', 'BIFE', 'FILÉ', 'PEITO', 'COXA'],
+        "Prato Principal 2": ['FRANGO', 'CARNE', 'OVO', 'PEIXE', 'LINGUIÇA', 'HAMBURGUER'],
+        "Guarnição": ['REFOGADO', 'COZIDO', 'GRATINADO', 'FAROFA', 'VINAGRETE'],
+        "Arroz": ['ARROZ'],
+        "Feijão": ['FEIJÃO', 'FEIJAO'],
+        "Salada": ['SALADA', 'TOMATE', 'ALFACE', 'REPOLHO', 'CENOURA'],
+        "Sobremesa": ['DOCE', 'PUDIM', 'GELATINA', 'FRUTA', 'BRIGADEIRO', 'MOUSSE']
+      };
+
+      const palavras = palavrasChaveFallback[categoria] || [categoria.split(' ')[0]];
+      const nameConditions = palavras.map(palavra => `nome_receita.ilike.%${palavra}%`).join(',');
+      
+      const { data: fallbackReceitas, error: fallbackError } = await supabase
+        .from('receitas_legado')
+        .select('receita_id_legado, nome_receita, categoria_descricao, modo_preparo')
+        .or(nameConditions)
+        .eq('inativa', false)
+        .limit(20);
+
+      if (fallbackError) {
+        console.error(`❌ Erro no fallback para ${categoria}:`, fallbackError);
         return [];
       }
 
-      console.log(`✅ Encontradas ${receitas.length} receitas para ${categoria}`);
-      return receitas;
+      console.log(`🔄 Fallback: encontradas ${fallbackReceitas?.length || 0} receitas para "${categoria}"`);
+      return fallbackReceitas || [];
     }
 
     // Função para buscar proteínas dinâmicas
@@ -531,14 +536,33 @@ serve(async (req) => {
       return shoppingList.sort((a, b) => b.custo_total - a.custo_total);
     }
 
-    // Função para calcular dias do período
+    // Função para calcular dias do período (CORRIGIDA para formato brasileiro)
     function calculateDaysFromPeriod(period: string): number {
       if (!period) return 7;
       
       const periodLower = period.toLowerCase().trim();
       console.log(`📅 Processando período: "${period}" -> "${periodLower}"`);
       
-      // Detectar diferentes formatos de período
+      // Detectar formato DD/MM a DD/MM/YYYY (formato brasileiro)
+      const brazilianDatePattern = /(\d{1,2})\/(\d{1,2})\s*a\s*(\d{1,2})\/(\d{1,2})\/(\d{4})/;
+      const match = period.match(brazilianDatePattern);
+      
+      if (match) {
+        const [, startDay, startMonth, endDay, endMonth, year] = match;
+        
+        // Criar datas de início e fim
+        const startDate = new Date(parseInt(year), parseInt(startMonth) - 1, parseInt(startDay));
+        const endDate = new Date(parseInt(year), parseInt(endMonth) - 1, parseInt(endDay));
+        
+        // Calcular diferença em dias
+        const diffTime = endDate.getTime() - startDate.getTime();
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1; // +1 para incluir o último dia
+        
+        console.log(`🗓️ Período brasileiro detectado: ${startDay}/${startMonth} a ${endDay}/${endMonth}/${year} = ${diffDays} dias`);
+        return diffDays;
+      }
+      
+      // Detectar outros formatos comuns
       if (periodLower.includes('semana')) {
         const weeks = parseInt(period.match(/\d+/)?.[0] || '1');
         const days = weeks * 7;
@@ -596,25 +620,10 @@ serve(async (req) => {
         const receitasDoDia = [];
         let custoDiario = 0;
 
-        // Selecionar proteína principal (rotação inteligente)
-        const proteinaIndex = (dia - 1) % proteinasDisponiveis.length;
-        const proteinaPrincipal = proteinasDisponiveis[proteinaIndex];
-        
-        if (proteinaPrincipal) {
-          const custoPP = await calculateSimpleCost(proteinaPrincipal.receita_id, mealQuantity);
-          if (custoPP && custoPP.custo_por_refeicao <= dailyBudget * 0.4) {
-            receitasDoDia.push({
-              ...proteinaPrincipal,
-              categoria: 'PROTEINA_PRINCIPAL',
-              custo_calculado: custoPP
-            });
-            custoDiario += custoPP.custo_total || 0;
-          }
-        }
+        // Nota: Proteínas já serão buscadas junto com as outras categorias via ESTRUTURA_CARDAPIO
 
-        // Buscar outras categorias em paralelo com orçamento específico
+        // Buscar todas as categorias da estrutura do cardápio
         const categoriesPromises = Object.keys(ESTRUTURA_CARDAPIO)
-          .filter(cat => cat !== 'PROTEINA_PRINCIPAL')
           .map(async (categoria) => {
             const budgetPorCategoria = dailyBudget * ESTRUTURA_CARDAPIO[categoria];
             console.log(`💰 ${categoria}: Orçamento R$ ${budgetPorCategoria.toFixed(2)}/refeição`);
