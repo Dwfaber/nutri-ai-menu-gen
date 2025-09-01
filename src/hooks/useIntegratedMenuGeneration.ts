@@ -186,13 +186,15 @@ export const useIntegratedMenuGeneration = () => {
           let finalCategory = mapped;
           if (mapped === 'Salada') finalCategory = categorizeSalad(recipe.nome_receita || '', idx);
           if (mapped === 'Suco') finalCategory = categorizeJuice(recipe.nome_receita || '', idx);
-          const s = String(recipe.day || '').toLowerCase();
-          const normalizedDay = s.includes('seg') ? 'Segunda'
-            : (s.includes('terç') || s.includes('terc') || s === 'terca') ? 'Terça'
-            : s.includes('qua') ? 'Quarta'
-            : s.includes('qui') ? 'Quinta'
-            : s.includes('sex') ? 'Sexta'
-            : 'Segunda';
+          const s = String(recipe.day || recipe.dia || '').toLowerCase();
+          const normalizedDay = s.includes('seg') ? 'Segunda-feira'
+            : (s.includes('terç') || s.includes('terc') || s === 'terca') ? 'Terça-feira'
+            : s.includes('qua') ? 'Quarta-feira'
+            : s.includes('qui') ? 'Quinta-feira'
+            : s.includes('sex') ? 'Sexta-feira'
+            : s.includes('sab') ? 'Sábado'
+            : s.includes('dom') ? 'Domingo'
+            : 'Segunda-feira';
           return {
             id: recipe.receita_id_legado,
             name: recipe.nome_receita,

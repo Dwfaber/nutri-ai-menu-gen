@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -7,6 +7,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { cn } from '@/lib/utils';
 import { format, startOfWeek, endOfWeek, parseISO, isValid } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { DayNavigator } from './DayNavigator';
 
 interface Ingredient {
   name: string;
@@ -90,13 +91,42 @@ const WeeklyMenuView: React.FC<WeeklyMenuViewProps> = ({
   onExport,
   onCopy
 }) => {
+  // Estado para navegação por dias
+  const [selectedDay, setSelectedDay] = useState<string>('');
+  
+  // Dias disponíveis nas receitas
+  const availableDays = useMemo(() => {
+    const days = [...new Set(recipes.map(r => r.day).filter(Boolean))];
+    const sortedDays = ['Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado', 'Domingo']
+      .filter(day => days.includes(day));
+    return sortedDays;
+  }, [recipes]);
+  
+  // Inicializar com o primeiro dia disponível
+  React.useEffect(() => {
+    if (availableDays.length > 0 && !selectedDay) {
+      setSelectedDay(availableDays[0]);
+    }
+  }, [availableDays, selectedDay]);
+  
+  // Filtrar receitas pelo dia selecionado
+  const filteredRecipes = useMemo(() => {
+    if (!selectedDay) return recipes;
+    return recipes.filter(recipe => recipe.day === selectedDay);
+  }, [recipes, selectedDay]);
+  
+  // Para exibição direta do dia selecionado sem agrupamento por semana
+  const dayRecipes = useMemo(() => {
+    return filteredRecipes;
+  }, [filteredRecipes]);
+
   const weekGroups = useMemo(() => {
-    if (!recipes || recipes.length === 0) return [];
+    if (!filteredRecipes || filteredRecipes.length === 0) return [];
 
     // Agrupa receitas por semana
     const recipesByWeek = new Map<string, MenuRecipe[]>();
     
-    recipes.forEach(recipe => {
+    filteredRecipes.forEach(recipe => {
       if (!recipe.day) return;
       
       try {
@@ -182,16 +212,16 @@ const WeeklyMenuView: React.FC<WeeklyMenuViewProps> = ({
     return dayRecipes.reduce((sum, recipe) => sum + (recipe.cost || 0), 0);
   };
 
-  const totalCost = recipes.reduce((sum, recipe) => sum + (recipe.cost || 0), 0);
-  const totalRecipes = recipes.length;
-  const totalServings = recipes.reduce((sum, recipe) => sum + (recipe.servings || 0), 0);
+  const totalCost = filteredRecipes.reduce((sum, recipe) => sum + (recipe.cost || 0), 0);
+  const totalRecipes = filteredRecipes.length;
+  const totalServings = filteredRecipes.reduce((sum, recipe) => sum + (recipe.servings || 0), 0);
 
   return (
     <Card className="w-full">
       <CardHeader>
         <div className="flex justify-between items-start">
           <div>
-            <CardTitle className="text-xl font-bold">CARDÁPIO</CardTitle>
+            <CardTitle className="text-xl font-bold">CARDÁPIO - {selectedDay?.toUpperCase()}</CardTitle>
             <p className="text-sm text-muted-foreground mt-1">GRAMAGEM: {gramWeight}</p>
           </div>
           <div className="flex items-center gap-2">
@@ -217,151 +247,129 @@ const WeeklyMenuView: React.FC<WeeklyMenuViewProps> = ({
             </div>
           </div>
         </div>
+        
+        {/* Navegador de dias */}
+        {availableDays.length > 1 && (
+          <div className="mt-4">
+            <DayNavigator
+              currentDay={selectedDay}
+              availableDays={availableDays}
+              onDayChange={setSelectedDay}
+            />
+          </div>
+        )}
       </CardHeader>
       <CardContent className="space-y-4">
-        {weekGroups.length === 0 ? (
+        {filteredRecipes.length === 0 ? (
           <div className="text-center py-8 text-muted-foreground">
-            <p>Nenhuma receita encontrada</p>
+            <p>Nenhuma receita encontrada para {selectedDay}</p>
           </div>
         ) : (
-          weekGroups.map((week, weekIndex) => {
-            const days = getDaysFromWeek(week.recipes);
+          <div className="border rounded-lg p-4 bg-background">
+            <div className="flex justify-between items-center mb-3">
+              <h4 className="font-semibold text-lg">{selectedDay?.toUpperCase()}</h4>
+              <Badge variant="secondary" className="font-medium">
+                R$ {totalCost.toFixed(2)}
+              </Badge>
+            </div>
             
-            return (
-              <Collapsible key={week.weekPeriod} defaultOpen={weekIndex === 0}>
-                <CollapsibleTrigger asChild>
-                  <Button 
-                    variant="outline" 
-                    className="w-full justify-between p-4 h-auto hover:bg-muted/50"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="text-left">
-                        <p className="font-semibold">Semana de {week.weekPeriod}</p>
-                        <p className="text-sm text-muted-foreground">
-                          {week.recipes.length} receitas • R$ {week.totalCost.toFixed(2)}
-                        </p>
-                      </div>
-                    </div>
-                    <ChevronDown className="h-4 w-4 shrink-0 transition-transform duration-200" />
-                  </Button>
-                </CollapsibleTrigger>
+            <div className="space-y-3">
+              {NEW_MENU_CATEGORIES.map((category) => {
+                const categoryRecipes = filteredRecipes.filter(recipe => recipe.category === category);
                 
-                <CollapsibleContent className="space-y-4 mt-4">
-                  {days.map((day) => {
-                    const dayCost = getDayCost(day.recipes);
-                    
-                    return (
-                      <div key={day.dayName} className="border rounded-lg p-4 bg-background">
-                        <div className="flex justify-between items-center mb-3">
-                          <h4 className="font-semibold text-lg">{day.dayName.toUpperCase()}</h4>
-                          <Badge variant="secondary" className="font-medium">
-                            R$ {dayCost.toFixed(2)}
-                          </Badge>
-                        </div>
-                        
-                         <div className="space-y-3">
-                           {NEW_MENU_CATEGORIES.map((category) => {
-                             const categoryRecipes = day.recipes.filter(recipe => recipe.category === category);
-                             
-                              // SEMPRE MOSTRAR ARROZ E FEIJÃO, mesmo sem receitas
-                              if (categoryRecipes.length === 0 && !['Arroz Branco', 'Feijão'].includes(category)) return null;
+                // SEMPRE MOSTRAR ARROZ E FEIJÃO, mesmo sem receitas
+                if (categoryRecipes.length === 0 && !['Arroz Branco', 'Feijão'].includes(category)) return null;
+              
+                return (
+                  <div key={category} className="space-y-2">
+                    {/* Se há receitas, mostrar normalmente */}
+                    {categoryRecipes.length > 0 ? (
+                      categoryRecipes.map((recipe, index) => (
+                        <div key={`${recipe.id}-${index}`} className="flex items-center justify-between p-3 rounded-lg border bg-card hover:bg-muted/50 transition-colors">
+                          <div className="flex items-center gap-3 flex-1">
+                            <Badge 
+                              variant="outline" 
+                              className={cn(
+                                "shrink-0 font-medium", 
+                                recipe.placeholder ? 'bg-amber-100 text-amber-800 border-amber-300' : 
+                                CATEGORY_COLORS[category] || 'bg-gray-100 text-gray-800'
+                              )}
+                            >
+                              {CATEGORY_DISPLAY_NAMES[category] || category}
+                            </Badge>
                             
-                             return (
-                               <div key={category} className="space-y-2">
-                                 {/* Se há receitas, mostrar normalmente */}
-                                 {categoryRecipes.length > 0 ? (
-                                   categoryRecipes.map((recipe, index) => (
-                                     <div key={`${recipe.id}-${index}`} className="flex items-center justify-between p-3 rounded-lg border bg-card hover:bg-muted/50 transition-colors">
-                                       <div className="flex items-center gap-3 flex-1">
-                                         <Badge 
-                                           variant="outline" 
-                                           className={cn(
-                                             "shrink-0 font-medium", 
-                                             recipe.placeholder ? 'bg-amber-100 text-amber-800 border-amber-300' : 
-                                             CATEGORY_COLORS[category] || 'bg-gray-100 text-gray-800'
-                                           )}
-                                         >
-                                           {CATEGORY_DISPLAY_NAMES[category] || category}
-                                         </Badge>
-                                         
-                                         <div className="flex-1">
-                                           <p className="font-medium leading-tight">
-                                             {recipe.name}
-                                             {recipe.placeholder && <span className="ml-2 text-xs text-amber-600">(Placeholder)</span>}
-                                           </p>
-                                           <p className="text-sm text-muted-foreground">
-                                             {recipe.servings} porções
-                                           </p>
-                                           
-                                           {recipe.observacao && (
-                                             <p className="text-xs text-amber-600 mt-1">
-                                               ⚠️ {recipe.observacao}
-                                             </p>
-                                           )}
-                                           
-                                           {recipe.ingredients && recipe.ingredients.length > 0 && (
-                                             <div className="mt-1">
-                                               <p className="text-xs text-muted-foreground">
-                                                 {recipe.ingredients.slice(0, 2).map(ing => ing.name).join(', ')}
-                                                 {recipe.ingredients.length > 2 && ` +${recipe.ingredients.length - 2}`}
-                                               </p>
-                                             </div>
-                                           )}
-                                         </div>
-                                       </div>
-                                       
-                                       <div className="text-right">
-                                         <p className={cn(
-                                           "font-bold text-lg",
-                                           recipe.cost > 0 ? "text-green-600" : "text-amber-600"
-                                         )}>
-                                           R$ {recipe.cost.toFixed(2)}
-                                         </p>
-                                       </div>
-                                     </div>
-                                   ))
-                                  ) : (
-                                    /* Placeholder para ARROZ E FEIJÃO quando não há receitas */
-                                    ['Arroz Branco', 'Feijão'].includes(category) && (
-                                     <div className="flex items-center justify-between p-3 rounded-lg border bg-amber-50 border-amber-200">
-                                       <div className="flex items-center gap-3 flex-1">
-                                         <Badge 
-                                           variant="outline" 
-                                           className="shrink-0 font-medium bg-amber-100 text-amber-800 border-amber-300"
-                                         >
-                                           {CATEGORY_DISPLAY_NAMES[category] || category}
-                                         </Badge>
-                                         
-                                          <div className="flex-1">
-                                            <p className="font-medium leading-tight text-amber-800">
-                                              {category === 'Arroz Branco' ? 'ARROZ BRANCO' : 'FEIJÃO MIX - CARIOCA + BANDINHA 50%'}
-                                              <span className="ml-2 text-xs">(Receita não encontrada)</span>
-                                            </p>
-                                           <p className="text-sm text-amber-600">
-                                             ⚠️ Aguardando configuração de receita
-                                           </p>
-                                         </div>
-                                       </div>
-                                       
-                                       <div className="text-right">
-                                         <p className="font-bold text-lg text-amber-600">
-                                           R$ 0,00
-                                         </p>
-                                       </div>
-                                     </div>
-                                   )
-                                 )}
-                               </div>
-                             );
-                          })}
+                            <div className="flex-1">
+                              <p className="font-medium leading-tight">
+                                {recipe.name}
+                                {recipe.placeholder && <span className="ml-2 text-xs text-amber-600">(Placeholder)</span>}
+                              </p>
+                              <p className="text-sm text-muted-foreground">
+                                {recipe.servings} porções
+                              </p>
+                              
+                              {recipe.observacao && (
+                                <p className="text-xs text-amber-600 mt-1">
+                                  ⚠️ {recipe.observacao}
+                                </p>
+                              )}
+                              
+                              {recipe.ingredients && recipe.ingredients.length > 0 && (
+                                <div className="mt-1">
+                                  <p className="text-xs text-muted-foreground">
+                                    {recipe.ingredients.slice(0, 2).map(ing => ing.name).join(', ')}
+                                    {recipe.ingredients.length > 2 && ` +${recipe.ingredients.length - 2}`}
+                                  </p>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                          
+                          <div className="text-right">
+                            <p className={cn(
+                              "font-bold text-lg",
+                              recipe.cost > 0 ? "text-green-600" : "text-amber-600"
+                            )}>
+                              R$ {recipe.cost.toFixed(2)}
+                            </p>
+                          </div>
                         </div>
-                      </div>
-                    );
-                  })}
-                </CollapsibleContent>
-              </Collapsible>
-            );
-          })
+                      ))
+                     ) : (
+                       /* Placeholder para ARROZ E FEIJÃO quando não há receitas */
+                       ['Arroz Branco', 'Feijão'].includes(category) && (
+                        <div className="flex items-center justify-between p-3 rounded-lg border bg-amber-50 border-amber-200">
+                          <div className="flex items-center gap-3 flex-1">
+                            <Badge 
+                              variant="outline" 
+                              className="shrink-0 font-medium bg-amber-100 text-amber-800 border-amber-300"
+                            >
+                              {CATEGORY_DISPLAY_NAMES[category] || category}
+                            </Badge>
+                            
+                             <div className="flex-1">
+                               <p className="font-medium leading-tight text-amber-800">
+                                 {category === 'Arroz Branco' ? 'ARROZ BRANCO' : 'FEIJÃO MIX - CARIOCA + BANDINHA 50%'}
+                                 <span className="ml-2 text-xs">(Receita não encontrada)</span>
+                               </p>
+                              <p className="text-sm text-amber-600">
+                                ⚠️ Aguardando configuração de receita
+                              </p>
+                            </div>
+                          </div>
+                          
+                          <div className="text-right">
+                            <p className="font-bold text-lg text-amber-600">
+                              R$ 0,00
+                            </p>
+                          </div>
+                        </div>
+                      )
+                    )}
+                  </div>
+                );
+             })}
+            </div>
+          </div>
         )}
         
         {/* Summary */}
