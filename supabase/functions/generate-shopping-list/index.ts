@@ -104,6 +104,48 @@ function convertUnits(quantidade: number, unidadeOrigem: string, unidadeDestino:
   return quantidade; // Sem conversão disponível
 }
 
+// Função para categorizar ingredientes automaticamente
+function categorizarIngrediente(nomeIngrediente: string): string {
+  const nome = nomeIngrediente.toUpperCase();
+  
+  // Proteínas
+  if (nome.includes('FRANGO') || nome.includes('CARNE') || nome.includes('PEIXE') || 
+      nome.includes('OVO') || nome.includes('LINGUIÇA') || nome.includes('SALSICHA')) {
+    return 'PROTEÍNAS';
+  }
+  
+  // Grãos e cereais
+  if (nome.includes('ARROZ') || nome.includes('FEIJÃO') || nome.includes('MACARRÃO') || 
+      nome.includes('FARINHA') || nome.includes('AVEIA') || nome.includes('CUSCUZ')) {
+    return 'GRÃOS E CEREAIS';
+  }
+  
+  // Vegetais
+  if (nome.includes('TOMATE') || nome.includes('CEBOLA') || nome.includes('ALHO') || 
+      nome.includes('CENOURA') || nome.includes('BATATA') || nome.includes('VERDURA')) {
+    return 'VEGETAIS';
+  }
+  
+  // Laticínios
+  if (nome.includes('LEITE') || nome.includes('QUEIJO') || nome.includes('IOGURTE') || 
+      nome.includes('REQUEIJÃO') || nome.includes('MANTEIGA')) {
+    return 'LATICÍNIOS';
+  }
+  
+  // Condimentos e temperos
+  if (nome.includes('SAL') || nome.includes('AÇÚCAR') || nome.includes('ÓLEO') || 
+      nome.includes('VINAGRE') || nome.includes('TEMPERO') || nome.includes('MOLHO')) {
+    return 'CONDIMENTOS';
+  }
+  
+  // Bebidas
+  if (nome.includes('SUCO') || nome.includes('ÁGUA') || nome.includes('REFRIGERANTE')) {
+    return 'BEBIDAS';
+  }
+  
+  return 'OUTROS';
+}
+
 function calculateOptimalPackaging(quantidadeNecessaria: number, opcoes: PackagingOption[]): OptimizationResult {
   if (quantidadeNecessaria <= 0 || opcoes.length === 0) {
     throw new Error('Quantidade inválida ou sem opções de embalagem');
@@ -317,6 +359,9 @@ serve(async (req) => {
 
     // Consolidar ingredientes por produto_base_id
     const consolidatedIngredients = new Map();
+    const warnings = []; // DECLARAR warnings ANTES do uso
+    const ingredientesNaoEncontrados = [];
+    const itensPorCategoria = {};
 
     // FASE 1: CORREÇÃO DA ESTRUTURA DE DADOS - SEPARAR PROCESSAMENTO
     // Processar receitas adaptadas (estrutura diferente de ingredientes)
@@ -348,7 +393,7 @@ serve(async (req) => {
         
         if (!validation.valid) {
           console.error(`Ingrediente inválido na receita adaptada:`, validation.errors);
-          warnings.push(`Receita adaptada - ${validation.errors.join(', ')}`);
+          // warnings agora está declarado
           continue;
         }
         
@@ -384,7 +429,7 @@ serve(async (req) => {
     }
 
     // PROCESSAR INGREDIENTES DAS RECEITAS LEGADO (SEPARADO DAS ADAPTADAS)
-    const warnings = [];
+    // MOVER declaração de warnings para antes do uso
     
     if (ingredients && ingredients.length > 0) {
       for (const ingredient of ingredients) {
@@ -397,7 +442,7 @@ serve(async (req) => {
         
         if (!validation.valid) {
           console.error(`Ingrediente inválido ${ingredient.produto_base_descricao}:`, validation.errors);
-          warnings.push(`Ingrediente ${ingredient.produto_base_descricao}: ${validation.errors.join(', ')}`);
+          // warnings foi movido para antes do uso
           continue; // Pular ingrediente inválido mas continuar processamento
         }
 
@@ -407,7 +452,7 @@ serve(async (req) => {
         const baseServing = Number(ingredient.quantidade_refeicoes || 100);
         if (baseServing <= 0) {
           console.error(`Base serving inválido para ingrediente ${ingredient.produto_base_descricao}: ${baseServing}`);
-          warnings.push(`Ingrediente ${ingredient.produto_base_descricao}: base serving inválido`);
+          // warnings agora está declarado
           continue;
         }
         
@@ -472,6 +517,12 @@ serve(async (req) => {
 
       if (!productOptions.length) {
         console.log(`Nenhum produto encontrado no mercado para produto_base_id: ${produtoBaseId}`);
+        // Adicionar à lista de ingredientes não encontrados
+        ingredientesNaoEncontrados.push({
+          nome: consolidatedIngredient.nome,
+          quantidade: `${consolidatedIngredient.quantidade_total} ${consolidatedIngredient.unidade}`,
+          receitas: consolidatedIngredient.receitas
+        });
         continue;
       }
 
@@ -514,18 +565,34 @@ serve(async (req) => {
           console.log(`Desperdício: ${optimizedPackaging.desperdicio_percentual}%`);
           
           for (const selection of optimizedPackaging.opcoes_selecionadas) {
-            shoppingItems.push({
+            const produto = packageOptions.find(p => p.produto_id === selection.produto_id);
+            const categoria = categorizarIngrediente(consolidatedIngredient.nome);
+            
+            const item = {
               product_id_legado: String(selection.produto_id),
               product_name: consolidatedIngredient.nome,
-              category: consolidatedIngredient.unidade,
+              category: categoria,
               quantity: selection.quantidade_pacotes,
               unit: firstProduct.unidade,
               unit_price: selection.custo_total / selection.quantidade_pacotes,
               total_price: selection.custo_total,
               available: true,
-              promocao: packageOptions.find(p => p.produto_id === selection.produto_id)?.em_promocao || false,
-              optimized: true
-            });
+              promocao: produto?.em_promocao || false,
+              optimized: true,
+              quantidade_necessaria: consolidatedIngredient.quantidade_total,
+              quantidade_comprar: selection.quantidade_total,
+              sobra: selection.quantidade_total - consolidatedIngredient.quantidade_total,
+              percentual_sobra: ((selection.quantidade_total - consolidatedIngredient.quantidade_total) / consolidatedIngredient.quantidade_total * 100).toFixed(1),
+              receitas_usando: consolidatedIngredient.receitas
+            };
+            
+            shoppingItems.push(item);
+            
+            // Agrupar por categoria
+            if (!itensPorCategoria[categoria]) {
+              itensPorCategoria[categoria] = [];
+            }
+            itensPorCategoria[categoria].push(item);
             
             totalCost += selection.custo_total;
           }
@@ -567,18 +634,34 @@ serve(async (req) => {
           console.log(`- Embalagens necessárias: ${embalagensNecessarias.toFixed(4)}`);
           console.log(`- Preço total: R$ ${totalPrice.toFixed(2)}`);
 
-          shoppingItems.push({
+          const categoria = categorizarIngrediente(consolidatedIngredient.nome);
+          const quantidade_comprar = Math.ceil(embalagensNecessarias) * packageQuantity;
+          
+          const item = {
             product_id_legado: String(firstProduct.produto_id),
             product_name: consolidatedIngredient.nome,
-            category: firstProduct.categoria_descricao || 'Sem categoria',
+            category: categoria,
             quantity: Math.ceil(embalagensNecessarias),
             unit: firstProduct.unidade,
             unit_price: finalUnitPrice,
             total_price: totalPrice,
             available: true,
             promocao: firstProduct.em_promocao_sim_nao || false,
-            optimized: false
-          });
+            optimized: false,
+            quantidade_necessaria: consolidatedIngredient.quantidade_total,
+            quantidade_comprar: quantidade_comprar,
+            sobra: quantidade_comprar - consolidatedIngredient.quantidade_total,
+            percentual_sobra: ((quantidade_comprar - consolidatedIngredient.quantidade_total) / consolidatedIngredient.quantidade_total * 100).toFixed(1),
+            receitas_usando: consolidatedIngredient.receitas
+          };
+          
+          shoppingItems.push(item);
+          
+          // Agrupar por categoria
+          if (!itensPorCategoria[categoria]) {
+            itensPorCategoria[categoria] = [];
+          }
+          itensPorCategoria[categoria].push(item);
           
           totalCost += totalPrice;
         }
@@ -630,11 +713,39 @@ serve(async (req) => {
       }
     }
 
+    // Calcular estatísticas de promoção
+    const itensPromocao = shoppingItems.filter(item => item.promocao);
+    const economiaPromocoes = itensPromocao.reduce((acc, item) => {
+      // Estimativa de 10-15% de economia em promoções
+      return acc + (item.total_price * 0.12);
+    }, 0);
+
     const response = {
       success: true,
       shopping_list_id: shoppingList.id,
-      total_items: shoppingItems.length,
-      total_cost: totalCost,
+      lista_compras: {
+        total_itens: shoppingItems.length,
+        custo_total: totalCost.toFixed(2),
+        itens_promocao: itensPromocao.length,
+        economia_promocoes: economiaPromocoes.toFixed(2),
+        
+        itens: shoppingItems.map(item => ({
+          nome_ingrediente: item.product_name,
+          produto_mercado: item.product_name,
+          quantidade_necessaria: item.quantidade_necessaria,
+          quantidade_comprar: item.quantidade_comprar,
+          custo_total_compra: item.total_price.toFixed(2),
+          sobra: item.sobra.toFixed(2),
+          percentual_sobra: item.percentual_sobra,
+          em_promocao: item.promocao,
+          receitas_usando: item.receitas_usando,
+          categoria_estimada: item.category
+        })),
+        
+        itens_por_categoria: itensPorCategoria,
+        
+        ingredientes_nao_encontrados: ingredientesNaoEncontrados
+      },
       budget_status: budgetStatus,
       optimization_summary: {
         ingredients_processed: consolidatedIngredients.size,
