@@ -387,6 +387,7 @@ export const useIntegratedMenuGeneration = () => {
       // Payload padronizado - incluindo receitas base obrigatórias
       const payload = {
         action: 'generate_menu',
+        client_id: clientToUse.id, // UUID único do cliente
         filialIdLegado: legacyId,
         period: weekPeriod, // Período no formato brasileiro DD/MM/YYYY a DD/MM/YYYY
         numDays: 7, // Sempre 7 dias para cardápio semanal
