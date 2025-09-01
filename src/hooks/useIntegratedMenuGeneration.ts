@@ -496,20 +496,23 @@ export const useIntegratedMenuGeneration = () => {
       // Mapear receitas do formato real da Edge Function
       let receitasExtraidas = [];
       
-      // FORMATO SIMPLES: data.cardapio é array direto de receitas
-      if (Array.isArray(data.cardapio) && data.cardapio.every((r: any) => r.nome || r.categoria)) {
+      // FORMATO SIMPLES: array direto de receitas (novo backend)
+      if (Array.isArray(data.cardapio) && data.cardapio.length > 0 && 
+          data.cardapio.every((r: any) => r.nome || r.categoria)) {
         console.log('✅ Formato simples de receitas:', data.cardapio.length);
         receitasExtraidas = data.cardapio;
-      }
-      // FORMATO POR DIAS: data.cardapio é um array de objetos de dias
-      else if (Array.isArray(data.cardapio) && data.cardapio.every((d: any) => d.receitas)) {
+      } 
+      // FORMATO POR DIAS: array de objetos de dias com receitas
+      else if (Array.isArray(data.cardapio) && data.cardapio.length > 0 && 
+               data.cardapio.every((d: any) => Array.isArray(d.receitas))) {
         console.log('✅ Formato por dias:', data.cardapio.length);
-        receitasExtraidas = data.cardapio.flatMap((diaObj: any) => 
+        receitasExtraidas = data.cardapio.flatMap((diaObj: any) =>
           (diaObj.receitas || []).map((receita: any) => ({
             ...receita,
             dia: diaObj.dia || receita.dia || 'Segunda-feira'
           }))
         );
+        console.log('✅ Extraído', receitasExtraidas.length, 'receitas do formato dias');
         console.log('✅ Extraído', receitasExtraidas.length, 'receitas do novo formato de dias');
       }
       // FORMATO LEGADO: data.cardapio.receitas 
