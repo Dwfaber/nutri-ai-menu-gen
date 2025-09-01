@@ -369,8 +369,9 @@ export const useIntegratedMenuGeneration = () => {
       const payload = {
         action: 'generate_menu',
         filialIdLegado: legacyId,
-        numDays: requestedNumDays,
-        refeicoesPorDia: mpd,
+        period: weekPeriod, // Send correct period
+        numDays: 7, // Always 7 days for weekly menu
+        mealQuantity: mpd, // Use mealQuantity instead of refeicoesPorDia
         useDiaEspecial: false,
         baseRecipes: {
           arroz: 580,    // ARROZ BRANCO

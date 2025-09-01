@@ -603,7 +603,7 @@ serve(async (req) => {
       
       // Calcular período dinamicamente
       const totalDaysToGenerate = calculateDaysFromPeriod(requestData.period || '1 semana');
-      const mealQuantity = requestData.mealQuantity || 100;
+      const mealQuantity = requestData.mealQuantity || requestData.refeicoesPorDia || 100;
       const dailyBudget = filialBudget.RefCustoSegunda || 5.0;
       
       console.log(`🗓️ Gerando cardápio para ${totalDaysToGenerate} dias, ${mealQuantity} refeições/dia`);
@@ -629,7 +629,7 @@ serve(async (req) => {
             console.log(`💰 ${categoria}: Orçamento R$ ${budgetPorCategoria.toFixed(2)}/refeição`);
             
             const receitas = await buscarReceitasPorCategoria(categoria, budgetPorCategoria, mealQuantity);
-            if (receitas.length > 0) {
+            if (receitas && receitas.length > 0) {
               // Rotação inteligente das receitas
               const receitaIndex = (dia - 1) % receitas.length;
               const receita = receitas[receitaIndex];
@@ -644,6 +644,28 @@ serve(async (req) => {
                 };
               } else {
                 console.warn(`⚠️ ${categoria}: Custo muito alto R$ ${custo?.custo_por_refeicao?.toFixed(2) || 'N/A'}/refeição`);
+              }
+            } else {
+              console.log(`⚠️ Nenhuma receita encontrada para categoria: ${categoria}`);
+              // Fallback para buscar qualquer receita ativa
+              const fallbackReceitas = await supabase
+                .from('receitas_legado')
+                .select('*')
+                .eq('inativa', false)
+                .limit(5);
+              
+              if (fallbackReceitas.data && fallbackReceitas.data.length > 0) {
+                const receitaFallback = fallbackReceitas.data[Math.floor(Math.random() * fallbackReceitas.data.length)];
+                const custo = await calculateSimpleCost(receitaFallback.receita_id_legado, mealQuantity);
+                
+                if (custo && custo.custo_por_refeicao > 0) {
+                  console.log(`🔄 Fallback: ${receitaFallback.nome_receita} - R$ ${custo.custo_por_refeicao.toFixed(2)}/refeição`);
+                  return {
+                    ...receitaFallback,
+                    categoria,
+                    custo_calculado: custo
+                  };
+                }
               }
             }
             return null;
