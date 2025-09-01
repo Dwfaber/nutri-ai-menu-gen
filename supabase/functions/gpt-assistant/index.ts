@@ -521,6 +521,73 @@ Deno.serve(async (req) => {
         console.log(`💰 Custo médio: R$ ${custoMedioPorRefeicao.toFixed(2)}/refeição`);
         console.log(`💰 Economia: R$ ${((budget - custoMedioPorRefeicao) * mealQuantity * numDays).toFixed(2)}`);
         
+        // ========== SALVAMENTO AUTOMÁTICO NO BANCO ==========
+        console.log('💾 Salvando cardápio no banco de dados...');
+        
+        try {
+          // Extrair receitas de todos os dias para o campo receitas_adaptadas
+          const todasReceitas = cardapioPorDia.flatMap(dia => 
+            dia.receitas.map(receita => ({
+              receita_id: receita.id,
+              nome: receita.nome,
+              categoria: receita.categoria,
+              dia: dia.dia,
+              custo_por_refeicao: receita.custo_por_refeicao,
+              custo_total: receita.custo_total,
+              porcoes: receita.porcoes
+            }))
+          );
+          
+          // Calcular IDs das receitas para o campo receitas_ids
+          const receitasIds = todasReceitas
+            .map(r => r.receita_id)
+            .filter(id => id && !String(id).startsWith('placeholder'))
+            .map(id => parseInt(id))
+            .filter(id => !isNaN(id));
+          
+          // Preparar dados para insert
+          const menuData = {
+            client_id: String(filialId || 'demo'),
+            client_name: dadosFilial?.nome_filial || clientName,
+            week_period: `${cardapioPorDia[0]?.data} - ${cardapioPorDia[cardapioPorDia.length - 1]?.data}`,
+            total_cost: parseFloat(custoTotalPeriodo.toFixed(2)),
+            cost_per_meal: parseFloat(custoMedioPorRefeicao.toFixed(2)),
+            total_recipes: todasReceitas.length,
+            status: 'pending_approval',
+            receitas_adaptadas: todasReceitas,
+            receitas_ids: receitasIds.length > 0 ? receitasIds : null
+          };
+          
+          console.log('📊 Dados do cardápio para salvar:', {
+            client_name: menuData.client_name,
+            total_recipes: menuData.total_recipes,
+            total_cost: menuData.total_cost,
+            receitas_ids_count: receitasIds.length
+          });
+          
+          // Inserir no banco
+          const { data: savedMenu, error: saveError } = await supabase
+            .from('generated_menus')
+            .insert(menuData)
+            .select()
+            .single();
+          
+          if (saveError) {
+            console.error('❌ Erro ao salvar cardápio:', saveError);
+          } else {
+            console.log('✅ Cardápio salvo com sucesso! ID:', savedMenu.id);
+            
+            // Adicionar ID do cardápio salvo na resposta
+            response.menu_id = savedMenu.id;
+            response.saved_to_database = true;
+          }
+          
+        } catch (saveError) {
+          console.error('❌ Erro ao salvar no banco:', saveError);
+          // Não falhar a operação, apenas avisar
+          response.save_warning = 'Cardápio gerado mas não foi salvo automaticamente';
+        }
+        
         return new Response(
           JSON.stringify(response),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
