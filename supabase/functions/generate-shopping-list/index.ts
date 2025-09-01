@@ -331,7 +331,8 @@ class ShoppingListGeneratorFixed {
       sobra = qtdComprar - qtdNecessaria;
     } else {
       qtdComprar = qtdNecessaria;
-      custoTotal = qtdNecessaria * (precoUnitario / embalagem);
+      // Corrigido: preço unitário já é por embalagem, multiplicamos direto pela quantidade
+      custoTotal = qtdNecessaria * precoUnitario;
     }
     
     // Economia em promoção (estimar 10%)
@@ -346,7 +347,7 @@ class ShoppingListGeneratorFixed {
         quantidade_necessaria: qtdNecessaria.toFixed(3),
         quantidade_comprar: qtdComprar.toFixed(3),
         unidade: ingrediente.unidade_padrao,
-        preco_unitario: precoUnitario.toFixed(2),
+        preco_unitario: (precoUnitario / embalagem).toFixed(2), // Preço por unidade individual
         custo_total_compra: custoTotal.toFixed(2),
         sobra: sobra.toFixed(3),
         percentual_sobra: qtdComprar > 0 ? ((sobra / qtdComprar) * 100).toFixed(1) : '0.0',
