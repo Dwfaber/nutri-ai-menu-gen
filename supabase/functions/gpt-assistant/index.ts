@@ -541,31 +541,42 @@ Deno.serve(async (req) => {
           }))
         );
 
+        // Prepara o payload para o insert
+        const payload = {
+          client_id: String(filialId || requestData.client_id || "sem-id"),
+          client_name: clientName,
+          week_period: `${response.cardapio[0].data} - ${response.cardapio[response.cardapio.length - 1].data}`,
+          total_cost: Number(response.resumo_financeiro.custo_total_periodo) || 0,
+          cost_per_meal: Number(response.resumo_financeiro.custo_medio_por_refeicao) || 0,
+          total_recipes: totalReceitas,
+          status: "pending_approval",
+          receitas_adaptadas: receitasAdaptadas,
+          cardapio_json: response.cardapio
+        };
+
+        console.log("💾 Payload para insert:", payload);
+
+        // Faz o insert no Supabase
         const { data: savedMenu, error } = await supabase
           .from("generated_menus")
-          .insert({
-            client_id: String(filialId || requestData.client_id || "sem-id"),
-            client_name: clientName,
-            week_period: `${response.cardapio[0].data} - ${response.cardapio[response.cardapio.length - 1].data}`,
-            total_cost: Number(response.resumo_financeiro.custo_total_periodo),
-            cost_per_meal: Number(response.resumo_financeiro.custo_medio_por_refeicao),
-            total_recipes: totalReceitas,
-            status: "pending_approval",
-            receitas_adaptadas: receitasAdaptadas,
-            cardapio_json: response.cardapio
-          })
+          .insert(payload)
           .select()
           .single();
 
         if (error) {
-          console.error("❌ Erro ao salvar em generated_menus:", error);
-        } else {
-          console.log("✅ Cardápio salvo com ID:", savedMenu.id);
+          console.error("❌ Erro ao salvar no Supabase:", error);
+          throw error;
         }
-        
-        // devolve o response já com ID salvo
+
+        // Retorno final da Edge Function
         return new Response(
-          JSON.stringify({ ...response, id: savedMenu?.id }),
+          JSON.stringify({
+            success: true,
+            id: savedMenu.id,
+            message: "Cardápio gerado com sucesso e salvo no banco.",
+            resumo_financeiro: response.resumo_financeiro,
+            cardapio: response.cardapio
+          }),
           { headers: { "Content-Type": "application/json", ...corsHeaders } }
         );
         
