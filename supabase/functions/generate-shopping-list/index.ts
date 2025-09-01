@@ -37,18 +37,47 @@ class ShoppingListGeneratorFixed {
     console.log(`🍽️ Porções/dia: ${servingsPerDay}`);
     
     try {
-      // PASSO 1: Buscar cardápio
+      // PASSO 1: Buscar cardápio com logs detalhados
+      console.log(`🔍 Buscando cardápio com ID: ${menuId}`);
+      console.log(`📊 Tipo do menuId: ${typeof menuId}, length: ${menuId?.length}`);
+      
       const { data: menuData, error: menuError } = await this.supabase
         .from('generated_menus')
-        .select('*')
+        .select('id, client_name, receitas_adaptadas, created_at')
         .eq('id', menuId)
         .maybeSingle();
 
-      if (menuError || !menuData) {
+      if (menuError) {
+        console.error('❌ Erro na busca do cardápio:', menuError);
+        throw new Error(`Erro na busca do cardápio: ${menuError.message}`);
+      }
+
+      if (!menuData) {
+        console.error('❌ Cardápio não encontrado na base de dados');
+        console.log('🔍 Tentando listar cardápios existentes...');
+        
+        // Log para debug: mostrar cardápios existentes
+        const { data: existingMenus } = await this.supabase
+          .from('generated_menus')
+          .select('id, client_name, created_at')
+          .limit(5)
+          .order('created_at', { ascending: false });
+          
+        console.log('📋 Últimos cardápios na base:', existingMenus?.map(m => `${m.id} - ${m.client_name}`));
         throw new Error(`Cardápio não encontrado: ${menuId}`);
       }
 
-      console.log(`📦 Cardápio encontrado: ${menuData.client_name} - ${menuData.receitas_adaptadas?.length || 0} receitas`);
+      console.log(`✅ Cardápio encontrado: ${menuData.client_name}`);
+      console.log(`📅 Criado em: ${menuData.created_at}`);
+      console.log(`🍽️ Receitas adaptadas: ${menuData.receitas_adaptadas?.length || 0} receitas`);
+      
+      // Validar se há receitas
+      const receitasAdaptadas = menuData.receitas_adaptadas || [];
+      if (!Array.isArray(receitasAdaptadas) || receitasAdaptadas.length === 0) {
+        console.error('❌ Cardápio sem receitas válidas');
+        console.log('📋 Conteúdo receitas_adaptadas:', receitasAdaptadas);
+        throw new Error('Cardápio não contém receitas válidas');
+      }
 
       // PASSO 2: Buscar ingredientes das receitas
       const receitasAdaptadas = menuData.receitas_adaptadas || [];
