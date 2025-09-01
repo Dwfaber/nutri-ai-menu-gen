@@ -365,13 +365,18 @@ export const useIntegratedMenuGeneration = () => {
           ? Math.max(1, Math.ceil(tMeals / mpd))
           : 7;
 
+      // Garantir período correto no formato brasileiro
+      console.log('📅 Período enviado:', weekPeriod);
+      console.log('🔢 Refeições por dia:', mpd);
+      console.log('🏢 Filial ID:', legacyId);
+
       // Payload padronizado - incluindo receitas base obrigatórias
       const payload = {
         action: 'generate_menu',
         filialIdLegado: legacyId,
-        period: weekPeriod, // Send correct period
-        numDays: 7, // Always 7 days for weekly menu
-        mealQuantity: mpd, // Use mealQuantity instead of refeicoesPorDia
+        period: weekPeriod, // Período no formato brasileiro DD/MM/YYYY a DD/MM/YYYY
+        numDays: 7, // Sempre 7 dias para cardápio semanal
+        mealQuantity: mpd, // Padronizar nome do parâmetro
         useDiaEspecial: false,
         baseRecipes: {
           arroz: 580,    // ARROZ BRANCO

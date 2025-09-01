@@ -1,6 +1,7 @@
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.51.0'
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.51.0';
+import { CostCalculator } from "./cost-calculator.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -601,94 +602,139 @@ serve(async (req) => {
       const filialBudget = await buscarOrcamentoFilial(requestData.filialIdLegado);
       const proteinasDisponiveis = await buscarProteinasDisponiveis();
       
-      // Calcular período dinamicamente
-      const totalDaysToGenerate = calculateDaysFromPeriod(requestData.period || '1 semana');
+      // Garantir período correto e sempre 7 dias para cardápio semanal
+      console.log(`📅 Período recebido: ${requestData.period}`);
+      
+      // Sempre gerar cardápio para 7 dias (semana completa)
+      const totalDaysToGenerate = 7;
       const mealQuantity = requestData.mealQuantity || requestData.refeicoesPorDia || 100;
       const dailyBudget = filialBudget.RefCustoSegunda || 5.0;
       
-      console.log(`🗓️ Gerando cardápio para ${totalDaysToGenerate} dias, ${mealQuantity} refeições/dia`);
+      console.log(`🗓️ Gerando cardápio CORRIGIDO para ${totalDaysToGenerate} dias, ${mealQuantity} refeições/dia`);
       console.log(`💰 Orçamento diário: R$ ${dailyBudget}/refeição`);
 
+      // Usar sistema de cálculos existente - instanciar CostCalculator  
+      const calculator = new CostCalculator();
+      
+      // Estrutura do cardápio com receitas para cada dia
+      const cardapio = { receitas: [] };
       const allRecipes = [];
       let totalCost = 0;
-      let estruturaCompleta = [];
-
-      // Loop otimizado para cada dia
-      for (let dia = 1; dia <= totalDaysToGenerate; dia++) {
-        console.log(`\n📅 === DIA ${dia} ===`);
+      
+      console.log(`\n🗓️ Gerando cardápio completo para 7 dias da semana...`);
+      console.log(`💰 Orçamento diário: R$ ${dailyBudget.toFixed(2)}/refeição`);
+      console.log(`🍴 Quantidade de refeições: ${mealQuantity}/dia`);
+      
+      // Categorias robustas que existem na base de dados
+      const categoriasRobustas = [
+        'Prato Principal 1',
+        'Prato Principal 2', 
+        'Guarnição',
+        'Arroz',
+        'Feijão',
+        'Salada',
+        'Sobremesa'
+      ];
+      
+      // Gerar cardápio para cada dia da semana (7 dias)
+      for (let dia = 1; dia <= 7; dia++) {
+        const diasSemana = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado', 'Domingo'];
+        console.log(`\n📅 === ${diasSemana[dia - 1]} (Dia ${dia}) ===`);
         
         const receitasDoDia = [];
-        let custoDiario = 0;
-
-        // Nota: Proteínas já serão buscadas junto com as outras categorias via ESTRUTURA_CARDAPIO
-
-        // Buscar todas as categorias da estrutura do cardápio
-        const categoriesPromises = Object.keys(ESTRUTURA_CARDAPIO)
-          .map(async (categoria) => {
-            const budgetPorCategoria = dailyBudget * ESTRUTURA_CARDAPIO[categoria];
-            console.log(`💰 ${categoria}: Orçamento R$ ${budgetPorCategoria.toFixed(2)}/refeição`);
+        
+        // Gerar receitas para cada categoria robusta
+        for (const categoria of categoriasRobustas) {
+          const budgetPorCategoria = dailyBudget / categoriasRobustas.length; // Distribuir orçamento igualmente
+          
+          console.log(`💰 ${categoria}: Orçamento R$ ${budgetPorCategoria.toFixed(2)}/refeição`);
+          
+          const receita = await (async () => {
+            console.log(`🔍 Buscando receitas para categoria: "${categoria}"`);
             
+            // Buscar receitas por categoria exata
             const receitas = await buscarReceitasPorCategoria(categoria, budgetPorCategoria, mealQuantity);
+            
             if (receitas && receitas.length > 0) {
-              // Rotação inteligente das receitas
+              // Rotação inteligente das receitas para evitar repetições
               const receitaIndex = (dia - 1) % receitas.length;
               const receita = receitas[receitaIndex];
-              const custo = await calculateSimpleCost(receita.receita_id_legado, mealQuantity);
               
-              if (custo && custo.custo_por_refeicao > 0 && custo.custo_por_refeicao <= budgetPorCategoria * 1.5) {
-                console.log(`✅ ${categoria}: ${receita.nome_receita} - R$ ${custo.custo_por_refeicao.toFixed(2)}/refeição`);
-                return {
-                  ...receita,
-                  categoria,
-                  custo_calculado: custo
-                };
-              } else {
-                console.warn(`⚠️ ${categoria}: Custo muito alto R$ ${custo?.custo_por_refeicao?.toFixed(2) || 'N/A'}/refeição`);
-              }
-            } else {
-              console.log(`⚠️ Nenhuma receita encontrada para categoria: ${categoria}`);
-              // Fallback para buscar qualquer receita ativa
-              const fallbackReceitas = await supabase
-                .from('receitas_legado')
-                .select('*')
-                .eq('inativa', false)
-                .limit(5);
-              
-              if (fallbackReceitas.data && fallbackReceitas.data.length > 0) {
-                const receitaFallback = fallbackReceitas.data[Math.floor(Math.random() * fallbackReceitas.data.length)];
-                const custo = await calculateSimpleCost(receitaFallback.receita_id_legado, mealQuantity);
+              // Usar sistema de cálculos existente
+              try {
+                const custoDetalhado = await calculator.calculateRecipeCost(
+                  parseInt(receita.receita_id_legado), 
+                  mealQuantity, 
+                  1 // 1 dia
+                );
                 
-                if (custo && custo.custo_por_refeicao > 0) {
-                  console.log(`🔄 Fallback: ${receitaFallback.nome_receita} - R$ ${custo.custo_por_refeicao.toFixed(2)}/refeição`);
+                if (custoDetalhado && custoDetalhado.custo_por_porcao > 0) {
+                  console.log(`✅ ${receita.nome_receita}: R$ ${custoDetalhado.custo_por_porcao.toFixed(2)}/refeição`);
                   return {
-                    ...receitaFallback,
+                    ...receita,
                     categoria,
-                    custo_calculado: custo
+                    custo_calculado: {
+                      custo_por_refeicao: custoDetalhado.custo_por_porcao,
+                      custo_total: custoDetalhado.custo_total,
+                      detalhes: custoDetalhado
+                    }
+                  };
+                }
+              } catch (error) {
+                console.warn(`⚠️ Erro no cálculo detalhado para ${receita.nome_receita}, usando cálculo simples:`, error.message);
+                
+                // Fallback para cálculo simples
+                const custoSimples = await calculateSimpleCost(receita.receita_id_legado, mealQuantity);
+                if (custoSimples && custoSimples.custo_por_refeicao > 0) {
+                  return {
+                    ...receita,
+                    categoria,
+                    custo_calculado: custoSimples
                   };
                 }
               }
+            } else {
+              console.log(`⚠️ Nenhuma receita encontrada para categoria: ${categoria}`);
             }
+            
+            // Fallback robusto - buscar qualquer receita ativa
+            console.log(`🔄 Buscando receita alternativa para ${categoria}...`);
+            const fallbackReceitas = await supabase
+              .from('receitas_legado')
+              .select('*')
+              .eq('inativa', false)
+              .limit(10);
+            
+            if (fallbackReceitas.data && fallbackReceitas.data.length > 0) {
+              const receitaFallback = fallbackReceitas.data[Math.floor(Math.random() * fallbackReceitas.data.length)];
+              const custoFallback = await calculateSimpleCost(receitaFallback.receita_id_legado, mealQuantity);
+              
+              if (custoFallback && custoFallback.custo_por_refeicao > 0) {
+                console.log(`🔄 Fallback: ${receitaFallback.nome_receita} - R$ ${custoFallback.custo_por_refeicao.toFixed(2)}/refeição`);
+                return {
+                  ...receitaFallback,
+                  categoria,
+                  custo_calculado: custoFallback
+                };
+              }
+            }
+            
             return null;
-          });
-
-        const outrasReceitas = await Promise.all(categoriesPromises);
-        outrasReceitas.forEach(receita => {
+          })();
+          
           if (receita) {
             receitasDoDia.push(receita);
-            custoDiario += receita.custo_calculado?.custo_total || 0;
+            allRecipes.push(receita);
+            totalCost += receita.custo_calculado?.custo_total || receita.custo_calculado?.custo_por_refeicao || 0;
+          } else {
+            console.error(`❌ Falha crítica: Não foi possível encontrar receita para ${categoria} no dia ${dia}`);
           }
-        });
-
-        // Adicionar receitas do dia ao total
-        allRecipes.push(...receitasDoDia);
-        totalCost += custoDiario;
-
-        estruturaCompleta.push({
-          dia,
-          receitas: receitasDoDia.length,
-          custo_total: custoDiario,
-          custo_por_refeicao: custoDiario / mealQuantity
-        });
+        }
+        
+        console.log(`✅ ${diasSemana[dia - 1]}: ${receitasDoDia.length}/${categoriasRobustas.length} receitas geradas`);
+        
+        // Garantir que todas as receitas do dia sejam adicionadas ao cardápio
+        cardapio.receitas.push(...receitasDoDia);
       }
 
       const executionTime = Date.now() - startTime;
