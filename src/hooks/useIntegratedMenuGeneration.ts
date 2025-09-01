@@ -484,18 +484,25 @@ export const useIntegratedMenuGeneration = () => {
         throw new Error(data?.error || 'Erro na geração do cardápio');
       }
 
-      // 🔍 DEBUG: Ver estrutura completa da resposta
-      console.log('📦 Resposta completa da Edge Function:', JSON.stringify(data, null, 2));
+      console.log("DEBUG :: Resposta Edge Function bruta (data):", JSON.stringify(data, null, 2));
       
       // Verificar diferentes estruturas de resposta
       const aiMenu = data.menu || data.cardapio || {};
-      console.log('📦 aiMenu extraído:', aiMenu);
+      console.log("DEBUG :: data.cardapio:", data.cardapio);
+      console.log("DEBUG :: data.cardapio?.receitas:", data.cardapio?.receitas);
+      console.log("DEBUG :: aiMenu.cardapio:", aiMenu.cardapio);
+      console.log("DEBUG :: aiMenu.days:", aiMenu.days);
       
-      // Mapear receitas da nova estrutura (data.cardapio como array de dias)
+      // Mapear receitas do formato real da Edge Function
       let receitasExtraidas = [];
       
-      // NOVO FORMATO: data.cardapio é um array de objetos de dias
+      // FORMATO REAL: data.cardapio é array direto de receitas
       if (Array.isArray(data.cardapio)) {
+        console.log('✅ Encontrado formato de receitas simples:', data.cardapio.length);
+        receitasExtraidas = data.cardapio;
+      }
+      // NOVO FORMATO: data.cardapio é um array de objetos de dias
+      else if (Array.isArray(data.cardapio)) {
         console.log('✅ Encontrado novo formato: data.cardapio array com', data.cardapio.length, 'dias');
         receitasExtraidas = data.cardapio.flatMap((diaObj: any) => 
           (diaObj.receitas || []).map((receita: any) => ({
@@ -539,11 +546,18 @@ export const useIntegratedMenuGeneration = () => {
         console.log(`${index + 1}. ${receita.nome} (${receita.categoria}) - R$${receita.custo_por_refeicao}`);
       });
       
+      // Fallback final: usar receitas_adaptadas se disponível
+      if (!receitasExtraidas.length && Array.isArray(data.receitas_adaptadas)) {
+        console.log('⚠️ Usando fallback de receitas_adaptadas do payload');
+        receitasExtraidas = data.receitas_adaptadas;
+      }
+
       // Validar se temos receitas
       if (!receitasExtraidas.length) {
         console.error('❌ Nenhuma receita encontrada em qualquer formato');
         console.error('📦 Estrutura data.cardapio:', data.cardapio);
         console.error('📦 Estrutura aiMenu:', aiMenu);
+        console.error('📦 Estrutura data.receitas_adaptadas:', data.receitas_adaptadas);
         throw new Error('IA não retornou um cardápio válido - nenhuma receita encontrada');
       }
       
@@ -746,12 +760,16 @@ export const useIntegratedMenuGeneration = () => {
       const totalCost =
         Number(aiMenu.summary?.total_custo) ||
         Number(aiMenu.total_cost) ||
+        Number(data.total_custo) ||
+        Number(data.total_cost) ||
         (daysV2.length ? daysV2.reduce((s: number, d: any) => s + Number(d.custo_total_dia || 0), 0) : 0);
 
       const costPerMeal =
         Number(aiMenu.summary?.custo_medio_por_refeicao) ||
         Number(aiMenu.average_cost_per_meal) ||
-        (daysV2.length ? totalCost / (mpdFromSummary * daysV2.length) : 0);
+        Number(data.custo_medio_por_refeicao) ||
+        Number(data.average_cost_per_meal) ||
+        (totalCost && mpdFromSummary ? totalCost / (mpdFromSummary * 7) : 0);
       const budgetLimit = clientToUse.custo_maximo_refeicao || 15;
       
       if (costPerMeal > budgetLimit) {
