@@ -544,14 +544,15 @@ Deno.serve(async (req) => {
         const { data: savedMenu, error } = await supabase
           .from("generated_menus")
           .insert({
-            client_id: String(filialId || clientId), // vem do payload
-            client_name: clientName, // vem do payload
+            client_id: String(filialId || requestData.client_id || "sem-id"),
+            client_name: clientName,
             week_period: `${response.cardapio[0].data} - ${response.cardapio[response.cardapio.length - 1].data}`,
-            total_cost: response.resumo_financeiro.custo_total_periodo,
-            cost_per_meal: response.resumo_financeiro.custo_medio_por_refeicao,
+            total_cost: Number(response.resumo_financeiro.custo_total_periodo),
+            cost_per_meal: Number(response.resumo_financeiro.custo_medio_por_refeicao),
             total_recipes: totalReceitas,
             status: "pending_approval",
-            receitas_adaptadas: receitasAdaptadas
+            receitas_adaptadas: receitasAdaptadas,
+            cardapio_json: response.cardapio
           })
           .select()
           .single();
