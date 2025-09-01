@@ -494,66 +494,58 @@ export const useIntegratedMenuGeneration = () => {
       console.log("DEBUG :: aiMenu.days:", aiMenu.days);
       
       // Mapear receitas do formato real da Edge Function
-      let receitasExtraidas = [];
-      
-      // FORMATO SIMPLES: array direto de receitas (novo backend)
-      if (Array.isArray(data.cardapio) && data.cardapio.length > 0 && 
-          data.cardapio.every((r: any) => r.nome || r.categoria)) {
-        console.log('✅ Formato simples de receitas:', data.cardapio.length);
-        receitasExtraidas = data.cardapio;
-      } 
-      // FORMATO POR DIAS: array de objetos de dias com receitas
-      else if (Array.isArray(data.cardapio) && data.cardapio.length > 0 && 
-               data.cardapio.every((d: any) => Array.isArray(d.receitas))) {
-        console.log('✅ Formato por dias:', data.cardapio.length);
-        receitasExtraidas = data.cardapio.flatMap((diaObj: any) =>
-          (diaObj.receitas || []).map((receita: any) => ({
-            ...receita,
-            dia: diaObj.dia || receita.dia || 'Segunda-feira'
-          }))
-        );
-        console.log('✅ Extraído', receitasExtraidas.length, 'receitas do formato dias');
-        console.log('✅ Extraído', receitasExtraidas.length, 'receitas do novo formato de dias');
+      let receitasExtraidas: any[] = [];
+
+      if (Array.isArray(data.cardapio) && data.cardapio.length > 0) {
+        const first = data.cardapio[0];
+        
+        // 🔎 Caso 1: formato simples (array de receitas)
+        if (first && (first.nome || first.categoria || first.custo_por_refeicao)) {
+          console.log('✅ Detectado formato simples de receitas:', data.cardapio.length);
+          receitasExtraidas = data.cardapio;
+        }
+        // 🔎 Caso 2: formato de dias (array de objetos com "receitas")
+        else if (first && Array.isArray(first.receitas)) {
+          console.log('✅ Detectado formato por dias:', data.cardapio.length);
+          receitasExtraidas = data.cardapio.flatMap((diaObj: any) =>
+            (diaObj.receitas || []).map((receita: any) => ({
+              ...receita,
+              dia: diaObj.dia || receita.dia || 'Segunda-feira'
+            }))
+          );
+        }
+        else {
+          console.warn('⚠️ Estrutura de cardápio não reconhecida, tentando fallbacks');
+        }
       }
-      // FORMATO LEGADO: data.cardapio.receitas 
+      // 🔎 Caso 3: formato legado - objeto com cardapio.receitas
       else if (data.cardapio?.receitas && Array.isArray(data.cardapio.receitas)) {
-        console.log('✅ Encontrado formato legado: data.cardapio.receitas:', data.cardapio.receitas.length, 'receitas');
+        console.log('✅ Detectado formato legado cardapio.receitas:', data.cardapio.receitas.length);
         receitasExtraidas = data.cardapio.receitas;
-      } 
-      // OUTROS FORMATOS
+      }
+      // 🔎 Caso 4: aiMenu.cardapio
       else if (Array.isArray(aiMenu.cardapio)) {
-        console.log('✅ Encontrado aiMenu.cardapio:', aiMenu.cardapio.length, 'receitas');
+        console.log('✅ Detectado aiMenu.cardapio:', aiMenu.cardapio.length);
         receitasExtraidas = aiMenu.cardapio;
-      } else if (Array.isArray(aiMenu.days)) {
-        console.log('✅ Encontrado aiMenu.days:', aiMenu.days.length, 'dias');
-        // Processar formato de dias (estrutura legada)
-        receitasExtraidas = aiMenu.days.flatMap((day: any) => 
+      }
+      // 🔎 Caso 5: aiMenu.days
+      else if (Array.isArray(aiMenu.days)) {
+        console.log('✅ Detectado aiMenu.days:', aiMenu.days.length);
+        receitasExtraidas = aiMenu.days.flatMap((day: any) =>
           (day.receitas || []).map((receita: any) => ({
             ...receita,
             dia: day.dia || 'Segunda'
           }))
         );
       }
-      
-      // DEBUG: Log das receitas extraídas
-      console.log('🔍 Receitas extraídas detalhadas:');
-      receitasExtraidas.forEach((receita, index) => {
-        console.log(`${index + 1}. ${receita.nome} (${receita.categoria}) - R$${receita.custo_por_refeicao}`);
-      });
-      
-      console.log('📦 Receitas extraídas:', receitasExtraidas);
-      
-      // DEBUG: Log das receitas extraídas
-      console.log('🔍 Receitas extraídas detalhadas:');
-      receitasExtraidas.forEach((receita, index) => {
-        console.log(`${index + 1}. ${receita.nome} (${receita.categoria}) - R$${receita.custo_por_refeicao}`);
-      });
-      
-      // Fallback final: usar receitas_adaptadas se disponível
+
+      // 🔎 Fallback final
       if (!receitasExtraidas.length && Array.isArray(data.receitas_adaptadas)) {
-        console.log('⚠️ Usando fallback de receitas_adaptadas do payload');
+        console.log('⚠️ Usando fallback receitas_adaptadas:', data.receitas_adaptadas.length);
         receitasExtraidas = data.receitas_adaptadas;
       }
+
+      console.log(`📦 Total de receitas extraídas: ${receitasExtraidas.length}`);
 
       // Validar se temos receitas
       if (!receitasExtraidas.length) {
