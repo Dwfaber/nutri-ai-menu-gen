@@ -251,7 +251,7 @@ export const useIntegratedMenuGeneration = () => {
           week_period: menu.weekPeriod,
           total_cost: menu.totalCost,
           cost_per_meal: menu.costPerMeal,
-          total_recipes: menu.totalRecipes,
+          total_recipes: receitasAdaptadas.length,   // Usa fonte da verdade real
           status: menu.status,
           receitas_ids: menu.recipes.map(r => r.id),
           receitas_adaptadas: receitasAdaptadas
