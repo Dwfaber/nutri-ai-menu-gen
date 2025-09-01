@@ -43,7 +43,7 @@ class ShoppingListGeneratorFixed {
       
       const { data: menuData, error: menuError } = await this.supabase
         .from('generated_menus')
-        .select('id, client_name, receitas_adaptadas, created_at')
+        .select('id, client_name, receitas_adaptadas, receitas_ids, created_at')
         .eq('id', menuId)
         .maybeSingle();
 
@@ -71,16 +71,29 @@ class ShoppingListGeneratorFixed {
       console.log(`📅 Criado em: ${menuData.created_at}`);
       console.log(`🍽️ Receitas adaptadas: ${menuData.receitas_adaptadas?.length || 0} receitas`);
       
-      // Validar se há receitas
-      const receitasAdaptadas = menuData.receitas_adaptadas || [];
+      // ESTRATÉGIA EM CASCATA: receitas_adaptadas → receitas_ids → erro
+      let receitasAdaptadas = menuData.receitas_adaptadas || [];
+
+      // 🚨 fallback quando receitas_adaptadas está vazio
       if (!Array.isArray(receitasAdaptadas) || receitasAdaptadas.length === 0) {
-        console.error('❌ Cardápio sem receitas válidas');
-        console.log('📋 Conteúdo receitas_adaptadas:', receitasAdaptadas);
-        throw new Error('Cardápio não contém receitas válidas');
+        console.warn("⚠️ receitas_adaptadas vazio, tentando fallback com receitas_ids");
+
+        if (Array.isArray(menuData.receitas_ids) && menuData.receitas_ids.length > 0) {
+          receitasAdaptadas = menuData.receitas_ids.map((id: string) => ({
+            receita_id_legado: id
+          }));
+          console.log(`✅ Fallback: ${receitasAdaptadas.length} receitas recuperadas via receitas_ids`);
+        } else {
+          console.error("❌ Nenhuma receita associada a este cardápio:", menuData.id);
+          console.log('📋 Conteúdo receitas_adaptadas:', menuData.receitas_adaptadas);
+          console.log('📋 Conteúdo receitas_ids:', menuData.receitas_ids);
+          throw new Error(`Cardápio ${menuData.id} não possui receitas associadas`);
+        }
+      } else {
+        console.log(`✅ Usando receitas_adaptadas: ${receitasAdaptadas.length} receitas`);
       }
 
       // PASSO 2: Buscar ingredientes das receitas
-      const receitasAdaptadas = menuData.receitas_adaptadas || [];
       const recipeIds = receitasAdaptadas
         .map((r: any) => r.receita_id_legado)
         .filter(Boolean);
