@@ -1,4 +1,3 @@
-
 import { useClientContractsContext } from '@/contexts/ClientContractsContext';
 import type { ContractClient } from '@/contexts/ClientContractsContext';
 
