@@ -168,8 +168,8 @@ export const useShoppingList = () => {
               unidade: item.unit,
               preco_unitario: item.unit_price,
               valor_total: item.total_price,
-              fornecedor: item.supplier || '',
-              observacoes: item.notes || '',
+              fornecedor: (item as any).supplier || '',
+              observacoes: (item as any).notes || '',
               receita_origem: []
             }));
 
