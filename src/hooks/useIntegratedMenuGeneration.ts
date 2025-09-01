@@ -376,7 +376,7 @@ export const useIntegratedMenuGeneration = () => {
         filialIdLegado: legacyId,
         period: weekPeriod, // Período no formato brasileiro DD/MM/YYYY a DD/MM/YYYY
         numDays: 7, // Sempre 7 dias para cardápio semanal
-        mealQuantity: mpd, // Padronizar nome do parâmetro
+        refeicoesPorDia: mpd, // Padronizar nome do parâmetro
         useDiaEspecial: false,
         baseRecipes: {
           arroz: 580,    // ARROZ BRANCO
@@ -542,12 +542,14 @@ export const useIntegratedMenuGeneration = () => {
 
       const mapCategory = (c: string) => {
         const s = String(c || '').toUpperCase();
+        if (s.includes('PROTEÍNA PRINCIPAL 1') || s.includes('PROTEINA PRINCIPAL 1')) return 'PP1';
+        if (s.includes('PROTEÍNA PRINCIPAL 2') || s.includes('PROTEINA PRINCIPAL 2')) return 'PP2';
         if (s.includes('PRATO PRINCIPAL 1')) return 'PP1';
         if (s.includes('PRATO PRINCIPAL 2')) return 'PP2';
-        if (s.includes('ARROZ')) return 'Arroz Branco';
+        if (s.includes('ARROZ BRANCO') || s.includes('ARROZ')) return 'Arroz Branco';
         if (s.includes('FEIJ')) return 'Feijão';
-        if (s.includes('SALADA 1')) return 'Salada 1';
-        if (s.includes('SALADA 2')) return 'Salada 2';
+        if (s.includes('SALADA 1') || s.includes('VERDURAS')) return 'Salada 1';
+        if (s.includes('SALADA 2') || s.includes('LEGUMES')) return 'Salada 2';
         if (s.includes('SUCO 1')) return 'Suco 1';
         if (s.includes('SUCO 2')) return 'Suco 2';
         return mapCategoryToMenuStructure(c);
