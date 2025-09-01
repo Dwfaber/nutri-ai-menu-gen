@@ -163,10 +163,22 @@ export const useIntegratedMenuGeneration = () => {
   // Carregar cardápios salvos
   const loadSavedMenus = async () => {
     try {
-      const { data: menus, error: menusError } = await supabase
+      // Get the current client ID from selected client
+      const currentClientId = selectedClient?.id || selectedClient?.filial_id;
+      
+      let query = supabase
         .from('generated_menus')
         .select('*')
         .order('created_at', { ascending: false });
+      
+      // Filter by client if we have one selected
+      if (currentClientId) {
+        // Try different client ID formats to match the database
+        query = query.or(`client_id.eq.${currentClientId},client_id.eq.${String(currentClientId)}`);
+        console.log('🔍 Filtrando cardápios para cliente:', currentClientId);
+      }
+
+      const { data: menus, error: menusError } = await query;
 
       if (menusError) throw menusError;
 
@@ -291,10 +303,10 @@ export const useIntegratedMenuGeneration = () => {
     }
   };
 
-  // Carregar cardápios ao montar o componente
+  // Carregar cardápios ao montar o componente e quando cliente mudar
   useEffect(() => {
     loadSavedMenus();
-  }, []);
+  }, [selectedClient?.id]); // Recarrega quando o cliente muda
 
   const generateMenuWithFormData = async (
     formData: any
