@@ -478,13 +478,27 @@ export const useIntegratedMenuGeneration = () => {
       const aiMenu = data.menu || data.cardapio || {};
       console.log('📦 aiMenu extraído:', aiMenu);
       
-      // Mapear receitas da nova estrutura (data.cardapio.receitas)
+      // Mapear receitas da nova estrutura (data.cardapio como array de dias)
       let receitasExtraidas = [];
       
-      if (data.cardapio?.receitas && Array.isArray(data.cardapio.receitas)) {
-        console.log('✅ Encontrado data.cardapio.receitas:', data.cardapio.receitas.length, 'receitas');
+      // NOVO FORMATO: data.cardapio é um array de objetos de dias
+      if (Array.isArray(data.cardapio)) {
+        console.log('✅ Encontrado novo formato: data.cardapio array com', data.cardapio.length, 'dias');
+        receitasExtraidas = data.cardapio.flatMap((diaObj: any) => 
+          (diaObj.receitas || []).map((receita: any) => ({
+            ...receita,
+            dia: diaObj.dia || receita.dia || 'Segunda-feira'
+          }))
+        );
+        console.log('✅ Extraído', receitasExtraidas.length, 'receitas do novo formato de dias');
+      }
+      // FORMATO LEGADO: data.cardapio.receitas 
+      else if (data.cardapio?.receitas && Array.isArray(data.cardapio.receitas)) {
+        console.log('✅ Encontrado formato legado: data.cardapio.receitas:', data.cardapio.receitas.length, 'receitas');
         receitasExtraidas = data.cardapio.receitas;
-      } else if (Array.isArray(aiMenu.cardapio)) {
+      } 
+      // OUTROS FORMATOS
+      else if (Array.isArray(aiMenu.cardapio)) {
         console.log('✅ Encontrado aiMenu.cardapio:', aiMenu.cardapio.length, 'receitas');
         receitasExtraidas = aiMenu.cardapio;
       } else if (Array.isArray(aiMenu.days)) {
