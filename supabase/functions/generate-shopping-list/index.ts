@@ -146,19 +146,22 @@ class ShoppingListGeneratorFixed {
 
       // Salvar itens
       if (listaCompras.length > 0) {
-        const itemsToInsert = listaCompras.map(item => ({
-          shopping_list_id: shoppingList.id,
-          product_id_legado: item.produto_base_id.toString(),
-          product_name: item.nome_ingrediente,
-          category: item.categoria_estimada,
-          quantity: parseFloat(item.quantidade_comprar),
-          unit: item.unidade,
-          unit_price: parseFloat(item.preco_unitario || '0'),
-          total_price: parseFloat(item.custo_total_compra),
-          promocao: item.em_promocao,
-          optimized: true,
-          available: true
-        }));
+        const itemsToInsert = listaCompras.map(item => {
+          console.log('🔍 Mapeando item:', item);
+          return {
+            shopping_list_id: shoppingList.id,
+            product_id_legado: item.produto_base_id?.toString() || 'unknown',
+            product_name: item.nome_ingrediente || 'Produto sem nome',
+            category: item.categoria_estimada || 'DIVERSOS',
+            quantity: parseFloat(item.quantidade_comprar) || 0,
+            unit: item.unidade || 'UN',
+            unit_price: parseFloat(item.preco_unitario) || 0,
+            total_price: parseFloat(item.custo_total_compra) || 0,
+            promocao: Boolean(item.em_promocao),
+            optimized: true,
+            available: true
+          };
+        });
 
         const { error: itemsError } = await this.supabase
           .from('shopping_list_items')
