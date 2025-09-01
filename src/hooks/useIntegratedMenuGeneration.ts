@@ -496,14 +496,14 @@ export const useIntegratedMenuGeneration = () => {
       // Mapear receitas do formato real da Edge Function
       let receitasExtraidas = [];
       
-      // FORMATO REAL: data.cardapio é array direto de receitas
-      if (Array.isArray(data.cardapio)) {
-        console.log('✅ Encontrado formato de receitas simples:', data.cardapio.length);
+      // FORMATO SIMPLES: data.cardapio é array direto de receitas
+      if (Array.isArray(data.cardapio) && data.cardapio.every((r: any) => r.nome || r.categoria)) {
+        console.log('✅ Formato simples de receitas:', data.cardapio.length);
         receitasExtraidas = data.cardapio;
       }
-      // NOVO FORMATO: data.cardapio é um array de objetos de dias
-      else if (Array.isArray(data.cardapio)) {
-        console.log('✅ Encontrado novo formato: data.cardapio array com', data.cardapio.length, 'dias');
+      // FORMATO POR DIAS: data.cardapio é um array de objetos de dias
+      else if (Array.isArray(data.cardapio) && data.cardapio.every((d: any) => d.receitas)) {
+        console.log('✅ Formato por dias:', data.cardapio.length);
         receitasExtraidas = data.cardapio.flatMap((diaObj: any) => 
           (diaObj.receitas || []).map((receita: any) => ({
             ...receita,
