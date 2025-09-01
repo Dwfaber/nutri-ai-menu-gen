@@ -541,7 +541,7 @@ Deno.serve(async (req) => {
           }))
         );
 
-        // Prepara o payload para o insert
+        // Prepara o payload para o insert (sem cardapio_json que não existe na tabela)
         const payload = {
           client_id: String(filialId || requestData.client_id || "sem-id"),
           client_name: clientName,
@@ -550,8 +550,7 @@ Deno.serve(async (req) => {
           cost_per_meal: Number(response.resumo_financeiro.custo_medio_por_refeicao) || 0,
           total_recipes: totalReceitas,
           status: "pending_approval",
-          receitas_adaptadas: receitasAdaptadas,
-          cardapio_json: response.cardapio
+          receitas_adaptadas: receitasAdaptadas
         };
 
         console.log("💾 Payload para insert:", payload);
