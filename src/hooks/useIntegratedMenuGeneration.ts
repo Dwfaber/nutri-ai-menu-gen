@@ -552,6 +552,7 @@ export const useIntegratedMenuGeneration = () => {
         if (s.includes('SALADA 2') || s.includes('LEGUMES')) return 'Salada 2';
         if (s.includes('SUCO 1')) return 'Suco 1';
         if (s.includes('SUCO 2')) return 'Suco 2';
+        if (s.includes('SOBREMESA') || s.includes('CREME') || s.includes('DOCE')) return 'Sobremesa';
         return mapCategoryToMenuStructure(c);
       };
 

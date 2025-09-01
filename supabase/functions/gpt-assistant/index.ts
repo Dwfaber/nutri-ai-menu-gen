@@ -6,16 +6,17 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// ============ ESTRUTURA FIXA DO CARDÁPIO ============
+// ============ ESTRUTURA FIXA DO CARDÁPIO (9 CATEGORIAS) ============
 const ESTRUTURA_CARDAPIO = {
-  PP1: { categoria: 'Proteína Principal 1', obrigatorio: true, budget_percent: 25 },
-  PP2: { categoria: 'Proteína Principal 2', obrigatorio: true, budget_percent: 20 },
-  ARROZ: { categoria: 'Arroz Branco', obrigatorio: true, budget_percent: 15, receita_id: 580 },
-  FEIJAO: { categoria: 'Feijão', obrigatorio: true, budget_percent: 15, receita_id: 1600 },
-  SALADA1: { categoria: 'Salada 1 (Verduras)', obrigatorio: true, budget_percent: 8 },
-  SALADA2: { categoria: 'Salada 2 (Legumes)', obrigatorio: true, budget_percent: 7 },
-  SUCO1: { categoria: 'Suco 1', obrigatorio: true, budget_percent: 5 },
-  SUCO2: { categoria: 'Suco 2', obrigatorio: true, budget_percent: 5 }
+  PP1: { categoria: 'Proteína Principal 1', obrigatorio: true, budget_percent: 24 },
+  PP2: { categoria: 'Proteína Principal 2', obrigatorio: true, budget_percent: 19 },
+  ARROZ: { categoria: 'Arroz Branco', obrigatorio: true, budget_percent: 14, receita_id: 580 },
+  FEIJAO: { categoria: 'Feijão', obrigatorio: true, budget_percent: 14, receita_id: 1600 },
+  SALADA1: { categoria: 'Salada 1 (Verduras)', obrigatorio: true, budget_percent: 7 },
+  SALADA2: { categoria: 'Salada 2 (Legumes)', obrigatorio: true, budget_percent: 6 },
+  SUCO1: { categoria: 'Suco 1', obrigatorio: true, budget_percent: 4 },
+  SUCO2: { categoria: 'Suco 2', obrigatorio: true, budget_percent: 4 },
+  SOBREMESA: { categoria: 'Sobremesa', obrigatorio: true, budget_percent: 8 }
 };
 
 Deno.serve(async (req) => {
@@ -113,8 +114,15 @@ Deno.serve(async (req) => {
             'TOMATE', 'PEPINO', 'CENOURA', 'BETERRABA', 'ABOBRINHA', 'CHUCHU',
             'LEGUME', 'SALADA COLORIDA', 'VINAGRETE', 'SALADA DE LEGUMES'
           ],
-          'Suco 1': ['SUCO', 'LARANJA', 'LIMAO', 'MARACUJA', 'ABACAXI', 'UVA', 'REFRESCO'],
-          'Suco 2': ['GOIABA', 'MANGA', 'CAJU', 'ACEROLA', 'AGUA SABORIZADA', 'MELANCIA', 'MORANGO']
+          'Suco 1': ['SUCO DE LARANJA', 'SUCO DE LIMAO', 'SUCO DE MARACUJA', 'REFRESCO', 'SUCO CITRICO'],
+          'Suco 2': ['SUCO DE GOIABA', 'SUCO DE MANGA', 'SUCO DE CAJU', 'AGUA SABORIZADA', 'SUCO TROPICAL'],
+          'Sobremesa': ['CREME', 'DOCE', 'PAVÊ', 'FRUTAS', 'GELATINA', 'PUDIM', 'GOIABADA', 'SOBREMESA', 'MOUSSE']
+        };
+        
+        // FILTROS NEGATIVOS para evitar classificação incorreta
+        const filtrosNegativos = {
+          'Suco 1': ['CREME', 'DOCE', 'PAVÊ'],
+          'Suco 2': ['CREME', 'DOCE', 'PAVÊ']
         };
         
         const keywords = palavrasChave[categoria] || [categoria.toUpperCase()];
@@ -122,7 +130,7 @@ Deno.serve(async (req) => {
         
         // BUSCA MELHORADA: Tentar múltiplas estratégias
         
-        // 1. Buscar por nome da receita
+        // 1. Buscar por nome da receita com filtros negativos
         for (const keyword of keywords.slice(0, 5)) {
           const { data: receitasPorNome } = await supabase
             .from('receita_ingredientes')
@@ -133,10 +141,18 @@ Deno.serve(async (req) => {
           if (receitasPorNome) {
             receitasPorNome.forEach(r => {
               if (r.receita_id_legado) {
-                todasReceitas.add(JSON.stringify({
-                  id: r.receita_id_legado,
-                  nome: r.nome
-                }));
+                // Aplicar filtros negativos
+                const filtros = filtrosNegativos[categoria] || [];
+                const contemFiltroNegativo = filtros.some(filtro => 
+                  r.nome.toUpperCase().includes(filtro.toUpperCase())
+                );
+                
+                if (!contemFiltroNegativo) {
+                  todasReceitas.add(JSON.stringify({
+                    id: r.receita_id_legado,
+                    nome: r.nome
+                  }));
+                }
               }
             });
           }
@@ -463,7 +479,7 @@ Deno.serve(async (req) => {
           },
           
           estrutura_aplicada: {
-            descricao: 'PP1, PP2, Arroz, Feijão, Salada 1, Salada 2, Suco 1, Suco 2',
+            descricao: 'PP1, PP2, Arroz, Feijão, Salada 1, Salada 2, Suco 1, Suco 2, Sobremesa',
             distribuicao: Object.entries(ESTRUTURA_CARDAPIO).map(([key, val]) => ({
               codigo: key,
               categoria: val.categoria,
