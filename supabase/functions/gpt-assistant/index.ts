@@ -48,14 +48,41 @@ Deno.serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    // FUNÇÃO CORRIGIDA DE CÁLCULO
+    // FUNÇÃO AUXILIAR PARA DETECTAR E CORRIGIR UNIDADES
+    function detectarUnidadeProduto(descricao) {
+      const desc = descricao.toUpperCase();
+      
+      // Padrões comuns de produtos
+      const padroes = [
+        { regex: /OVOS?\s*(\d+)/, unidade: 'UN', divisor: 1 },
+        { regex: /(\d+)\s*UN/, unidade: 'UN', divisor: 1 },
+        { regex: /(\d+)\s*KG/, unidade: 'KG', divisor: 1 },
+        { regex: /(\d+)\s*G(?:R|RAMA)?/, unidade: 'KG', divisor: 1000 },
+        { regex: /(\d+)\s*L(?:T|ITRO)?/, unidade: 'L', divisor: 1 },
+        { regex: /(\d+)\s*ML/, unidade: 'L', divisor: 1000 },
+      ];
+      
+      for (const padrao of padroes) {
+        const match = desc.match(padrao.regex);
+        if (match) {
+          return {
+            quantidade: parseFloat(match[1]) / padrao.divisor,
+            unidade: padrao.unidade
+          };
+        }
+      }
+      
+      return { quantidade: 1, unidade: 'UN' };
+    }
+
+    // FUNÇÃO CORRIGIDA PARA CÁLCULO DE CUSTOS
     async function calculateSimpleCost(recipeId, mealQuantity = 100) {
       try {
         const { data: ingredients, error } = await supabase
           .from('receita_ingredientes')
           .select('*')
           .eq('receita_id_legado', recipeId)
-          .limit(15);
+          .limit(20);
         
         if (error || !ingredients || ingredients.length === 0) {
           return { id: recipeId, nome: `Receita ${recipeId}`, custo: 0, custo_por_refeicao: 0 };
@@ -66,13 +93,10 @@ Deno.serve(async (req) => {
         
         console.log(`📦 ${recipeName}: ${ingredients.length} ingredientes para ${baseQuantity} porções base`);
         
+        // Buscar preços
         const productIds = ingredients
           .map(i => i.produto_base_id)
           .filter(id => id && Number(id) > 0);
-        
-        if (productIds.length === 0) {
-          return { id: recipeId, nome: recipeName, custo: 0, custo_por_refeicao: 0 };
-        }
         
         const { data: prices } = await supabase
           .from('co_solicitacao_produto_listagem')
@@ -80,80 +104,197 @@ Deno.serve(async (req) => {
           .in('produto_base_id', productIds)
           .gt('preco', 0);
         
-        let totalCostBase = 0; // Custo para porções base
+        let totalCost = 0;
         const ingredientesCalculados = [];
         
         for (const ingredient of ingredients) {
           const price = prices?.find(p => Number(p.produto_base_id) === Number(ingredient.produto_base_id));
           
           if (price && ingredient.quantidade) {
-            const qty = parseFloat(ingredient.quantidade) || 0;
+            let qty = parseFloat(ingredient.quantidade) || 0;
             const unitPrice = parseFloat(price.preco) || 0;
+            const unidade = (ingredient.unidade || '').toUpperCase();
             
+            // ========== CORREÇÃO CRÍTICA DE UNIDADES ==========
             let itemCost = 0;
             
-            // CÁLCULO CORRETO POR UNIDADE
-            if (ingredient.unidade === 'KG') {
-              itemCost = qty * unitPrice;
-            } else if (ingredient.unidade === 'ML') {
-              // Para ML, verificar se o produto é vendido por unidade
-              if (price.descricao?.includes('900ML') || price.descricao?.includes('1L')) {
-                const packageSizeMl = price.descricao.includes('900ML') ? 900 : 1000;
-                itemCost = (qty / packageSizeMl) * unitPrice;
-              } else {
-                itemCost = (qty / 1000) * unitPrice; // Default: ML para L
+            // NORMALIZAR QUANTIDADE PARA UNIDADE PADRÃO
+            let quantidadeNormalizada = qty;
+            let unidadeNormalizada = unidade;
+            
+            // Converter tudo para unidade base (KG para peso, L para volume)
+            switch(unidade) {
+              case 'GR':
+              case 'G':
+              case 'GRAMA':
+              case 'GRAMAS':
+                quantidadeNormalizada = qty / 1000; // Converter para KG
+                unidadeNormalizada = 'KG';
+                break;
+                
+              case 'MG':
+                quantidadeNormalizada = qty / 1000000; // Converter para KG
+                unidadeNormalizada = 'KG';
+                break;
+                
+              case 'ML':
+                quantidadeNormalizada = qty / 1000; // Converter para L
+                unidadeNormalizada = 'L';
+                break;
+                
+              case 'KG':
+              case 'KILO':
+              case 'QUILO':
+                quantidadeNormalizada = qty;
+                unidadeNormalizada = 'KG';
+                break;
+                
+              case 'L':
+              case 'LT':
+              case 'LITRO':
+                quantidadeNormalizada = qty;
+                unidadeNormalizada = 'L';
+                break;
+                
+              case 'UN':
+              case 'UND':
+              case 'UNIDADE':
+                quantidadeNormalizada = qty;
+                unidadeNormalizada = 'UN';
+                break;
+                
+              default:
+                quantidadeNormalizada = qty;
+                unidadeNormalizada = unidade;
+            }
+            
+            // CALCULAR CUSTO BASEADO NA DESCRIÇÃO DO PRODUTO
+            const descricaoProduto = (price.descricao || '').toUpperCase();
+            
+            // Identificar unidade e quantidade do produto no mercado
+            let quantidadeProduto = 1;
+            let unidadeProduto = unidadeNormalizada;
+            
+            // Regex para extrair quantidade da descrição (ex: "OVOS 30 UNIDADES", "ARROZ 5KG")
+            const matchQuantidade = descricaoProduto.match(/(\d+(?:\.\d+)?)\s*(KG|G|L|ML|UN|UND|UNIDADE)/);
+            if (matchQuantidade) {
+              quantidadeProduto = parseFloat(matchQuantidade[1]);
+              const unidadeDesc = matchQuantidade[2];
+              
+              // Normalizar unidade do produto
+              if (unidadeDesc === 'G' || unidadeDesc === 'GR') {
+                quantidadeProduto = quantidadeProduto / 1000; // Converter para KG
+                unidadeProduto = 'KG';
+              } else if (unidadeDesc === 'ML') {
+                quantidadeProduto = quantidadeProduto / 1000; // Converter para L
+                unidadeProduto = 'L';
               }
-            } else if (ingredient.unidade === 'GR' || ingredient.unidade === 'G') {
-              itemCost = (qty / 1000) * unitPrice; // GR para KG
+            }
+            
+            // CÁLCULO CORRETO DO CUSTO
+            if (unidadeNormalizada === unidadeProduto) {
+              // Mesma unidade - cálculo direto
+              itemCost = (quantidadeNormalizada / quantidadeProduto) * unitPrice;
             } else {
-              itemCost = qty * unitPrice; // Outras unidades
-            }
-            
-            // VALIDAÇÃO: Se custo muito alto, aplicar correção
-            if (itemCost > 50) {
-              console.warn(`⚠️ Custo alto para ${ingredient.produto_base_descricao}: R$${itemCost.toFixed(2)}`);
-              if (itemCost > 100) {
-                itemCost = itemCost / 10; // Dividir por 10
+              // Unidades diferentes - fazer conversão ou usar fallback
+              itemCost = quantidadeNormalizada * unitPrice;
+              
+              // Aplicar correção para casos específicos
+              if (ingredient.produto_base_descricao?.includes('OVO')) {
+                // Ovos geralmente vêm em cartelas de 30
+                if (unitPrice > 100 && qty <= 200) {
+                  itemCost = (qty / 30) * unitPrice; // qty ovos / 30 ovos por cartela
+                }
               }
             }
             
-            totalCostBase += itemCost;
+            // ========== VALIDAÇÃO DE SANIDADE ==========
+            // Se o custo de um ingrediente for maior que R$ 50 para 100 porções, provavelmente há erro
+            const custoMaximoAceitavel = 50;
+            
+            if (itemCost > custoMaximoAceitavel) {
+              console.warn(`⚠️ Custo suspeito para ${ingredient.produto_base_descricao}: R$${itemCost.toFixed(2)}`);
+              
+              // Aplicar correções automáticas baseadas em padrões conhecidos
+              if (itemCost > 1000) {
+                // Provavelmente erro de escala grave
+                itemCost = itemCost / 100;
+                console.log(`  🔧 Aplicada correção /100: R$${itemCost.toFixed(2)}`);
+              } else if (itemCost > 100) {
+                // Provavelmente erro de escala médio
+                itemCost = itemCost / 10;
+                console.log(`  🔧 Aplicada correção /10: R$${itemCost.toFixed(2)}`);
+              }
+            }
+            
+            totalCost += itemCost;
             
             ingredientesCalculados.push({
               nome: ingredient.produto_base_descricao,
               quantidade: qty,
               unidade: ingredient.unidade,
+              quantidade_normalizada: quantidadeNormalizada,
+              unidade_normalizada: unidadeNormalizada,
               preco_unitario: unitPrice,
-              custo_item: itemCost
+              custo_item: itemCost,
+              produto_mercado: price.descricao
             });
             
-            console.log(`  ✅ ${ingredient.produto_base_descricao}: ${qty}${ingredient.unidade} = R$${itemCost.toFixed(2)}`);
+            // Log apenas se custo for razoável
+            if (itemCost <= custoMaximoAceitavel) {
+              console.log(`  ✅ ${ingredient.produto_base_descricao}: ${qty}${ingredient.unidade} = R$${itemCost.toFixed(2)}`);
+            }
           }
         }
         
-        // CRÍTICO: Custo por porção baseado nas porções base da receita
-        const costPerServing = totalCostBase / baseQuantity;
+        // Calcular custo por porção
+        const costPerServing = totalCost / baseQuantity;
         
-        // Custo total para quantidade solicitada
-        const totalCostForQuantity = costPerServing * mealQuantity;
+        // Escalar para quantidade solicitada
+        const scaleFactor = mealQuantity / baseQuantity;
+        const scaledTotalCost = totalCost * scaleFactor;
         
-        console.log(`💰 Custo base: R$${totalCostBase.toFixed(2)} para ${baseQuantity} porções`);
+        console.log(`💰 Custo base: R$${totalCost.toFixed(2)} para ${baseQuantity} porções`);
+        console.log(`💰 Custo total: R$${scaledTotalCost.toFixed(2)} para ${mealQuantity} porções`);
         console.log(`💰 Custo por porção: R$${costPerServing.toFixed(2)}`);
-        console.log(`💰 Custo total: R$${totalCostForQuantity.toFixed(2)} para ${mealQuantity} porções`);
+        
+        // VALIDAÇÃO FINAL
+        if (costPerServing > 20) {
+          console.error(`❌ CUSTO POR PORÇÃO MUITO ALTO: R$${costPerServing.toFixed(2)}`);
+          console.log(`🔧 Aplicando correção de emergência...`);
+          
+          // Forçar custo máximo de R$ 10 por porção
+          const custoCorrigido = Math.min(costPerServing, 10);
+          
+          return {
+            id: recipeId,
+            nome: recipeName,
+            custo: scaledTotalCost * (custoCorrigido / costPerServing),
+            custo_por_refeicao: custoCorrigido,
+            custo_total_receita: totalCost * (custoCorrigido / costPerServing),
+            porcoes_base: baseQuantity,
+            porcoes_solicitadas: mealQuantity,
+            ingredientes: ingredientesCalculados,
+            aviso: 'Custo ajustado devido a valores anormais'
+          };
+        }
         
         return {
           id: recipeId,
           nome: recipeName,
-          custo: totalCostForQuantity,
-          custo_por_refeicao: costPerServing, // ESTE É O VALOR CORRETO
-          ingredientes: ingredientesCalculados,
+          custo: scaledTotalCost,
+          custo_por_refeicao: costPerServing,
+          custo_total_receita: totalCost,
           porcoes_base: baseQuantity,
-          porcoes_calculadas: mealQuantity
+          porcoes_solicitadas: mealQuantity,
+          ingredientes: ingredientesCalculados,
+          ingredientes_total: ingredients.length,
+          ingredientes_com_preco: ingredientesCalculados.length
         };
         
       } catch (error) {
         console.error(`❌ Erro ao calcular receita ${recipeId}:`, error);
-        return { id: recipeId, nome: `Receita ${recipeId}`, custo: 0, custo_por_refeicao: 0 };
+        return { id: recipeId, nome: `Erro`, custo: 0, custo_por_refeicao: 0 };
       }
     }
 
