@@ -536,7 +536,7 @@ Deno.serve(async (req) => {
           dia.receitas.map(r => ({
             nome: r.nome,
             categoria: r.categoria,
-            custo_por_porcao: r.custo_por_porcao,
+            custo_por_refeicao: r.custo_por_refeicao,
             ingredientes: r.ingredientes
           }))
         );
