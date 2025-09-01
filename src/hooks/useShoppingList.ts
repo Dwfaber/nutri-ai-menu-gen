@@ -1,4 +1,3 @@
-
 import { useState, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/components/ui/use-toast';
@@ -169,8 +168,8 @@ export const useShoppingList = () => {
               unidade: item.unit,
               preco_unitario: item.unit_price,
               valor_total: item.total_price,
-              fornecedor: '',
-              observacoes: '',
+              fornecedor: item.supplier || '',
+              observacoes: item.notes || '',
               receita_origem: []
             }));
 
@@ -236,21 +235,6 @@ export const useShoppingList = () => {
         throw new Error(result.error || 'Erro na geração da lista');
       }
 
-      const newList: ShoppingList = {
-        id: crypto.randomUUID(),
-        nome: `Lista de Compras - ${new Date().toLocaleDateString()}`,
-        cardapio_id: menuId,
-        itens: result.items || [],
-        valor_total: result.total_cost || 0,
-        data_criacao: new Date().toISOString(),
-        status: 'draft',
-        optimization_results: result.optimization_results,
-        client_name: result.client_name || clientName,
-        budget_predicted: result.budget_predicted || budgetPredicted,
-        cost_actual: result.total_cost || 0,
-        created_at: new Date().toISOString()
-      };
-
       // Reload lists from database to get the actual saved data
       await loadShoppingLists();
 
@@ -259,7 +243,9 @@ export const useShoppingList = () => {
         `Lista gerada com sucesso!`
       );
 
-      return newList;
+      // Return the most recent list (should be the one just created)
+      const mostRecentList = lists.length > 0 ? lists[0] : null;
+      return mostRecentList;
 
     } catch (error) {
       console.error('Erro ao gerar lista de compras:', error);
@@ -279,6 +265,48 @@ export const useShoppingList = () => {
 
   const saveShoppingList = async (list: ShoppingList): Promise<boolean> => {
     try {
+      setIsLoading(true);
+
+      // Save to Supabase first
+      const { error: listError } = await supabase
+        .from('shopping_lists')
+        .upsert({
+          id: list.id,
+          menu_id: list.cardapio_id,
+          client_name: list.client_name,
+          budget_predicted: list.budget_predicted,
+          cost_actual: list.valor_total,
+          status: list.status === 'draft' ? 'pending' : list.status === 'approved' ? 'budget_ok' : list.status,
+          created_at: list.created_at,
+        });
+
+      if (listError) throw listError;
+
+      // Delete existing items and insert new ones
+      await supabase.from('shopping_list_items').delete().eq('shopping_list_id', list.id);
+
+      if (list.itens.length > 0) {
+        const itemsPayload = list.itens.map(item => ({
+          shopping_list_id: list.id,
+          product_id_legado: item.produto_id,
+          product_name: item.produto_nome,
+          category: item.categoria,
+          quantity: item.quantidade_necessaria,
+          unit: item.unidade,
+          unit_price: item.preco_unitario,
+          total_price: item.valor_total,
+          supplier: item.fornecedor || null,
+          notes: item.observacoes || null,
+        }));
+
+        const { error: itemsError } = await supabase
+          .from('shopping_list_items')
+          .insert(itemsPayload);
+
+        if (itemsError) throw itemsError;
+      }
+
+      // Update local state
       setLists(prev => 
         prev.map(l => l.id === list.id ? list : l)
       );
@@ -301,11 +329,15 @@ export const useShoppingList = () => {
         "destructive"
       );
       return false;
+    } finally {
+      setIsLoading(false);
     }
   };
 
   const deleteShoppingList = async (listId: string): Promise<boolean> => {
     try {
+      setIsLoading(true);
+
       // Delete from database - first delete items, then the list
       const { error: itemsError } = await supabase
         .from('shopping_list_items')
@@ -342,6 +374,60 @@ export const useShoppingList = () => {
         "destructive"
       );
       return false;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const updateItemQuantity = async (itemId: string, quantity: number) => {
+    if (!currentList) return;
+
+    try {
+      // Update in database first
+      const item = currentList.itens.find(i => i.id === itemId);
+      if (!item) return;
+
+      const newTotalPrice = quantity * item.preco_unitario;
+
+      const { error } = await supabase
+        .from('shopping_list_items')
+        .update({ 
+          quantity: quantity,
+          total_price: newTotalPrice
+        })
+        .eq('id', itemId);
+
+      if (error) throw error;
+
+      // Update local state
+      const updatedItems = currentList.itens.map(item => 
+        item.id === itemId 
+          ? { ...item, quantidade_necessaria: quantity, valor_total: newTotalPrice }
+          : item
+      );
+
+      const updatedList = {
+        ...currentList,
+        itens: updatedItems,
+        valor_total: updatedItems.reduce((sum, item) => sum + item.valor_total, 0)
+      };
+
+      // Update the list's total cost in database
+      await supabase
+        .from('shopping_lists')
+        .update({ cost_actual: updatedList.valor_total })
+        .eq('id', currentList.id);
+
+      setCurrentList(updatedList);
+      setLists(prev => prev.map(l => l.id === updatedList.id ? updatedList : l));
+
+    } catch (error) {
+      console.error('Erro ao atualizar quantidade:', error);
+      showToast(
+        "Erro ao Atualizar",
+        "Não foi possível atualizar a quantidade",
+        "destructive"
+      );
     }
   };
 
@@ -391,25 +477,6 @@ export const useShoppingList = () => {
     a.download = `lista-compras-${clientName}.csv`;
     a.click();
     window.URL.revokeObjectURL(url);
-  };
-
-  const updateItemQuantity = async (itemId: string, quantity: number) => {
-    if (!currentList) return;
-
-    const updatedItems = currentList.itens.map(item => 
-      item.id === itemId 
-        ? { ...item, quantidade_necessaria: quantity, valor_total: quantity * item.preco_unitario }
-        : item
-    );
-
-    const updatedList = {
-      ...currentList,
-      itens: updatedItems,
-      valor_total: updatedItems.reduce((sum, item) => sum + item.valor_total, 0)
-    };
-
-    setCurrentList(updatedList);
-    setLists(prev => prev.map(l => l.id === updatedList.id ? updatedList : l));
   };
 
   const createFromMenu = async (menuId: string, clientName: string, totalCost: number): Promise<void> => {
