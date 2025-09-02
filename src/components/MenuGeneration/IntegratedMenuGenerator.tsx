@@ -220,7 +220,8 @@ const IntegratedMenuGenerator = () => {
           <CardContent className="space-y-4">
             <p className="text-gray-600 text-sm">
               Sistema inteligente que verifica disponibilidade no mercado e aplica regras de negócio.
-              Estrutura: PP1, PP2, Arroz Branco, Feijão, Salada 1 (Verduras), Salada 2 (Legumes), Suco 1, Suco 2.
+              Estrutura: PP1, PP2, Arroz Branco, Feijão, Guarnição, 
+              Salada 1 (Verduras), Salada 2 (Legumes), Suco 1, Suco 2, Sobremesa.
               Garante variedade de proteínas, evita processos e controla custos para qualquer período.
             </p>
             <div className="flex gap-3">
