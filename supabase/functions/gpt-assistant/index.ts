@@ -338,53 +338,105 @@ Deno.serve(async (req) => {
       }
     }
 
-    // FUNÇÃO PARA BUSCAR RECEITAS COM VARIAÇÃO
+    // FUNÇÃO PARA BUSCAR RECEITAS COM VARIAÇÃO (com fallback inteligente)
     async function buscarReceitaComVariacao(categoria, budget, mealQuantity, diaIndex = 0) {
       console.log(`🔍 Buscando ${categoria} (dia ${diaIndex + 1}) - orçamento R$${budget.toFixed(2)}`);
-      
+
       const palavrasChave = {
-        'Proteína Principal 1': ['FRANGO', 'CARNE', 'PEIXE', 'BOVINA', 'PEITO', 'COXA'],
-        'Proteína Principal 2': ['LINGUICA', 'OVO', 'HAMBURGUER', 'ALMONDEGA', 'SALSICHA'],
-        'Guarnição': ['BATATA', 'MANDIOCA', 'AIPIM', 'MACAXEIRA', 'INHAME', 'PURÊ', 'FAROFA', 'POLENTA', 'MANDIOQUINHA', 'BATATA DOCE', 'ESCONDIDINHO', 'TORTA', 'QUICHE', 'LASANHA', 'GRATINADO', 'REFOGADO', 'LEGUMES', 'ACOMPANHAMENTO'],
-        'Salada 1 (Verduras)': ['SALADA', 'ALFACE', 'ACELGA', 'COUVE', 'FOLHAS'],
-        'Salada 2 (Legumes)': ['TOMATE', 'PEPINO', 'CENOURA', 'ABOBRINHA', 'LEGUME'],
-        'Suco 1': ['SUCO DE LARANJA', 'SUCO DE LIMAO', 'REFRESCO'],
-        'Suco 2': ['SUCO DE GOIABA', 'AGUA SABORIZADA', 'SUCO TROPICAL'],
-        'Sobremesa': ['CREME', 'DOCE', 'FRUTAS', 'GELATINA', 'GOIABADA']
+        'Proteína Principal 1': [
+          'FRANGO', 'CARNE', 'BOVINA', 'PEIXE', 'SUÍNO',
+          'FILÉ', 'PEITO', 'COXA', 'ASSADO', 'ENSOPADO', 'GRELHADO',
+          'BIFE', 'COSTELA', 'CHURRASCO'
+        ],
+        'Proteína Principal 2': [
+          'LINGUIÇA', 'SALSICHA', 'HAMBURGUER', 'ALMÔNDEGA',
+          'OVO', 'OMELETE', 'FRITADA', 'FRANGO DESFIADO',
+          'CARNE MOÍDA', 'KAFTA', 'ISCAS', 'STROGONOFF'
+        ],
+        'Guarnição': [
+          'BATATA', 'MANDIOCA', 'AIPIM', 'MACAXEIRA', 'INHAME',
+          'PURÊ', 'FAROFA', 'POLENTA', 'MANDIOQUINHA', 'BATATA DOCE',
+          'ESCONDIDINHO', 'TORTA', 'QUICHE', 'LASANHA',
+          'GRATINADO', 'REFOGADO', 'LEGUMES', 'ACOMPANHAMENTO',
+          'MACARRÃO', 'MASSA'
+        ],
+        'Salada 1 (Verduras)': [
+          'SALADA', 'ALFACE', 'ACELGA', 'COUVE', 'FOLHAS',
+          'RÚCULA', 'ESPINAFRE', 'AGRIAO'
+        ],
+        'Salada 2 (Legumes)': [
+          'TOMATE', 'PEPINO', 'CENOURA', 'ABOBRINHA',
+          'BETERRABA', 'CHUCHU', 'LEGUME'
+        ],
+        'Suco 1': [
+          'SUCO DE LARANJA', 'SUCO DE LIMAO', 'REFRESCO',
+          'SUCO DE MARACUJA', 'SUCO DE ABACAXI'
+        ],
+        'Suco 2': [
+          'SUCO DE GOIABA', 'AGUA SABORIZADA', 'SUCO TROPICAL',
+          'SUCO DE UVA', 'SUCO DE MELANCIA'
+        ],
+        'Sobremesa': [
+          'BOLO', 'PUDIM', 'MOUSSE', 'COMPOTA', 'DOCE',
+          'GELATINA', 'FRUTA', 'CREME', 'TORTA', 'SORVETE',
+          'BRIGADEIRO', 'BEIJINHO', 'COCADA'
+        ]
       };
-      
+
+      // Keywords para a categoria
       const keywords = palavrasChave[categoria] || [categoria];
-      const keyword = keywords[diaIndex % keywords.length]; // Rotacionar por dia
-      
+
+      let receitas = [];
       try {
-        const { data: receitas } = await supabase
+        // 1) Tenta buscar receitas usando todas as keywords (OR)
+        const { data } = await supabase
           .from('receita_ingredientes')
           .select('receita_id_legado, nome')
-          .ilike('nome', `%${keyword}%`)
-          .limit(10 + diaIndex * 2); // Mais opções para dias posteriores
-        
-        if (!receitas || receitas.length === 0) {
-          return null;
+          .or(keywords.map(k => `nome.ilike.%${k}%`).join(','))
+          .limit(25);
+
+        receitas = data || [];
+
+        // 2) Fallback: se não encontrou nada, pega qualquer receita
+        if (!receitas.length) {
+          console.warn(`⚠️ Nenhuma receita encontrada para ${categoria}, usando fallback geral...`);
+          const { data: fallback } = await supabase
+            .from('receita_ingredientes')
+            .select('receita_id_legado, nome')
+            .limit(30);
+          receitas = fallback || [];
         }
-        
+
+        // Remove duplicadas
         const receitasUnicas = [...new Map(receitas.map(r => [r.receita_id_legado, r])).values()];
+        if (!receitasUnicas.length) return null;
+
+        // Pula algumas para variar entre dias
         const startIndex = diaIndex % receitasUnicas.length;
-        
-        // Testar receitas com offset por dia
-        for (let i = 0; i < Math.min(3, receitasUnicas.length); i++) {
+
+        // Testa até 5 receitas candidatas
+        for (let i = 0; i < Math.min(5, receitasUnicas.length); i++) {
           const index = (startIndex + i) % receitasUnicas.length;
           const receita = receitasUnicas[index];
-          
+
           const custo = await calculateSimpleCost(receita.receita_id_legado, mealQuantity);
-          
+
           if (custo.custo_por_refeicao > 0 && custo.custo_por_refeicao <= budget) {
             console.log(`  ✅ Selecionada: ${custo.nome} - R$${custo.custo_por_refeicao.toFixed(2)}`);
             return custo;
           }
         }
-        
+
+        // Último fallback: devolve a primeira viável mesmo acima do budget
+        const receitaFallback = receitasUnicas[0];
+        if (receitaFallback) {
+          const custo = await calculateSimpleCost(receitaFallback.receita_id_legado, mealQuantity);
+          console.log(`  ⚠️ Usando fallback sem respeitar budget: ${custo.nome} - R$${custo.custo_por_refeicao.toFixed(2)}`);
+          return custo;
+        }
+
         return null;
-        
+
       } catch (error) {
         console.error(`❌ Erro ao buscar ${categoria}:`, error);
         return null;
