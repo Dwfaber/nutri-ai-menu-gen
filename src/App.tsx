@@ -19,6 +19,7 @@ import Compras from "./pages/Compras";
 import Relatorios from "./pages/Relatorios";
 import NotFound from "./pages/NotFound";
 import Updates from "./pages/Updates";
+import Configuracoes from "./pages/Configuracoes";
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import ResetPassword from "./pages/ResetPassword";
@@ -62,7 +63,7 @@ const App = () => {
                              <Route path="/compras" element={<Compras />} />
                              <Route path="/relatorios" element={<Relatorios />} />
                              <Route path="/atualizacoes" element={<Updates />} />
-                             <Route path="/configuracoes" element={<Dashboard />} />
+                             <Route path="/configuracoes" element={<Configuracoes />} />
                              <Route path="/welcome" element={<Index />} />
                              <Route path="*" element={<NotFound />} />
                            </Routes>
