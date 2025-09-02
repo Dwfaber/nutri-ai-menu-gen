@@ -19,11 +19,15 @@ const Index = () => {
     <div className="min-h-screen bg-gradient-to-br from-primary/5 to-secondary/5 flex items-center justify-center p-6">
       <div className="max-w-4xl w-full">
         <div className="text-center mb-8">
-          <h1 className="text-5xl font-bold mb-4 bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">
-            Nutr's IA
-          </h1>
+          <div className="mb-6 flex justify-center">
+            <img 
+              src="/nutris-logo.png" 
+              alt="Nutr's Refeições Coletivas" 
+              className="h-20 md:h-28 object-contain"
+            />
+          </div>
           <p className="text-xl text-muted-foreground mb-6">
-            Sistema Inteligente para Automação de Cardápios Corporativos
+            Sistema Inteligente para Refeições Coletivas
           </p>
           <p className="text-sm text-muted-foreground">
             Otimização de compras, criação de cardápios e relatórios de desempenho
