@@ -9,6 +9,21 @@ export default function Updates() {
   const recentUpdates = [
     {
       date: "02/09/2025",
+      title: "Sistema de Orçamento Dinâmico",
+      description: "Orçamento específico por filial implementado substituindo valor fixo",
+      type: "feature",
+      impact: "crítico",
+      details: [
+        "Busca automática do orçamento da filial na tabela custos_filiais",
+        "Eliminação da constante hardcoded MAX_MEAL_COST",
+        "Fallback para R$ 9,00 quando não há dados específicos",
+        "Transparência total com origem do orçamento (tabela vs fallback)",
+        "Substituições detalhadas com economia calculada",
+        "Logs informativos para auditoria completa"
+      ]
+    },
+    {
+      date: "02/09/2025",
       title: "Estrutura de Cardápios Completa",
       description: "Sistema agora gera cardápios com 10 categorias fixas sem duplicação",
       type: "feature",
@@ -65,8 +80,14 @@ export default function Updates() {
     backend: [
       {
         date: "02/09/2025",
-        title: "Edge Function GPT-Assistant v3.0",
-        description: "Correção completa da estrutura de cardápios",
+        title: "Sistema de Orçamento Dinâmico",
+        description: "Orçamento específico por filial implementado",
+        status: "concluído"
+      },
+      {
+        date: "02/09/2025",
+        title: "Edge Function GPT-Assistant v4.0",
+        description: "Correção de escopo e cálculos aprimorados",
         status: "concluído"
       },
       {
@@ -127,6 +148,12 @@ export default function Updates() {
       }
     ],
     ai: [
+      {
+        date: "02/09/2025",
+        title: "IA com Orçamento Personalizado",
+        description: "Inteligência artificial adaptada ao orçamento específico de cada filial",
+        status: "concluído"
+      },
       {
         date: "02/09/2025",
         title: "Sistema de Busca Inteligente",
