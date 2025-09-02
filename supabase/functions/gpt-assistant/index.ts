@@ -42,6 +42,12 @@ Deno.serve(async (req) => {
     const requestData = await req.json();
     
     console.log('📥 REQUEST:', requestData.action, requestData.filialIdLegado || 'sem filial');
+    console.log('🔍 CLIENT_ID DEBUG:', {
+      client_id: requestData.client_id,
+      clientId: requestData.clientId, 
+      filial_id: requestData.filial_id,
+      filialIdLegado: requestData.filialIdLegado
+    });
     
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
@@ -544,9 +550,16 @@ Deno.serve(async (req) => {
           }))
         );
 
+        // Captura o client_id correto do requestData
+        const clientId = requestData.client_id || requestData.clientId || requestData.filial_id || requestData.filialIdLegado;
+        
+        if (!clientId || clientId === "sem-id") {
+          console.warn('⚠️  CLIENT_ID não encontrado no payload:', requestData);
+        }
+
         // Prepara o payload para o insert (sem cardapio_json que não existe na tabela)
         const payload = {
-          client_id: String(requestData.client_id || requestData.clientId || requestData.filial_id || "unknown-client"),
+          client_id: String(clientId || "unknown-client"),
           client_name: clientName,
           week_period: `${response.cardapio[0].data} - ${response.cardapio[response.cardapio.length - 1].data}`,
           total_cost: Number(response.resumo_financeiro.custo_total_periodo) || 0,
