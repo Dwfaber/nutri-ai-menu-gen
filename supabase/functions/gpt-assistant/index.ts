@@ -1,4 +1,4 @@
-// index.ts - VERSÃO CORRIGIDA COMPLETA
+// index.ts - VERSÃO COM REGRAS DA NUTRICIONISTA v4.0
 
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
@@ -6,6 +6,18 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type'
+};
+
+// ========== CONFIGURAÇÕES DA NUTRICIONISTA ==========
+const MAX_MEAL_COST = 6.30;
+const STANDARD_PROTEIN_GRAMS = 120;
+
+const PROTEIN_TYPES: Record<string, string[]> = {
+  "Carne Vermelha": ["carne bovina", "boi", "coxão", "acém", "maminha", "alcatra", "patinho", "carne moída", "hambúrguer", "almôndega", "bife", "costela", "picanha", "suína", "porco", "lombo"],
+  "Frango": ["frango", "galinha", "peito", "coxa", "asa", "chester"],
+  "Peixe": ["peixe", "tilápia", "salmão", "sardinha", "bacalhau", "pescada", "merluza"],
+  "Ovo": ["ovo", "omelete", "fritada", "mexido"],
+  "Vegetariano": ["soja", "lentilha", "grão-de-bico", "ervilha", "feijão branco", "vegetariano", "vegano", "proteína de soja", "quinoa"]
 };
 
 // ESTRUTURA COM 10 CATEGORIAS (INCLUINDO GUARNIÇÃO)
@@ -54,6 +66,85 @@ Deno.serve(async (req) => {
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
+
+    // ========== FUNÇÕES DE CONTROLE DA NUTRICIONISTA ==========
+    
+    // Identifica tipo da proteína baseado no nome
+    function getProteinType(name: string): string | null {
+      const nomeLower = name.toLowerCase();
+      for (const [tipo, palavras] of Object.entries(PROTEIN_TYPES)) {
+        if (palavras.some(p => nomeLower.includes(p))) return tipo;
+      }
+      return null;
+    }
+
+    // Valida categoria para não cruzar (ex: sobremesa != frango)
+    function validarCategoriaReceita(receita: any, categoria: string): boolean {
+      const nome = receita.nome?.toLowerCase() || receita.name?.toLowerCase() || '';
+      
+      if (categoria.includes("sobremesa") || categoria.includes("Sobremesa")) {
+        // Sobremesa NÃO pode ter proteína
+        if (["frango","carne","bovina","suína","peixe","ovo","proteína"].some(w => nome.includes(w))) {
+          console.log(`❌ ${receita.nome} rejeitada para sobremesa (contém proteína)`);
+          return false;
+        }
+      }
+      
+      if (categoria.includes("suco") || categoria.includes("Suco")) {
+        // Suco NÃO pode ter salada
+        if (["salada","alface","tomate","pepino"].some(w => nome.includes(w))) {
+          console.log(`❌ ${receita.nome} rejeitada para suco (contém salada)`);
+          return false;
+        }
+      }
+      
+      if (categoria.includes("salada") || categoria.includes("Salada")) {
+        // Salada NÃO pode ter suco
+        if (["suco","refresco","bebida"].some(w => nome.includes(w))) {
+          console.log(`❌ ${receita.nome} rejeitada para salada (contém suco)`);
+          return false;
+        }
+      }
+      
+      if (categoria.includes("Proteína")) {
+        // Proteína DEVE ter proteína
+        const tipoProteina = getProteinType(nome);
+        if (!tipoProteina) {
+          console.log(`❌ ${receita.nome} rejeitada para proteína (sem proteína detectada)`);
+          return false;
+        }
+      }
+      
+      return true;
+    }
+
+    // Função de escolha com variedade
+    function escolherReceita(categoria: string, pool: any[], receitasUsadas: string[] = []) {
+      const lista = pool.filter(r => {
+        const validCategoria = r.categoria === categoria || r.category === categoria;
+        const naoUsada = !receitasUsadas.includes(r.nome || r.name);
+        const categoriaValida = validarCategoriaReceita(r, categoria);
+        return validCategoria && naoUsada && categoriaValida;
+      });
+      
+      if (!lista.length) {
+        // Fallback: ignora "já usado" mas mantém validação de categoria
+        const listaFallback = pool.filter(r => {
+          const validCategoria = r.categoria === categoria || r.category === categoria;
+          const categoriaValida = validarCategoriaReceita(r, categoria);
+          return validCategoria && categoriaValida;
+        });
+        
+        if (listaFallback.length > 0) {
+          const idx = Math.floor(Math.random() * listaFallback.length);
+          return { ...listaFallback[idx] };
+        }
+        return null;
+      }
+      
+      const idx = Math.floor(Math.random() * lista.length);
+      return { ...lista[idx] };
+    }
 
     // FUNÇÃO AUXILIAR PARA DETECTAR E CORRIGIR UNIDADES
     function detectarUnidadeProduto(descricao) {
@@ -443,6 +534,325 @@ Deno.serve(async (req) => {
       }
     }
 
+    // ========== FUNÇÃO PRINCIPAL DE GERAÇÃO COM REGRAS ==========
+    async function gerarCardapioComRegras(config: {
+      budget: number,
+      mealQuantity: number,
+      numDays: number,
+      periodo: string,
+      diasUteis: boolean,
+      supabase: any
+    }) {
+      const { budget, mealQuantity, numDays, periodo, diasUteis, supabase } = config;
+      
+      const totalDias = periodo === "quinzena" ? 14 : Math.min(numDays, 7);
+      let cardapioPorDia = [];
+      let contadorCarnesVermelhas = 0;
+      let guarnicoesUsadas: string[] = [];
+      let receitasPool: any[] = [];
+      
+      // Buscar todas as receitas disponíveis
+      console.log('🔍 Carregando pool de receitas...');
+      const { data: allRecipes } = await supabase
+        .from('receita_ingredientes')
+        .select('receita_id_legado, nome')
+        .limit(200);
+      
+      if (allRecipes) {
+        receitasPool = allRecipes.map(r => ({
+          id: r.receita_id_legado,
+          nome: r.nome,
+          name: r.nome,
+          categoria: inferirCategoria(r.nome),
+          category: inferirCategoria(r.nome)
+        }));
+      }
+      
+      const diasSemana = ['Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado', 'Domingo'];
+      
+      for (let i = 0; i < totalDias; i++) {
+        const nomeDia = diasSemana[i % 7];
+        
+        // Pular fins de semana se diasUteis = true
+        if (diasUteis && (i % 7 === 5 || i % 7 === 6)) {
+          console.log(`⏭️ Pulando ${nomeDia} (apenas dias úteis)`);
+          continue;
+        }
+        
+        console.log(`\n📅 === ${nomeDia} (Dia ${i + 1}) ===`);
+        
+        let receitasDia: any[] = [];
+        let custoDia = 0;
+        let substituicoesPorOrcamento: string[] = [];
+        
+        // ====== PROTEÍNAS COM CONTROLE DE VARIEDADE ======
+        console.log('🥩 Selecionando proteínas...');
+        
+        let pp1 = escolherReceita("Proteína Principal 1", receitasPool);
+        let pp2 = escolherReceita("Proteína Principal 2", receitasPool);
+        
+        if (pp1) {
+          const pp1Result = await calculateSimpleCost(pp1.id, mealQuantity);
+          if (pp1Result.custo_por_refeicao > 0) {
+            pp1.custo_por_refeicao = pp1Result.custo_por_refeicao;
+            pp1.nome = pp1Result.nome;
+            pp1.grams = STANDARD_PROTEIN_GRAMS;
+            
+            // Controle de carne vermelha
+            const tipoPP1 = getProteinType(pp1.nome);
+            if (tipoPP1 === "Carne Vermelha") {
+              if (contadorCarnesVermelhas >= 2) {
+                console.log(`⚠️ Limite de carne vermelha atingido, buscando alternativa para PP1`);
+                const alternativa = receitasPool.find(r => 
+                  r.categoria === "Proteína Principal 1" && 
+                  getProteinType(r.nome) !== "Carne Vermelha"
+                );
+                if (alternativa) {
+                  const altResult = await calculateSimpleCost(alternativa.id, mealQuantity);
+                  if (altResult.custo_por_refeicao > 0) {
+                    pp1 = alternativa;
+                    pp1.custo_por_refeicao = altResult.custo_por_refeicao;
+                    pp1.nome = altResult.nome;
+                    pp1.grams = STANDARD_PROTEIN_GRAMS;
+                  }
+                }
+              } else {
+                contadorCarnesVermelhas++;
+              }
+            }
+          }
+        }
+        
+        if (pp2) {
+          const pp2Result = await calculateSimpleCost(pp2.id, mealQuantity);
+          if (pp2Result.custo_por_refeicao > 0) {
+            pp2.custo_por_refeicao = pp2Result.custo_por_refeicao;
+            pp2.nome = pp2Result.nome;
+            pp2.grams = STANDARD_PROTEIN_GRAMS;
+            
+            // Garantir tipos diferentes no mesmo dia
+            if (pp1 && getProteinType(pp1.nome) === getProteinType(pp2.nome)) {
+              console.log(`⚠️ Mesmo tipo de proteína no dia, buscando alternativa para PP2`);
+              const alternativa = receitasPool.find(r =>
+                r.categoria === "Proteína Principal 2" &&
+                getProteinType(r.nome) !== getProteinType(pp1.nome)
+              );
+              if (alternativa) {
+                const altResult = await calculateSimpleCost(alternativa.id, mealQuantity);
+                if (altResult.custo_por_refeicao > 0) {
+                  pp2 = alternativa;
+                  pp2.custo_por_refeicao = altResult.custo_por_refeicao;
+                  pp2.nome = altResult.nome;
+                  pp2.grams = STANDARD_PROTEIN_GRAMS;
+                }
+              }
+            }
+            
+            // Controle de carne vermelha para PP2
+            const tipoPP2 = getProteinType(pp2.nome);
+            if (tipoPP2 === "Carne Vermelha") {
+              if (contadorCarnesVermelhas >= 2) {
+                console.log(`⚠️ Limite de carne vermelha atingido, buscando alternativa para PP2`);
+                const alternativa = receitasPool.find(r => 
+                  r.categoria === "Proteína Principal 2" && 
+                  getProteinType(r.nome) !== "Carne Vermelha"
+                );
+                if (alternativa) {
+                  const altResult = await calculateSimpleCost(alternativa.id, mealQuantity);
+                  if (altResult.custo_por_refeicao > 0) {
+                    pp2 = alternativa;
+                    pp2.custo_por_refeicao = altResult.custo_por_refeicao;
+                    pp2.nome = altResult.nome;
+                    pp2.grams = STANDARD_PROTEIN_GRAMS;
+                  }
+                }
+              } else {
+                contadorCarnesVermelhas++;
+              }
+            }
+          }
+        }
+        
+        // Adicionar proteínas ao dia
+        if (pp1) {
+          receitasDia.push({
+            id: pp1.id,
+            nome: pp1.nome,
+            categoria: 'Proteína Principal 1',
+            codigo: 'PP1',
+            custo_por_refeicao: pp1.custo_por_refeicao,
+            custo_total: pp1.custo_por_refeicao * mealQuantity,
+            porcoes: mealQuantity,
+            ingredientes: [],
+            grams: pp1.grams,
+            protein_type: getProteinType(pp1.nome)
+          });
+          custoDia += pp1.custo_por_refeicao;
+        }
+        
+        if (pp2) {
+          receitasDia.push({
+            id: pp2.id,
+            nome: pp2.nome,
+            categoria: 'Proteína Principal 2',
+            codigo: 'PP2',
+            custo_por_refeicao: pp2.custo_por_refeicao,
+            custo_total: pp2.custo_por_refeicao * mealQuantity,
+            porcoes: mealQuantity,
+            ingredientes: [],
+            grams: pp2.grams,
+            protein_type: getProteinType(pp2.nome)
+          });
+          custoDia += pp2.custo_por_refeicao;
+        }
+        
+        // ====== OUTRAS CATEGORIAS ======
+        const outrasCategoriasConfig = [
+          { codigo: 'ARROZ', categoria: 'Arroz Branco', receita_id: 580 },
+          { codigo: 'FEIJAO', categoria: 'Feijão', receita_id: 1600 },
+          { codigo: 'GUARNICAO', categoria: 'Guarnição' },
+          { codigo: 'SALADA1', categoria: 'Salada 1 (Verduras)' },
+          { codigo: 'SALADA2', categoria: 'Salada 2 (Legumes)' },
+          { codigo: 'SUCO1', categoria: 'Suco 1' },
+          { codigo: 'SUCO2', categoria: 'Suco 2' },
+          { codigo: 'SOBREMESA', categoria: 'Sobremesa' }
+        ];
+        
+        for (const catConfig of outrasCategoriasConfig) {
+          let receita = null;
+          
+          if (catConfig.receita_id) {
+            // Receitas fixas (arroz e feijão)
+            const resultado = await calculateSimpleCost(catConfig.receita_id, mealQuantity);
+            if (resultado.custo_por_refeicao > 0) {
+              receita = {
+                id: resultado.id,
+                nome: resultado.nome,
+                custo_por_refeicao: resultado.custo_por_refeicao,
+                custo_total: resultado.custo || 0
+              };
+            }
+          } else {
+            // Receitas variáveis com controle de variedade
+            if (catConfig.codigo === 'GUARNICAO') {
+              receita = escolherReceita(catConfig.categoria, receitasPool, guarnicoesUsadas);
+              if (receita) {
+                const resultado = await calculateSimpleCost(receita.id, mealQuantity);
+                if (resultado.custo_por_refeicao > 0) {
+                  receita.custo_por_refeicao = resultado.custo_por_refeicao;
+                  receita.nome = resultado.nome;
+                  guarnicoesUsadas.push(receita.nome);
+                }
+              }
+            } else {
+              receita = escolherReceita(catConfig.categoria, receitasPool);
+              if (receita) {
+                const resultado = await calculateSimpleCost(receita.id, mealQuantity);
+                if (resultado.custo_por_refeicao > 0) {
+                  receita.custo_por_refeicao = resultado.custo_por_refeicao;
+                  receita.nome = resultado.nome;
+                }
+              }
+            }
+          }
+          
+          if (receita && receita.custo_por_refeicao > 0) {
+            receitasDia.push({
+              id: receita.id,
+              nome: receita.nome,
+              categoria: catConfig.categoria,
+              codigo: catConfig.codigo,
+              custo_por_refeicao: receita.custo_por_refeicao,
+              custo_total: receita.custo_por_refeicao * mealQuantity,
+              porcoes: mealQuantity,
+              ingredientes: []
+            });
+            custoDia += receita.custo_por_refeicao;
+          }
+        }
+        
+        // ====== CONTROLE DE ORÇAMENTO RIGOROSO ======
+        if (custoDia > MAX_MEAL_COST) {
+          console.log(`⚠️ Custo do dia R$${custoDia.toFixed(2)} > limite R$${MAX_MEAL_COST.toFixed(2)}`);
+          
+          // Encontrar item mais caro (excluindo arroz e feijão fixos)
+          const receitasAjustaveis = receitasDia.filter(r => r.codigo !== 'ARROZ' && r.codigo !== 'FEIJAO');
+          if (receitasAjustaveis.length > 0) {
+            const maisCaro = receitasAjustaveis.reduce((a, b) => a.custo_por_refeicao > b.custo_por_refeicao ? a : b);
+            
+            // Buscar alternativa mais barata da mesma categoria
+            const alternativas = receitasPool.filter(r => 
+              r.categoria === maisCaro.categoria && 
+              validarCategoriaReceita(r, maisCaro.categoria)
+            );
+            
+            for (const alt of alternativas) {
+              const resultado = await calculateSimpleCost(alt.id, mealQuantity);
+              if (resultado.custo_por_refeicao > 0 && resultado.custo_por_refeicao < maisCaro.custo_por_refeicao) {
+                console.log(`🔄 Substituindo ${maisCaro.nome} por ${resultado.nome} (economia: R$${(maisCaro.custo_por_refeicao - resultado.custo_por_refeicao).toFixed(2)})`);
+                
+                // Atualizar receita
+                maisCaro.id = alt.id;
+                maisCaro.nome = resultado.nome;
+                maisCaro.custo_total = resultado.custo_por_refeicao * mealQuantity;
+                
+                // Recalcular custo do dia
+                custoDia = custoDia - maisCaro.custo_por_refeicao + resultado.custo_por_refeicao;
+                maisCaro.custo_por_refeicao = resultado.custo_por_refeicao;
+                
+                substituicoesPorOrcamento.push(`${maisCaro.categoria}: ${maisCaro.nome}`);
+                break;
+              }
+            }
+          }
+        }
+        
+        cardapioPorDia.push({
+          dia: nomeDia,
+          data: new Date(Date.now() + i * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+          receitas: receitasDia,
+          custo_total_dia: custoDia * mealQuantity,
+          custo_por_refeicao: custoDia,
+          dentro_orcamento: custoDia <= MAX_MEAL_COST,
+          substituicoes_orcamento: substituicoesPorOrcamento,
+          contadores: {
+            carnes_vermelhas_semana: contadorCarnesVermelhas,
+            guarnicoes_usadas: guarnicoesUsadas.length
+          }
+        });
+        
+        console.log(`💰 ${nomeDia}: R$ ${custoDia.toFixed(2)}/refeição ${custoDia <= MAX_MEAL_COST ? '✅' : '⚠️'}`);
+        if (substituicoesPorOrcamento.length > 0) {
+          console.log(`🔄 Substituições: ${substituicoesPorOrcamento.join(', ')}`);
+        }
+      }
+      
+      return cardapioPorDia;
+    }
+    
+    // Função auxiliar para inferir categoria pelo nome
+    function inferirCategoria(nome: string): string {
+      const nomeLower = nome.toLowerCase();
+      
+      if (getProteinType(nome)) {
+        if (nomeLower.includes('principal') || nomeLower.includes('prato')) {
+          return 'Proteína Principal 1';
+        }
+        return 'Proteína Principal 2';
+      }
+      
+      if (nomeLower.includes('arroz')) return 'Arroz Branco';
+      if (nomeLower.includes('feijão') || nomeLower.includes('feijao')) return 'Feijão';
+      if (nomeLower.includes('salada') || nomeLower.includes('alface') || nomeLower.includes('tomate')) {
+        return nomeLower.includes('folha') ? 'Salada 1 (Verduras)' : 'Salada 2 (Legumes)';
+      }
+      if (nomeLower.includes('suco') || nomeLower.includes('refresco')) return 'Suco 1';
+      if (nomeLower.includes('sobremesa') || nomeLower.includes('doce') || nomeLower.includes('bolo')) return 'Sobremesa';
+      if (nomeLower.includes('batata') || nomeLower.includes('mandioca') || nomeLower.includes('macarrão')) return 'Guarnição';
+      
+      return 'Guarnição'; // fallback
+    }
+
     // HANDLER PRINCIPAL
     if (requestData.action === 'generate_menu') {
       const mealQuantity = requestData.refeicoesPorDia || requestData.meal_quantity || 100;
@@ -464,70 +874,18 @@ Deno.serve(async (req) => {
         
         console.log(`💰 Orçamento: R$ ${budget.toFixed(2)}/refeição`);
         
-        // Gerar cardápio por dia
-        const cardapioPorDia = [];
-        const diasSemana = ['Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado', 'Domingo'];
+        // ========== NOVA LÓGICA COM REGRAS DA NUTRICIONISTA ==========
+        const periodo = requestData.periodo || 'semanal';
+        const diasUteis = requestData.diasUteis || false;
         
-        for (let diaIndex = 0; diaIndex < numDays; diaIndex++) {
-          const nomeDia = diasSemana[diaIndex % 7];
-          console.log(`\n📅 === ${nomeDia} (Dia ${diaIndex + 1}) ===`);
-          
-          const receitasDia = [];
-          let custoDia = 0;
-          
-          // Gerar cada categoria para este dia
-          for (const [codigo, config] of Object.entries(ESTRUTURA_CARDAPIO)) {
-            const orcamentoItem = budget * (config.budget_percent / 100);
-            
-            let receita = null;
-            
-            if (config.receita_id) {
-              // Receitas fixas (arroz e feijão)
-              receita = await calculateSimpleCost(config.receita_id, mealQuantity);
-            } else {
-              // Receitas variáveis
-              receita = await buscarReceitaComVariacao(config.categoria, orcamentoItem, mealQuantity, diaIndex);
-            }
-            
-            if (receita && receita.custo_por_refeicao > 0) {
-              receitasDia.push({
-                id: receita.id,
-                nome: receita.nome,
-                categoria: config.categoria,
-                codigo: codigo,
-                custo_por_refeicao: receita.custo_por_refeicao,
-                custo_total: receita.custo || 0,
-                porcoes: mealQuantity,
-                ingredientes: receita.ingredientes || []
-              });
-              
-              custoDia += receita.custo_por_refeicao;
-            } else {
-              // Receita não encontrada
-              receitasDia.push({
-                id: `placeholder-${codigo}-${diaIndex}`,
-                nome: `${config.categoria} (não disponível)`,
-                categoria: config.categoria,
-                codigo: codigo,
-                custo_por_refeicao: 0,
-                custo_total: 0,
-                porcoes: mealQuantity,
-                ingredientes: []
-              });
-            }
-          }
-          
-          cardapioPorDia.push({
-            dia: nomeDia,
-            data: new Date(Date.now() + diaIndex * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-            receitas: receitasDia,
-            custo_total_dia: custoDia * mealQuantity,
-            custo_por_refeicao: custoDia,
-            dentro_orcamento: custoDia <= budget
-          });
-          
-          console.log(`💰 ${nomeDia}: R$ ${custoDia.toFixed(2)}/refeição`);
-        }
+        const cardapioPorDia = await gerarCardapioComRegras({
+          budget,
+          mealQuantity,
+          numDays,
+          periodo,
+          diasUteis,
+          supabase
+        });
         
         // Calcular totais
         const custoMedioPorRefeicao = cardapioPorDia.reduce((sum, dia) => sum + dia.custo_por_refeicao, 0) / numDays;
