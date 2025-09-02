@@ -26,7 +26,7 @@ const Sidebar = () => {
         <div className="flex items-center justify-center">
           <img 
             src="/nutris-logo.png" 
-            alt="Nutr's Logo" 
+            alt="Nutr's Refeições Coletivas" 
             className="h-10 object-contain"
           />
         </div>
