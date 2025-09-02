@@ -8,7 +8,7 @@ import { CheckCircle, Clock, Code, Database, Cpu, GitBranch, Zap, Bug, Plus, Cal
 export default function Updates() {
   const recentUpdates = [
     {
-      date: "02/01/2025",
+      date: "02/09/2025",
       title: "Estrutura de Cardápios Completa",
       description: "Sistema agora gera cardápios com 10 categorias fixas sem duplicação",
       type: "feature",
@@ -21,7 +21,7 @@ export default function Updates() {
       ]
     },
     {
-      date: "02/01/2025",
+      date: "02/09/2025",
       title: "Edge Function GPT-Assistant Corrigida",
       description: "Percentuais de orçamento ajustados e palavras-chave para Guarnição",
       type: "bug-fix",
@@ -34,7 +34,7 @@ export default function Updates() {
       ]
     },
     {
-      date: "02/01/2025",
+      date: "02/09/2025",
       title: "Hook de Geração Otimizado",
       description: "Mapeamento corrigido elimina duplicatas no frontend",
       type: "bug-fix",
@@ -47,7 +47,7 @@ export default function Updates() {
       ]
     },
     {
-      date: "02/01/2025",
+      date: "02/09/2025",
       title: "Interface de Geração Atualizada",
       description: "Descrição completa das 10 categorias no gerador",
       type: "feature",
@@ -64,13 +64,13 @@ export default function Updates() {
   const completeHistory = {
     backend: [
       {
-        date: "02/01/2025",
+        date: "02/09/2025",
         title: "Edge Function GPT-Assistant v3.0",
         description: "Correção completa da estrutura de cardápios",
         status: "concluído"
       },
       {
-        date: "02/01/2025",
+        date: "02/09/2025",
         title: "Distribuição Orçamentária Otimizada",
         description: "Percentuais ajustados para 10 categorias",
         status: "concluído"
@@ -96,13 +96,13 @@ export default function Updates() {
     ],
     frontend: [
       {
-        date: "02/01/2025",
+        date: "02/09/2025",
         title: "WeeklyMenuView Completo",
         description: "Renderização de 10 categorias fixas sem duplicação",
         status: "concluído"
       },
       {
-        date: "02/01/2025",
+        date: "02/09/2025",
         title: "Interface de Geração Atualizada",
         description: "Descrição completa das categorias disponíveis",
         status: "concluído"
@@ -128,13 +128,13 @@ export default function Updates() {
     ],
     ai: [
       {
-        date: "02/01/2025",
+        date: "02/09/2025",
         title: "Sistema de Busca Inteligente",
         description: "Palavras-chave específicas para cada categoria",
         status: "concluído"
       },
       {
-        date: "02/01/2025",
+        date: "02/09/2025",
         title: "Prevenção de Duplicação",
         description: "IA evita repetição de categorias nos cardápios",
         status: "concluído"
