@@ -381,7 +381,8 @@ export const useIntegratedMenuGeneration = () => {
         status: 'pending_approval',
         totalCost: Number(data.resumo_financeiro?.custo_total_periodo || 0),
         costPerMeal: Number(data.resumo_financeiro?.custo_medio_por_refeicao || 0),
-        totalRecipes: data.cardapio?.length || 0,
+        totalRecipes: data.cardapio?.reduce((total: number, dia: any) => 
+          total + (dia.receitas?.length || 0), 0) || 0,
         recipes: data.cardapio?.flatMap((dia: any) =>
           dia.receitas?.map((r: any, index: number) => ({
             id: r.id || `recipe-${index}`,
