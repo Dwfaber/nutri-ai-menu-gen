@@ -613,7 +613,12 @@ Deno.serve(async (req) => {
     }, budget: number, origemOrcamento: string) {
       const { mealQuantity, numDays, periodo, diasUteis, supabase } = config;
       
-      const totalDias = periodo === "quinzena" ? 14 : Math.min(numDays, 7);
+    let totalDias = periodo === "quinzena" ? 14 : Math.min(numDays, 7);
+    
+    // Se for apenas dias úteis, ajusta para não contar sábado e domingo
+    if (diasUteis) {
+      totalDias = Math.min(totalDias, 5);
+    }
       let cardapioPorDia = [];
       let contadorCarnesVermelhas = 0;
       let guarnicoesUsadas: string[] = [];
@@ -651,10 +656,6 @@ Deno.serve(async (req) => {
         const nomeDia = diasSemana[i % 7];
         
         // Pular fins de semana se diasUteis = true
-        if (diasUteis && (i % 7 === 5 || i % 7 === 6)) {
-          console.log(`⏭️ Pulando ${nomeDia} (apenas dias úteis)`);
-          continue;
-        }
         
         console.log(`\n📅 === ${nomeDia} (Dia ${i + 1}) ===`);
         
