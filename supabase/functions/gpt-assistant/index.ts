@@ -530,17 +530,17 @@ Deno.serve(async (req) => {
           0
         );
 
-        // adapta receitas (seu fluxo pode precisar de IDs ou full JSON)
-        // aqui salvo as receitas como vieram, no campo receitas_adaptadas
-        const receitasAdaptadas = response.cardapio.flatMap(dia =>
-          dia.receitas.map(r => ({
-            receita_id_legado: r.id || `auto-${Date.now()}-${Math.random()}`,
-            nome_receita: r.nome,
-            categoria_descricao: r.categoria,
-            custo_adaptado: r.custo_por_refeicao,
-            porcoes: r.porcoes || 50,
-            ingredientes: r.ingredientes,
-            day: dia.dia
+        // 🔧 Adaptar receitas para o formato esperado pelo hook useIntegratedMenuGeneration
+        const receitasAdaptadas = response.cardapio.flatMap((dia) =>
+          dia.receitas.map((r) => ({
+            receita_id_legado: String(r.id),        // ID legado ou da receita
+            nome_receita: r.nome,                   // Nome da receita
+            categoria_descricao: r.categoria,       // Categoria mapeada
+            day: dia.dia,                           // O dia da semana (Segunda-feira, etc.)
+            custo_adaptado: r.custo_por_refeicao,   // Custo unitário
+            porcoes: r.porcoes || 50,               // Número de porções (default 50 se não vier)
+            ingredientes: r.ingredientes || [],     // Ingredientes que vieram do cálculo
+            nutritional_info: {}                    // Campo vazio (compatível com hook)
           }))
         );
 
