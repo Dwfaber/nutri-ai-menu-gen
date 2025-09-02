@@ -541,7 +541,7 @@ Deno.serve(async (req) => {
       periodo: string,
       diasUteis: boolean,
       supabase: any
-    }, budget: number) {
+    }, budget: number, origemOrcamento: string) {
       const { mealQuantity, numDays, periodo, diasUteis, supabase } = config;
       
       const totalDias = periodo === "quinzena" ? 14 : Math.min(numDays, 7);
@@ -772,7 +772,7 @@ Deno.serve(async (req) => {
         
         // ====== CONTROLE DE ORÇAMENTO RIGOROSO ======
         if (custoDia > budget) {
-          console.log(`⚠️ Custo do dia R$${custoDia.toFixed(2)} > limite R$${budget.toFixed(2)} (origem: ${dadosFilial ? "custos_filiais" : "fallback"})`);
+          console.log(`⚠️ Custo do dia R$${custoDia.toFixed(2)} > limite R$${budget.toFixed(2)} (origem: ${origemOrcamento})`);
           
           // Encontrar item mais caro (excluindo arroz e feijão fixos)
           const receitasAjustaveis = receitasDia.filter(r => r.codigo !== 'ARROZ' && r.codigo !== 'FEIJAO');
@@ -799,7 +799,12 @@ Deno.serve(async (req) => {
                 custoDia = custoDia - maisCaro.custo_por_refeicao + resultado.custo_por_refeicao;
                 maisCaro.custo_por_refeicao = resultado.custo_por_refeicao;
                 
-                substituicoesPorOrcamento.push(`${maisCaro.categoria}: ${maisCaro.nome}`);
+                substituicoesPorOrcamento.push({
+                  receita_original: maisCaro.nome,
+                  receita_substituta: resultado.nome,
+                  categoria: maisCaro.categoria,
+                  economia: maisCaro.custo_por_refeicao - resultado.custo_por_refeicao
+                });
                 break;
               }
             }
@@ -822,7 +827,8 @@ Deno.serve(async (req) => {
         
         console.log(`💰 ${nomeDia}: R$ ${custoDia.toFixed(2)}/refeição ${custoDia <= budget ? '✅' : '⚠️'}`);
         if (substituicoesPorOrcamento.length > 0) {
-          console.log(`🔄 Substituições: ${substituicoesPorOrcamento.join(', ')}`);
+          const resumoSubs = substituicoesPorOrcamento.map(s => `${s.categoria}: ${s.receita_substituta} (economia: R$${s.economia.toFixed(2)})`);
+          console.log(`🔄 Substituições: ${resumoSubs.join(', ')}`);
         }
       }
       
@@ -877,13 +883,15 @@ Deno.serve(async (req) => {
         const periodo = requestData.periodo || 'semanal';
         const diasUteis = requestData.diasUteis || false;
         
+        const origemOrcamento = dadosFilial ? "custos_filiais" : "fallback";
+        
         const cardapioPorDia = await gerarCardapioComRegras({
           mealQuantity,
           numDays,
           periodo,
           diasUteis,
           supabase
-        }, budget);
+        }, budget, origemOrcamento);
         
         // Calcular totais
         const custoMedioPorRefeicao = cardapioPorDia.reduce((sum, dia) => sum + dia.custo_por_refeicao, 0) / numDays;
