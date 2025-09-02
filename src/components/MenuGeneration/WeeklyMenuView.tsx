@@ -9,14 +9,18 @@ interface WeeklyMenuViewProps {
 // ✅ Mapeamento entre nomes do backend e códigos da UI
 const CATEGORY_MAPPING: Record<string, string> = {
   "Proteína Principal 1": "PP1",
+  "Prato Principal 1": "PP1", // sinônimo
   "Proteína Principal 2": "PP2",
+  "Prato Principal 2": "PP2", // sinônimo
   "Arroz Branco": "Arroz Branco",
   "Feijão": "Feijão",
   "Guarnição": "Guarnição",
   "Salada 1 (Verduras)": "Salada 1",
   "Salada 2 (Legumes)": "Salada 2",
+  "Salada": "Salada 1", // fallback, se vier genérico
   "Suco 1": "Suco 1",
   "Suco 2": "Suco 2",
+  "Suco": "Suco 1", // fallback, se vier genérico
   "Sobremesa": "Sobremesa",
 };
 
