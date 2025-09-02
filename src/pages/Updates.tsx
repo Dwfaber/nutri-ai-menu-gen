@@ -8,48 +8,73 @@ import { CheckCircle, Clock, Code, Database, Cpu, GitBranch, Zap, Bug, Plus, Cal
 export default function Updates() {
   const recentUpdates = [
     {
-      date: "27/08/2024",
-      title: "Sistema de Custos Corrigido",
-      description: "Correção crítica no cálculo de custos por refeição",
-      type: "bug-fix",
+      date: "02/01/2025",
+      title: "Estrutura de Cardápios Completa",
+      description: "Sistema agora gera cardápios com 10 categorias fixas sem duplicação",
+      type: "feature",
       impact: "crítico",
       details: [
-        "Conversões de unidade precisas (KG, G, ML, L, UN)",
-        "Validação inteligente para custos altos",
-        "Logs detalhados para debug",
-        "Tratamento de erros robusto"
+        "Estrutura fixa: PP1, PP2, Arroz, Feijão, Guarnição, Salada 1, Salada 2, Suco 1, Suco 2, Sobremesa",
+        "Eliminação completa de duplicação de categorias",
+        "Slots sempre preenchidos sem lacunas",
+        "Distribuição orçamentária otimizada (100% do budget)"
       ]
     },
     {
-      date: "27/08/2024", 
-      title: "Geração de Cardápios Melhorada",
-      description: "Expansão da busca e variedade de receitas",
+      date: "02/01/2025",
+      title: "Edge Function GPT-Assistant Corrigida",
+      description: "Percentuais de orçamento ajustados e palavras-chave para Guarnição",
+      type: "bug-fix",
+      impact: "alto",
+      details: [
+        "Percentuais corrigidos: PP1 (22%), PP2 (18%), Guarnição (10%)",
+        "Soma exata de 100% do orçamento diário",
+        "Palavras-chave específicas para busca de guarnições",
+        "Busca inteligente por batata, farofa, purê, polenta, etc."
+      ]
+    },
+    {
+      date: "02/01/2025",
+      title: "Hook de Geração Otimizado",
+      description: "Mapeamento corrigido elimina duplicatas no frontend",
+      type: "bug-fix",
+      impact: "alto",
+      details: [
+        "Mapeamento único por categoria usando Map()",
+        "Prevenção de duplicação no processamento",
+        "Integração perfeita com WeeklyMenuView",
+        "Performance melhorada na renderização"
+      ]
+    },
+    {
+      date: "02/01/2025",
+      title: "Interface de Geração Atualizada",
+      description: "Descrição completa das 10 categorias no gerador",
       type: "feature",
-      impact: "alto",
+      impact: "médio",
       details: [
-        "Busca expandida por categorias (carnes, peixes, vegetais)",
-        "IDs reais substituindo placeholders temporários",
-        "Rotação inteligente de proteínas (PP1/PP2)",
-        "Variedade aumentada em todas as categorias"
-      ]
-    },
-    {
-      date: "27/08/2024",
-      title: "Correção de Erros 500",
-      description: "Estabilização da API e funções edge",
-      type: "bug-fix", 
-      impact: "alto",
-      details: [
-        "Tratamento robusto de erros na API",
-        "Validação de dados antes do processamento", 
-        "Logs de debug implementados",
-        "Timeout handling melhorado"
+        "Texto atualizado incluindo Guarnição e Sobremesa",
+        "Descrição precisa da estrutura de cardápios",
+        "Interface sincronizada com funcionalidade backend",
+        "Melhor experiência do usuário"
       ]
     }
   ];
 
   const completeHistory = {
     backend: [
+      {
+        date: "02/01/2025",
+        title: "Edge Function GPT-Assistant v3.0",
+        description: "Correção completa da estrutura de cardápios",
+        status: "concluído"
+      },
+      {
+        date: "02/01/2025",
+        title: "Distribuição Orçamentária Otimizada",
+        description: "Percentuais ajustados para 10 categorias",
+        status: "concluído"
+      },
       {
         date: "27/08/2024",
         title: "Otimização Edge Functions",
@@ -71,6 +96,18 @@ export default function Updates() {
     ],
     frontend: [
       {
+        date: "02/01/2025",
+        title: "WeeklyMenuView Completo",
+        description: "Renderização de 10 categorias fixas sem duplicação",
+        status: "concluído"
+      },
+      {
+        date: "02/01/2025",
+        title: "Interface de Geração Atualizada",
+        description: "Descrição completa das categorias disponíveis",
+        status: "concluído"
+      },
+      {
         date: "27/08/2024",
         title: "Interface de Atualizações",
         description: "Nova aba para acompanhar melhorias",
@@ -90,6 +127,18 @@ export default function Updates() {
       }
     ],
     ai: [
+      {
+        date: "02/01/2025",
+        title: "Sistema de Busca Inteligente",
+        description: "Palavras-chave específicas para cada categoria",
+        status: "concluído"
+      },
+      {
+        date: "02/01/2025",
+        title: "Prevenção de Duplicação",
+        description: "IA evita repetição de categorias nos cardápios",
+        status: "concluído"
+      },
       {
         date: "27/08/2024",
         title: "Algoritmo de Rotação",
