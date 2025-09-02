@@ -6,10 +6,24 @@ interface WeeklyMenuViewProps {
   menu: GeneratedMenu;
 }
 
+// ✅ Mapeamento entre nomes do backend e códigos da UI
+const CATEGORY_MAPPING: Record<string, string> = {
+  "Proteína Principal 1": "PP1",
+  "Proteína Principal 2": "PP2",
+  "Arroz Branco": "Arroz Branco",
+  "Feijão": "Feijão",
+  "Guarnição": "Guarnição",
+  "Salada 1 (Verduras)": "Salada 1",
+  "Salada 2 (Legumes)": "Salada 2",
+  "Suco 1": "Suco 1",
+  "Suco 2": "Suco 2",
+  "Sobremesa": "Sobremesa",
+};
+
 // ✅ Definimos as categorias fixas que SEMPRE devem aparecer
 const CATEGORIAS_FIXAS = [
   "PP1",
-  "PP2",
+  "PP2", 
   "Arroz Branco",
   "Feijão",
   "Guarnição",
@@ -25,12 +39,16 @@ export const WeeklyMenuView: React.FC<WeeklyMenuViewProps> = ({ menu }) => {
     return <p>Nenhuma receita encontrada para este cardápio.</p>;
   }
 
-  // 🔎 Agrupar receitas por dia
+  // 🔎 Agrupar receitas por dia com mapeamento de categorias
   const receitasPorDia = menu.recipes.reduce((acc: any, r) => {
     if (!acc[r.day]) acc[r.day] = {};
+    
+    // 🔧 Mapeia categoria do backend para código da UI
+    const categoriaMapeada = CATEGORY_MAPPING[r.category] || r.category;
+    
     // 🔧 Elimina duplicadas: se já existe categoria, não sobrescreve
-    if (!acc[r.day][r.category]) {
-      acc[r.day][r.category] = r;
+    if (!acc[r.day][categoriaMapeada]) {
+      acc[r.day][categoriaMapeada] = r;
     }
     return acc;
   }, {});
