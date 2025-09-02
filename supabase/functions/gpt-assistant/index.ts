@@ -534,11 +534,13 @@ Deno.serve(async (req) => {
         // aqui salvo as receitas como vieram, no campo receitas_adaptadas
         const receitasAdaptadas = response.cardapio.flatMap(dia =>
           dia.receitas.map(r => ({
-            nome: r.nome,
-            categoria: r.categoria,
-            custo_por_refeicao: r.custo_por_refeicao,
+            receita_id_legado: r.id || `auto-${Date.now()}-${Math.random()}`,
+            nome_receita: r.nome,
+            categoria_descricao: r.categoria,
+            custo_adaptado: r.custo_por_refeicao,
+            porcoes: r.porcoes || 50,
             ingredientes: r.ingredientes,
-            dia: dia.dia // 👈 AGORA cada receita carrega seu dia
+            day: dia.dia
           }))
         );
 
