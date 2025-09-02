@@ -331,13 +331,106 @@ export const useIntegratedMenuGeneration = () => {
       return null;
     }
 
-    const weekPeriod = `${formData.period.start} a ${formData.period.end}`;
-    const preferences = formData.preferences ? [formData.preferences] : [];
-    
-    // Use the selected client from context or override with form data
-    const clientToUse = selectedClient?.id === formData.clientId ? selectedClient : formData.contractData;
-    
-    return generateMenu(weekPeriod, preferences, clientToUse, formData.mealsPerDay, formData.totalMeals);
+    try {
+      setIsGenerating(true);
+      setError(null);
+
+      const weekPeriod = `${formData.period.start} a ${formData.period.end}`;
+      
+      // Use the selected client from context or override with form data
+      const clientToUse = selectedClient?.id === formData.clientId ? selectedClient : formData.contractData;
+      
+      if (!clientToUse) {
+        throw new Error("Cliente não encontrado");
+      }
+
+      // Criar payload para Edge Function
+      const payload = {
+        action: 'generate_menu',
+        client_id: formData.clientId,
+        filial_id: clientToUse.filial_id || clientToUse.filial_id_legado,
+        period: weekPeriod,
+        numDays: 7,
+        refeicoesPorDia: formData.mealsPerDay || clientToUse.total_funcionarios || 100,
+        preferences: formData.preferences ? [formData.preferences] : [],
+        baseRecipes: {
+          arroz: 580,
+          feijao: 1600
+        }
+      };
+
+      // Chamar Edge Function
+      const { data, error: functionError } = await supabase.functions.invoke('gpt-assistant', {
+        body: payload
+      });
+
+      if (functionError) {
+        throw new Error(functionError.message || 'Erro ao gerar cardápio');
+      }
+
+      if (!data || !data.success) {
+        throw new Error(data?.erro || 'Resposta inválida da IA');
+      }
+
+      // ⚡ IMEDIATAMENTE criar e definir o generatedMenu
+      const menu: GeneratedMenu = {
+        id: `temp-${Date.now()}`, // ID temporário até salvar no banco
+        clientId: formData.clientId,
+        clientName: clientToUse.nome_fantasia || clientToUse.nome_empresa || 'Cliente',
+        weekPeriod: weekPeriod,
+        status: 'pending_approval',
+        totalCost: Number(data.resumo_financeiro?.custo_total_periodo || 0),
+        costPerMeal: Number(data.resumo_financeiro?.custo_medio_por_refeicao || 0),
+        totalRecipes: data.cardapio?.length || 0,
+        recipes: data.cardapio?.flatMap((dia: any) =>
+          dia.receitas?.map((r: any, index: number) => ({
+            id: r.id || `recipe-${index}`,
+            name: r.nome || 'Receita sem nome',
+            category: r.categoria || 'Outros',
+            day: dia.dia || 'Segunda-feira',
+            cost: Number(r.custo_por_refeicao || 0),
+            servings: Number(r.porcoes || formData.mealsPerDay || 100),
+            ingredients: r.ingredientes || [],
+            nutritionalInfo: r.nutritional_info || {}
+          }))
+        ) || [],
+        createdAt: new Date().toISOString(),
+        warnings: data.avisos || []
+      };
+
+      // ⚡ PRIMEIRO atualizar estado local para exibição imediata
+      setGeneratedMenu(menu);
+
+      // 🎉 Feedback imediato ao usuário
+      toast({
+        title: "🎉 Cardápio gerado com sucesso!",
+        description: "Cardápio criado e disponível para análise.",
+      });
+
+      // DEPOIS salvar no banco de dados
+      const savedMenuId = await saveMenuToDatabase(menu);
+      
+      if (savedMenuId) {
+        // Atualizar o menu com o ID real do banco
+        setGeneratedMenu(prev => prev ? { ...prev, id: savedMenuId } : null);
+        
+        // Recarregar lista de cardápios salvos
+        await loadSavedMenus();
+      }
+
+      return menu;
+    } catch (error: any) {
+      console.error('❌ Erro na geração:', error);
+      setError(error.message);
+      toast({
+        title: "❌ Erro na geração do cardápio",
+        description: error.message || 'Erro desconhecido ao gerar cardápio',
+        variant: "destructive"
+      });
+      return null;
+    } finally {
+      setIsGenerating(false);
+    }
   };
 
   const generateMenu = async (
@@ -793,7 +886,7 @@ export const useIntegratedMenuGeneration = () => {
 
       // Create generated menu
       const menu: GeneratedMenu = {
-        id: crypto.randomUUID(),
+        id: `temp-${Date.now()}`, // ID temporário até salvar no banco
         clientId: clientToUse.id || clientToUse.cliente_id_legado,
         clientName: clientToUse.nome_fantasia || clientToUse.nome_empresa,
         weekPeriod,
@@ -807,17 +900,23 @@ export const useIntegratedMenuGeneration = () => {
         warnings: data.warnings || []
       };
 
-      // Save to database
+      // ⚡ PRIMEIRO atualizar estado local para exibição imediata
+      setGeneratedMenu(menu);
+
+      // 🎉 Feedback imediato ao usuário
+      toast({
+        title: "🎉 Cardápio gerado com sucesso!",
+        description: `${receitasCardapio.length} receitas otimizadas. Custo: R$ ${costPerMeal.toFixed(2)}/refeição`,
+      });
+
+      // DEPOIS salvar no banco de dados
       const savedId = await saveMenuToDatabase(menu);
       if (savedId) {
-        menu.id = savedId;
-        setGeneratedMenu(menu);
+        // Atualizar o menu com o ID real do banco
+        setGeneratedMenu(prev => prev ? { ...prev, id: savedId } : null);
+        
+        // Recarregar lista de cardápios salvos
         await loadSavedMenus();
-
-        toast({
-          title: "Cardápio Gerado com IA!",
-          description: `${receitasCardapio.length} receitas otimizadas. Custo: R$ ${costPerMeal.toFixed(2)}/refeição`,
-        });
         
         console.log('Menu generation with AI completed successfully');
         console.log('Final cost per meal:', costPerMeal);
@@ -825,7 +924,9 @@ export const useIntegratedMenuGeneration = () => {
 
         return menu;
       } else {
-        throw new Error('Erro ao salvar cardápio no banco de dados');
+        // Mesmo se não conseguir salvar, mantém o menu gerado na interface
+        console.warn('Não foi possível salvar no banco, mas menu permanece na interface');
+        return menu;
       }
 
     } catch (error) {
@@ -981,7 +1082,17 @@ export const useIntegratedMenuGeneration = () => {
     }
   };
 
-  const clearGeneratedMenu = () => {
+  // ⚡ Função que preserva o estado durante navegação
+  const clearGeneratedMenu = (force: boolean = false) => {
+    // Só limpa se for forçado (botão limpar, rejeição, exclusão)
+    if (force) {
+      setGeneratedMenu(null);
+      setError(null);
+    }
+  };
+
+  // Função específica para limpar explicitamente
+  const clearMenuExplicitly = () => {
     setGeneratedMenu(null);
     setError(null);
   };
@@ -1029,6 +1140,7 @@ export const useIntegratedMenuGeneration = () => {
     rejectMenu,
     generateShoppingListFromMenu,
     clearGeneratedMenu,
+    clearMenuExplicitly, // Nova função para limpeza explícita
     loadSavedMenus,
     deleteGeneratedMenu,
     mapRecipesToMarketProducts,

@@ -34,6 +34,7 @@ const IntegratedMenuGenerator = () => {
     rejectMenu,
     generateShoppingListFromMenu,
     clearGeneratedMenu,
+    clearMenuExplicitly,
     error,
     viableRecipes,
     marketIngredients,
@@ -419,7 +420,7 @@ const IntegratedMenuGenerator = () => {
                 <p className="text-sm text-red-700 mt-1">{generatedMenu.rejectedReason}</p>
                 <div className="flex gap-2 mt-3">
                   <Button 
-                    onClick={clearGeneratedMenu}
+                    onClick={() => clearMenuExplicitly()}
                     variant="outline"
                   >
                     Limpar Cardápio
