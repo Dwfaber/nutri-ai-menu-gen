@@ -546,7 +546,7 @@ Deno.serve(async (req) => {
 
         // Prepara o payload para o insert (sem cardapio_json que não existe na tabela)
         const payload = {
-          client_id: String(requestData.client_id || requestData.clientId || "sem-id"),
+          client_id: String(requestData.client_id || requestData.clientId || requestData.filial_id || "unknown-client"),
           client_name: clientName,
           week_period: `${response.cardapio[0].data} - ${response.cardapio[response.cardapio.length - 1].data}`,
           total_cost: Number(response.resumo_financeiro.custo_total_periodo) || 0,
