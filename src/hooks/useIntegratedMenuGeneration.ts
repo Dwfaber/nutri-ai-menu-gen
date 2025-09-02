@@ -173,12 +173,23 @@ export const useIntegratedMenuGeneration = () => {
       
       // Filter by client if we have one selected
       if (currentClientId) {
-        // Try different client ID formats to match the database
-        query = query.or(`client_id.eq.${currentClientId},client_id.eq.${String(currentClientId)}`);
-        console.log('🔍 Filtrando cardápios para cliente:', currentClientId);
+        query = query.eq('client_id', String(currentClientId));
+        console.log('🔍 Filtro aplicado client_id:', currentClientId);
+      } else {
+        console.log('⚠️ Nenhum cliente selecionado - mostrando todos os cardápios');
       }
 
       const { data: menus, error: menusError } = await query;
+
+      if (menusError) {
+        console.error('❌ Erro Supabase:', menusError);
+      } else {
+        console.log('📊 Cardápios encontrados:', menus?.length || 0);
+        if (menus?.length) {
+          console.log('📑 IDs dos cardápios:', menus.map(m => m.id));
+          console.log('💰 Primeiro cardápio - receitas:', menus[0]?.total_recipes, 'custo:', menus[0]?.cost_per_meal);
+        }
+      }
 
       if (menusError) throw menusError;
 
