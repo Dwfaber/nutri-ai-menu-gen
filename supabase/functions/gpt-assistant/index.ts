@@ -650,10 +650,13 @@ Deno.serve(async (req) => {
         }));
       }
       
-      const diasSemana = ['Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado', 'Domingo'];
+      // Se diasUteis=true → só considera segunda a sexta
+      const diasSemana = diasUteis 
+        ? ['Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira']
+        : ['Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado', 'Domingo'];
       
       for (let i = 0; i < totalDias; i++) {
-        const nomeDia = diasSemana[i % 7];
+        const nomeDia = diasSemana[i % diasSemana.length];
         
         // Pular fins de semana se diasUteis = true
         
@@ -960,7 +963,10 @@ Deno.serve(async (req) => {
         }, budget, origemOrcamento);
         
         // Calcular totais
-        const custoMedioPorRefeicao = cardapioPorDia.reduce((sum, dia) => sum + dia.custo_por_refeicao, 0) / numDays;
+        const diasGerados = cardapioPorDia.length;
+        const custoMedioPorRefeicao = diasGerados > 0 
+          ? cardapioPorDia.reduce((sum, dia) => sum + dia.custo_por_refeicao, 0) / diasGerados
+          : 0;
         const custoTotalPeriodo = cardapioPorDia.reduce((sum, dia) => sum + dia.custo_total_dia, 0);
         
         // RESPOSTA ESTRUTURADA POR DIA
@@ -1003,7 +1009,8 @@ Deno.serve(async (req) => {
           metadata: {
             data_geracao: new Date().toISOString(),
             tempo_processamento_ms: Date.now() - startTime,
-            dias_gerados: numDays,
+            dias_gerados: diasGerados,
+            dias_uteis: diasUteis,
             estrutura_por_dia: Object.keys(ESTRUTURA_CARDAPIO)
           }
         };
