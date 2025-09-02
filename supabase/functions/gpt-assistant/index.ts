@@ -10,16 +10,16 @@ const corsHeaders = {
 
 // ESTRUTURA COM 10 CATEGORIAS (INCLUINDO GUARNIÇÃO)
 const ESTRUTURA_CARDAPIO = {
-  PP1: { categoria: 'Proteína Principal 1', budget_percent: 16 },
-  PP2: { categoria: 'Proteína Principal 2', budget_percent: 19 },
-  ARROZ: { categoria: 'Arroz Branco', budget_percent: 14, receita_id: 580 },
-  FEIJAO: { categoria: 'Feijão', budget_percent: 14, receita_id: 1600 },
-  GUARNICAO: { categoria: 'Guarnição', budget_percent: 8 },
-  SALADA1: { categoria: 'Salada 1 (Verduras)', budget_percent: 7 },
-  SALADA2: { categoria: 'Salada 2 (Legumes)', budget_percent: 6 },
-  SUCO1: { categoria: 'Suco 1', budget_percent: 4 },
-  SUCO2: { categoria: 'Suco 2', budget_percent: 4 },
-  SOBREMESA: { categoria: 'Sobremesa', budget_percent: 8 }
+  PP1: { categoria: 'Proteína Principal 1', budget_percent: 22 },
+  PP2: { categoria: 'Proteína Principal 2', budget_percent: 18 },
+  ARROZ: { categoria: 'Arroz Branco', budget_percent: 12, receita_id: 580 },
+  FEIJAO: { categoria: 'Feijão', budget_percent: 12, receita_id: 1600 },
+  GUARNICAO: { categoria: 'Guarnição', budget_percent: 10 },
+  SALADA1: { categoria: 'Salada 1 (Verduras)', budget_percent: 8 },
+  SALADA2: { categoria: 'Salada 2 (Legumes)', budget_percent: 8 },
+  SUCO1: { categoria: 'Suco 1', budget_percent: 5 },
+  SUCO2: { categoria: 'Suco 2', budget_percent: 3 },
+  SOBREMESA: { categoria: 'Sobremesa', budget_percent: 2 }
 };
 
 Deno.serve(async (req) => {
@@ -345,6 +345,7 @@ Deno.serve(async (req) => {
       const palavrasChave = {
         'Proteína Principal 1': ['FRANGO', 'CARNE', 'PEIXE', 'BOVINA', 'PEITO', 'COXA'],
         'Proteína Principal 2': ['LINGUICA', 'OVO', 'HAMBURGUER', 'ALMONDEGA', 'SALSICHA'],
+        'Guarnição': ['BATATA', 'MANDIOCA', 'AIPIM', 'MACAXEIRA', 'INHAME', 'PURÊ', 'FAROFA', 'POLENTA', 'MANDIOQUINHA', 'BATATA DOCE', 'ESCONDIDINHO', 'TORTA', 'QUICHE', 'LASANHA', 'GRATINADO', 'REFOGADO', 'LEGUMES', 'ACOMPANHAMENTO'],
         'Salada 1 (Verduras)': ['SALADA', 'ALFACE', 'ACELGA', 'COUVE', 'FOLHAS'],
         'Salada 2 (Legumes)': ['TOMATE', 'PEPINO', 'CENOURA', 'ABOBRINHA', 'LEGUME'],
         'Suco 1': ['SUCO DE LARANJA', 'SUCO DE LIMAO', 'REFRESCO'],
