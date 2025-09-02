@@ -19,6 +19,25 @@ const PROTEIN_TYPES: Record<string, string[]> = {
   "Vegetariano": ["soja", "lentilha", "grão-de-bico", "ervilha", "feijão branco", "vegetariano", "vegano", "proteína de soja", "quinoa"]
 };
 
+// ================= CORREÇÕES ESTRUTURAIS ADICIONADAS =================
+
+// Limite semanal de proteínas
+const LIMITE_PROTEINAS_SEMANA = { 
+  "Carne Vermelha": 2, 
+  "Frango": 2, 
+  "Peixe": 2, 
+  "Ovo": 1, 
+  "Vegetariano": 1 
+};
+
+let contadorProteinas = {
+  "Carne Vermelha": 0, 
+  "Frango": 0, 
+  "Peixe": 0, 
+  "Ovo": 0, 
+  "Vegetariano": 0
+};
+
 // ESTRUTURA COM 10 CATEGORIAS (INCLUINDO GUARNIÇÃO)
 const ESTRUTURA_CARDAPIO = {
   PP1: { categoria: 'Proteína Principal 1', budget_percent: 22 },
@@ -39,14 +58,14 @@ Deno.serve(async (req) => {
   }
 
   if (req.method === 'GET') {
-    return new Response(
-      JSON.stringify({ 
-        status: 'healthy', 
-        version: 'CORRIGIDA-FINAL-v3.0',
-        timestamp: new Date().toISOString() 
-      }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
+  return new Response(
+    JSON.stringify({ 
+      status: 'healthy', 
+      version: 'ESTRUTURAL-FINAL-v4.0',
+      timestamp: new Date().toISOString() 
+    }),
+    { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+  );
   }
 
   try {
@@ -77,14 +96,64 @@ Deno.serve(async (req) => {
       return null;
     }
 
-    // Valida categoria para não cruzar (ex: sobremesa != frango)
+    // Corrigir inferência PP1 vs PP2 e validação rigorosa
+    function inferirCategoria(nome: string): string {
+      const lower = nome.toLowerCase();
+
+      if (getProteinType(nome)) {
+        if (/(filé|filé|bife|cox|peito|assado|grelhado|costela|cupim|ensopado)/.test(lower)) {
+          return 'Proteína Principal 1';
+        }
+        return 'Proteína Principal 2';
+      }
+
+      if (lower.includes("arroz")) return "Arroz Branco";
+      if (lower.includes("feijão") || lower.includes("feijao")) return "Feijão";
+      if (/(salada|alface|rúcula|couve|folha|espinafre)/.test(lower)) return "Salada 1 (Verduras)";
+      if (/(tomate|pepino|cenoura|abobrinha|legume|beterraba|chuchu)/.test(lower)) return "Salada 2 (Legumes)";
+      if (/(suco|refresco|bebida)/.test(lower)) return "Suco 1";
+      if (/(bolo|pudim|mousse|doce|fruta|gelatina|sobremesa|brigadeiro)/.test(lower)) return "Sobremesa";
+
+      return "Guarnição"; // fallback
+    }
+
+    // Fallback para categorias vazias
+    function fallbackReceita(categoria: string) {
+      switch (categoria) {
+        case "Salada 1 (Verduras)": return { id: -1, nome: "Salada de folhas simples", custo_por_refeicao: 0.5 };
+        case "Salada 2 (Legumes)": return { id: -2, nome: "Salada de legumes cozidos", custo_por_refeicao: 0.6 };
+        case "Suco 1": return { id: -3, nome: "Suco de laranja natural", custo_por_refeicao: 0.4 };
+        case "Suco 2": return { id: -4, nome: "Suco de uva", custo_por_refeicao: 0.4 };
+        case "Sobremesa": return { id: -5, nome: "Fruta da estação", custo_por_refeicao: 0.5 };
+        default: return null;
+      }
+    }
+
+    // Escolha de proteína respeitando limite semanal
+    async function escolherProteina(categoria: string, receitasPool: any[], mealQuantity: number) {
+      for (let tentativa = 0; tentativa < 10; tentativa++) {
+        const receita = escolherReceita(categoria, receitasPool);
+        if (!receita) return null;
+        
+        const custo = await calculateSimpleCost(receita.id, mealQuantity);
+        const tipo = getProteinType(receita.nome);
+
+        if (tipo && contadorProteinas[tipo] < LIMITE_PROTEINAS_SEMANA[tipo]) {
+          contadorProteinas[tipo]++; // consumir vaga
+          return { ...receita, custo_por_refeicao: custo.custo_por_refeicao, nome: custo.nome };
+        }
+      }
+      return null;
+    }
+
+    // Valida categoria para não cruzar (ex: sobremesa != frango) - FILTRO RIGOROSO
     function validarCategoriaReceita(receita: any, categoria: string): boolean {
       const nome = receita.nome?.toLowerCase() || receita.name?.toLowerCase() || '';
       
       if (categoria.includes("sobremesa") || categoria.includes("Sobremesa")) {
-        // Sobremesa NÃO pode ter proteína
-        if (["frango","carne","bovina","suína","peixe","ovo","proteína"].some(w => nome.includes(w))) {
-          console.log(`❌ ${receita.nome} rejeitada para sobremesa (contém proteína)`);
+        // Sobremesa RIGOROSA: rejeita qualquer prato salgado/proteína/massa
+        if (/(carne|frango|peixe|ovo|arroz|feijão|massa|macarrão|nhoque|lasanha|strogonoff|hamburguer|proteína|sal)/.test(nome)) {
+          console.log(`❌ ${receita.nome} rejeitada para sobremesa`);
           return false;
         }
       }
@@ -549,6 +618,15 @@ Deno.serve(async (req) => {
       let contadorCarnesVermelhas = 0;
       let guarnicoesUsadas: string[] = [];
       let receitasPool: any[] = [];
+
+      // Resetar contadores de proteínas para nova geração
+      contadorProteinas = {
+        "Carne Vermelha": 0, 
+        "Frango": 0, 
+        "Peixe": 0, 
+        "Ovo": 0, 
+        "Vegetariano": 0
+      };
       
       // Buscar todas as receitas disponíveis
       console.log('🔍 Carregando pool de receitas...');
@@ -587,8 +665,8 @@ Deno.serve(async (req) => {
         // ====== PROTEÍNAS COM CONTROLE DE VARIEDADE ======
         console.log('🥩 Selecionando proteínas...');
         
-        let pp1 = escolherReceita("Proteína Principal 1", receitasPool);
-        let pp2 = escolherReceita("Proteína Principal 2", receitasPool);
+        let pp1 = await escolherProteina("Proteína Principal 1", receitasPool, mealQuantity);
+        let pp2 = await escolherProteina("Proteína Principal 2", receitasPool, mealQuantity);
         
         if (pp1) {
           const pp1Result = await calculateSimpleCost(pp1.id, mealQuantity);
@@ -754,8 +832,17 @@ Deno.serve(async (req) => {
               }
             }
           }
+
+          // Se não achar nada → usar fallback dummy para não deixar categorias vazias
+          if (!receita) {
+            receita = fallbackReceita(catConfig.categoria);
+            if (receita) {
+              console.log(`🔧 Usando fallback para ${catConfig.categoria}: ${receita.nome}`);
+            }
+          }
           
-          if (receita && receita.custo_por_refeicao > 0) {
+          // Adiciona no dia
+          if (receita) {
             receitasDia.push({
               id: receita.id,
               nome: receita.nome,
@@ -835,28 +922,6 @@ Deno.serve(async (req) => {
       return cardapioPorDia;
     }
     
-    // Função auxiliar para inferir categoria pelo nome
-    function inferirCategoria(nome: string): string {
-      const nomeLower = nome.toLowerCase();
-      
-      if (getProteinType(nome)) {
-        if (nomeLower.includes('principal') || nomeLower.includes('prato')) {
-          return 'Proteína Principal 1';
-        }
-        return 'Proteína Principal 2';
-      }
-      
-      if (nomeLower.includes('arroz')) return 'Arroz Branco';
-      if (nomeLower.includes('feijão') || nomeLower.includes('feijao')) return 'Feijão';
-      if (nomeLower.includes('salada') || nomeLower.includes('alface') || nomeLower.includes('tomate')) {
-        return nomeLower.includes('folha') ? 'Salada 1 (Verduras)' : 'Salada 2 (Legumes)';
-      }
-      if (nomeLower.includes('suco') || nomeLower.includes('refresco')) return 'Suco 1';
-      if (nomeLower.includes('sobremesa') || nomeLower.includes('doce') || nomeLower.includes('bolo')) return 'Sobremesa';
-      if (nomeLower.includes('batata') || nomeLower.includes('mandioca') || nomeLower.includes('macarrão')) return 'Guarnição';
-      
-      return 'Guarnição'; // fallback
-    }
 
     // HANDLER PRINCIPAL
     if (requestData.action === 'generate_menu') {
