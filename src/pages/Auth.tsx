@@ -173,7 +173,7 @@ export default function Auth() {
           <div className="flex justify-center">
             <img 
               src="/nutris-logo.png" 
-              alt="Nutr's Logo" 
+              alt="Nutr's Refeições Coletivas" 
               className="h-20 object-contain"
             />
           </div>
