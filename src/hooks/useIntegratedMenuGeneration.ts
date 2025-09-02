@@ -597,6 +597,7 @@ export const useIntegratedMenuGeneration = () => {
         if (s.includes('PRATO PRINCIPAL 2')) return 'PP2';
         if (s.includes('ARROZ BRANCO') || s.includes('ARROZ')) return 'Arroz Branco';
         if (s.includes('FEIJ')) return 'Feijão';
+        if (s.includes('GUARNIÇÃO') || s.includes('ACOMPANHAMENTO')) return 'Guarnição';
         if (s.includes('SALADA 1') || s.includes('VERDURAS')) return 'Salada 1';
         if (s.includes('SALADA 2') || s.includes('LEGUMES')) return 'Salada 2';
         if (s.includes('SUCO 1')) return 'Suco 1';

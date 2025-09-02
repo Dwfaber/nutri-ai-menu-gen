@@ -18,7 +18,7 @@ import NLPInput from '../components/MenuGenerator/NLPInput';
 import PreviewTabs from '../components/MenuGenerator/PreviewTabs';
 import { MenuCreationForm } from '../components/MenuGenerator/MenuCreationForm';
 import IntegratedMenuGenerator from '../components/MenuGeneration/IntegratedMenuGenerator';
-import WeeklyMenuView from '../components/MenuGeneration/WeeklyMenuView';
+import { WeeklyMenuView } from '../components/MenuGeneration/WeeklyMenuView';
 
 const Cardapios = () => {
   const [searchTerm, setSearchTerm] = useState('');
@@ -393,12 +393,7 @@ const Cardapios = () => {
             <DialogTitle>Visualizar Cardápio - {viewingMenu?.weekPeriod}</DialogTitle>
           </DialogHeader>
           {viewingMenu && (
-            <WeeklyMenuView
-              title="CARDÁPIO"
-              recipes={viewingMenu.recipes || []}
-              onExport={() => handleExportarCardapio(viewingMenu)}
-              onCopy={() => handleDuplicarCardapio(viewingMenu)}
-            />
+            <WeeklyMenuView menu={viewingMenu} />
           )}
         </DialogContent>
       </Dialog>

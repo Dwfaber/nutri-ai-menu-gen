@@ -8,12 +8,13 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type'
 };
 
-// ESTRUTURA COM 9 CATEGORIAS
+// ESTRUTURA COM 10 CATEGORIAS (INCLUINDO GUARNIÇÃO)
 const ESTRUTURA_CARDAPIO = {
-  PP1: { categoria: 'Proteína Principal 1', budget_percent: 24 },
+  PP1: { categoria: 'Proteína Principal 1', budget_percent: 16 },
   PP2: { categoria: 'Proteína Principal 2', budget_percent: 19 },
   ARROZ: { categoria: 'Arroz Branco', budget_percent: 14, receita_id: 580 },
   FEIJAO: { categoria: 'Feijão', budget_percent: 14, receita_id: 1600 },
+  GUARNICAO: { categoria: 'Guarnição', budget_percent: 8 },
   SALADA1: { categoria: 'Salada 1 (Verduras)', budget_percent: 7 },
   SALADA2: { categoria: 'Salada 2 (Legumes)', budget_percent: 6 },
   SUCO1: { categoria: 'Suco 1', budget_percent: 4 },

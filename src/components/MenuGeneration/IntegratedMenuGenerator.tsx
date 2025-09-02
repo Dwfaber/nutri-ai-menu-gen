@@ -9,7 +9,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { ChefHat, Calendar, CheckCircle, XCircle, ShoppingCart, DollarSign, Users, Plus, Wifi, WifiOff } from 'lucide-react';
 import { useIntegratedMenuGeneration } from '@/hooks/useIntegratedMenuGeneration';
 import { useSelectedClient } from '@/contexts/SelectedClientContext';
-import WeeklyMenuView from '@/components/MenuGeneration/WeeklyMenuView';
+import { WeeklyMenuView } from '@/components/MenuGeneration/WeeklyMenuView';
 import { SimpleMenuForm } from '@/components/MenuGeneration/SimpleMenuForm';
 import { ContractFormData } from '@/hooks/useClientContracts';
 import MenuValidationPanel from '@/components/MenuGeneration/MenuValidationPanel';
@@ -323,21 +323,7 @@ const IntegratedMenuGenerator = () => {
             {/* Weekly Menu View */}
             {generatedMenu.recipes && generatedMenu.recipes.length > 0 ? (
               <>
-                <WeeklyMenuView
-                  title="CARDÁPIO"
-                  recipes={generatedMenu.recipes.map((recipe: any, index) => ({
-                    id: recipe.id || `recipe-${index}`,
-                    name: recipe.name || 'Receita sem nome',
-                    category: recipe.category || 'PP1',
-                    day: recipe.day || '',
-                    cost: recipe.cost || 0,
-                    servings: recipe.servings || 50,
-                    ingredients: recipe.ingredients || []
-                  }))}
-                  onEdit={(recipeId) => console.log('Edit recipe:', recipeId)}
-                  onExport={() => console.log('Export menu')}
-                  onCopy={() => console.log('Copy menu')}
-                />
+                <WeeklyMenuView menu={generatedMenu} />
               </>
             ) : (
               <div className="p-8 text-center text-gray-500">
