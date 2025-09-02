@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { ChefHat, ShoppingCart, BarChart3, Settings, TestTube } from 'lucide-react';
 import { TestMenuGenerator } from '@/components/MenuGeneration/TestMenuGenerator';
+import logo from "@/assets/nutris-logo.png";
 
 const Index = () => {
   const navigate = useNavigate();
@@ -21,7 +22,7 @@ const Index = () => {
         <div className="text-center mb-8">
           <div className="mb-6 flex justify-center">
             <img 
-              src="/nutris-logo.png" 
+              src={logo} 
               alt="Nutr's Refeições Coletivas" 
               className="h-20 md:h-28 object-contain"
             />

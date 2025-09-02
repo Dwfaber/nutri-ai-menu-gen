@@ -7,6 +7,7 @@ import { useSelectedClient } from '@/contexts/SelectedClientContext';
 import ClientSelectorDropdown from '@/components/Dashboard/ClientSelectorDropdown';
 import WeeklyCostChart from '@/components/Dashboard/WeeklyCostChart';
 import CostAnalysisCard from '@/components/Dashboard/CostAnalysisCard';
+import logo from "@/assets/nutris-logo.png";
 
 const Dashboard = () => {
   const { metrics, isLoading, error, refetch } = useDashboardData();
@@ -40,7 +41,7 @@ const Dashboard = () => {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
           <img 
-            src="/nutris-logo.png" 
+            src={logo} 
             alt="Nutr's Refeições Coletivas" 
             className="h-12 object-contain"
           />

@@ -9,6 +9,7 @@ import {
   Brain,
   History
 } from 'lucide-react';
+import logo from "@/assets/nutris-logo.png";
 
 const Sidebar = () => {
   const navItems = [
@@ -25,7 +26,7 @@ const Sidebar = () => {
       <div className="p-6 border-b border-border">
         <div className="flex items-center justify-center">
           <img 
-            src="/nutris-logo.png" 
+            src={logo} 
             alt="Nutr's Refeições Coletivas" 
             className="h-10 object-contain"
           />

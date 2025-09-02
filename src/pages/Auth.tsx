@@ -11,6 +11,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Loader2, Play } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { useAuth } from "@/contexts/AuthContext";
+import logo from "@/assets/nutris-logo.png";
 
 export default function Auth() {
   const [loading, setLoading] = useState(false);
@@ -172,7 +173,7 @@ export default function Auth() {
         <CardHeader className="space-y-4">
           <div className="flex justify-center">
             <img 
-              src="/nutris-logo.png" 
+              src={logo} 
               alt="Nutr's Refeições Coletivas" 
               className="h-20 object-contain"
             />
