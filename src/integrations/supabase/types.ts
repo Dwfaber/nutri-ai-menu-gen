@@ -158,6 +158,10 @@ export type Database = {
           ratear_custo: boolean | null
           razao_social: string | null
           tipo_custo: number | null
+          use_pro_mix: boolean | null
+          use_pro_vita: boolean | null
+          use_suco_diet: boolean | null
+          use_suco_natural: boolean | null
         }
         Insert: {
           cnpj?: string | null
@@ -179,6 +183,10 @@ export type Database = {
           ratear_custo?: boolean | null
           razao_social?: string | null
           tipo_custo?: number | null
+          use_pro_mix?: boolean | null
+          use_pro_vita?: boolean | null
+          use_suco_diet?: boolean | null
+          use_suco_natural?: boolean | null
         }
         Update: {
           cnpj?: string | null
@@ -200,6 +208,10 @@ export type Database = {
           ratear_custo?: boolean | null
           razao_social?: string | null
           tipo_custo?: number | null
+          use_pro_mix?: boolean | null
+          use_pro_vita?: boolean | null
+          use_suco_diet?: boolean | null
+          use_suco_natural?: boolean | null
         }
         Relationships: []
       }
@@ -625,6 +637,27 @@ export type Database = {
         }
         Relationships: []
       }
+      sucos_disponiveis: {
+        Row: {
+          ativo: boolean | null
+          created_at: string | null
+          id: number
+          nome: string
+        }
+        Insert: {
+          ativo?: boolean | null
+          created_at?: string | null
+          id: number
+          nome: string
+        }
+        Update: {
+          ativo?: boolean | null
+          created_at?: string | null
+          id?: number
+          nome?: string
+        }
+        Relationships: []
+      }
       sync_logs: {
         Row: {
           created_at: string
@@ -693,6 +726,17 @@ export type Database = {
       cleanup_old_product_versions: {
         Args: Record<PropertyKey, never>
         Returns: undefined
+      }
+      gerar_cardapio: {
+        Args: {
+          p_data_fim: string
+          p_data_inicio: string
+          p_use_pro_mix?: boolean
+          p_use_pro_vita?: boolean
+          p_use_suco_diet?: boolean
+          p_use_suco_natural?: boolean
+        }
+        Returns: Json
       }
       has_role: {
         Args: {

@@ -23,6 +23,11 @@ export interface ContractClient {
   ativo: boolean;
   created_at: string;
   sync_at: string;
+  // Configurações de sucos
+  use_pro_mix?: boolean;
+  use_pro_vita?: boolean;
+  use_suco_diet?: boolean;
+  use_suco_natural?: boolean;
 }
 
 // Base interface for ingredients with market connection

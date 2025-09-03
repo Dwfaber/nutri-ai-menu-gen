@@ -24,6 +24,11 @@ export interface ContractClient {
   limite_percentual_acima_media: number;
   created_at: string;
   updated_at: string;
+  // Configurações de sucos
+  use_pro_mix?: boolean;
+  use_pro_vita?: boolean;
+  use_suco_diet?: boolean;
+  use_suco_natural?: boolean;
 }
 
 interface ClientContractsContextType {

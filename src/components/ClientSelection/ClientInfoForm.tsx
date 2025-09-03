@@ -8,6 +8,9 @@ import { Textarea } from '@/components/ui/textarea';
 import { ContractClient } from '@/contexts/ClientContractsContext';
 import { Badge } from '@/components/ui/badge';
 import { Users, DollarSign, Calendar, AlertTriangle } from 'lucide-react';
+import { JuiceConfigForm } from './JuiceConfigForm';
+import { createClient } from '@supabase/supabase-js';
+import { useToast } from '@/hooks/use-toast';
 
 export interface ClientAdditionalInfo {
   total_funcionarios: number;
@@ -33,6 +36,39 @@ const ClientInfoForm = ({ client, onComplete, onCancel }: ClientInfoFormProps) =
   });
   
   const [newRestriction, setNewRestriction] = useState('');
+  const { toast } = useToast();
+
+  const handleJuiceConfigUpdate = async (clientId: string, config: {
+    use_pro_mix?: boolean;
+    use_pro_vita?: boolean;
+    use_suco_diet?: boolean;
+    use_suco_natural?: boolean;
+  }) => {
+    try {
+      const supabase = createClient(
+        'https://wzbhhioegxdpegirglbq.supabase.co',
+        'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind6YmhoaW9lZ3hkcGVnaXJnbGJxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTI1MDA0MDUsImV4cCI6MjA2ODA3NjQwNX0.ufwv_XD8LZ2SGMPYUy7Z-CkK2GRNx8mailJb6ZRZHXQ'
+      );
+      const { error } = await supabase
+        .from('contratos_corporativos')
+        .update(config)
+        .eq('id', clientId);
+
+      if (error) throw error;
+
+      toast({
+        title: "Configuração atualizada",
+        description: "As configurações de suco foram salvas com sucesso.",
+      });
+    } catch (error) {
+      console.error('Erro ao atualizar configuração de sucos:', error);
+      toast({
+        title: "Erro",
+        description: "Erro ao salvar as configurações de suco.",
+        variant: "destructive",
+      });
+    }
+  };
 
   const handleAddRestriction = () => {
     if (newRestriction.trim() && !formData.restricoes_alimentares.includes(newRestriction.trim())) {
@@ -57,7 +93,8 @@ const ClientInfoForm = ({ client, onComplete, onCancel }: ClientInfoFormProps) =
   };
 
   return (
-    <Card className="w-full max-w-2xl mx-auto">
+    <div className="space-y-4">
+      <Card className="w-full max-w-2xl mx-auto">
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <AlertTriangle className="w-5 h-5 text-orange-500" />
@@ -202,6 +239,12 @@ const ClientInfoForm = ({ client, onComplete, onCancel }: ClientInfoFormProps) =
         </form>
       </CardContent>
     </Card>
+
+    <JuiceConfigForm 
+      client={client}
+      onUpdate={handleJuiceConfigUpdate}
+    />
+    </div>
   );
 };
 

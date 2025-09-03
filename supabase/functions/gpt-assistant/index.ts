@@ -874,6 +874,47 @@ Deno.serve(async (req) => {
                 custo_total: resultado.custo || 0
               };
             }
+          } else if (catConfig.codigo === 'SUCO1' || catConfig.codigo === 'SUCO2') {
+            // Sucos configurados via RPC de configuração do cliente
+            if (dadosFilial) {
+              try {
+                const { data: sucoConfig } = await supabase.rpc('gerar_cardapio', {
+                  p_data_inicio: new Date().toISOString().split('T')[0],
+                  p_data_fim: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+                  p_use_pro_mix: dadosFilial.use_pro_mix || false,
+                  p_use_pro_vita: dadosFilial.use_pro_vita || false,
+                  p_use_suco_diet: dadosFilial.use_suco_diet || false,
+                  p_use_suco_natural: dadosFilial.use_suco_natural || false
+                });
+
+                if (sucoConfig) {
+                  const sucoInfo = catConfig.codigo === 'SUCO1' ? sucoConfig.suco1 : sucoConfig.suco2;
+                  receita = {
+                    id: sucoInfo.id,
+                    nome: sucoInfo.nome,
+                    custo_por_refeicao: 0.40, // Custo padrão para sucos
+                    custo_total: 0.40 * mealQuantity
+                  };
+                }
+              } catch (error) {
+                console.warn(`Erro ao configurar suco via RPC: ${error.message}`);
+                // Fallback para suco padrão
+                receita = {
+                  id: 104,
+                  nome: catConfig.codigo === 'SUCO1' ? 'Suco Natural' : 'Suco de Fruta',
+                  custo_por_refeicao: 0.40,
+                  custo_total: 0.40 * mealQuantity
+                };
+              }
+            } else {
+              // Fallback quando não há dados de filial
+              receita = {
+                id: 104,
+                nome: catConfig.codigo === 'SUCO1' ? 'Suco Natural' : 'Suco de Fruta',
+                custo_por_refeicao: 0.40,
+                custo_total: 0.40 * mealQuantity
+              };
+            }
           } else {
             // Receitas variáveis com controle de variedade
             if (catConfig.codigo === 'GUARNICAO') {
