@@ -18,10 +18,12 @@ const SYNC_STRATEGIES = {
     uniqueColumns: ['solicitacao_id', 'produto_base_id'] // Chave natural para UPSERT
   },
   'produtos_base': {
-    strategy: 'truncate_insert', // Tabela simples, dados voláteis  
+    strategy: 'upsert_cleanup',
     backup: true,
     batchSize: 500,
-    cleanupOrphans: false
+    cleanupOrphans: true,
+    orphanDays: 30,
+    uniqueColumns: ['produto_base_id']
   },
   'custos_filiais': {
     strategy: 'upsert_cleanup', // Tabela média, relacionamentos importantes
@@ -149,6 +151,20 @@ function normalizeData(tableName: string, data: any[]) {
       quantidade_refeicoes: item.QuantidadeRefeicoes || item.quantidade_refeicoes || 1,
       notas: item.Notas || item.notas || '',
       user_name: item.UserName || item.user_name || '',
+      sync_at: new Date().toISOString(),
+      created_at: item.UserDateTime || item.created_at || new Date().toISOString(),
+      user_date_time: item.UserDateTime || item.user_date_time || new Date().toISOString(),
+      ...item
+    }));
+  }
+  
+  if (tableName === 'produtos_base') {
+    return data.map(item => ({
+      produto_base_id: item.ProdutoBaseId || item.produto_base_id,
+      descricao: item.Descricao || item.descricao,
+      unidade_medida_id: item.UnidadeMedidaId || item.unidade_medida_id,
+      unidade: item.Unidade || item.unidade,
+      user_name: item.UserName || item.user_name,
       sync_at: new Date().toISOString(),
       created_at: item.UserDateTime || item.created_at || new Date().toISOString(),
       user_date_time: item.UserDateTime || item.user_date_time || new Date().toISOString(),

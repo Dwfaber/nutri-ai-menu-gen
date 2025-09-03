@@ -64,5 +64,8 @@ verify_jwt = false
 [functions.sync-legacy-ingredientes]
 verify_jwt = false
 
+[functions.sync-legacy-produtos-base]
+verify_jwt = false
+
 [edge-runtime]
 inspector_port = 8083
