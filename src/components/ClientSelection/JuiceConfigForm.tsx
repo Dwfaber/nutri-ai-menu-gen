@@ -47,7 +47,7 @@ export const JuiceConfigForm: React.FC<JuiceConfigFormProps> = ({
               handleJuiceConfigChange('use_pro_vita', checked as boolean)
             }
           />
-          <Label htmlFor="use_pro_vita">Usar Suco Pro Vita</Label>
+          <Label htmlFor="use_pro_vita">Usar Vita Suco</Label>
         </div>
 
         <div className="flex items-center space-x-2">
@@ -76,7 +76,7 @@ export const JuiceConfigForm: React.FC<JuiceConfigFormProps> = ({
           <p>Prioridade dos sucos:</p>
           <ol className="list-decimal list-inside">
             <li>Suco Pró Mix</li>
-            <li>Suco Pro Vita</li>
+            <li>Vita Suco</li>
             <li>Suco Diet</li>
             <li>Suco Natural</li>
           </ol>
