@@ -147,18 +147,20 @@ Deno.serve(async (req) => {
         return "Sobremesa";
       }
       
-      // 6. SALADAS - Apenas verduras FRESCAS/CRUAS
-      if (/(salada|alface|rúcula|couve|folha|espinafre)/.test(lower) && 
+      // 6. SALADAS - Verduras FRESCAS/CRUAS e saladas à base de maionese
+      if (/(salada|alface|rúcula|couve|folha|espinafre|maionese|macarronese)/.test(lower) || 
+          /(ese$|salada\s+(de\s+)?maionese)/.test(lower) &&
           !/(cozida|cozido|refogada|refogado)/.test(lower)) {
         console.log(`✅ ${nome} → Salada 1 (Verduras frescas)`);
         return "Salada 1 (Verduras)";
       }
       
-      // 7. SALADAS DE LEGUMES (cruas/frescas)
-      if ((/(tomate|pepino|cenoura|abobrinha|beterraba|chuchu)/.test(lower) ||
-           (nomeUpper.includes('SALADA') && (nomeUpper.includes('RUSSA') || nomeUpper.includes('MISTA')))) &&
+      // 7. SALADAS DE LEGUMES/MAIONESE (cruas/frescas)
+      if ((/(tomate|pepino|cenoura|abobrinha|beterraba|chuchu|maionese|colorida)/.test(lower) ||
+           (nomeUpper.includes('SALADA') && (nomeUpper.includes('RUSSA') || nomeUpper.includes('MISTA'))) ||
+           (nomeUpper.includes('MAIONESE') || nomeUpper.includes('MACARRONESE'))) &&
           !/(cozida|cozido|refogada|refogado)/.test(lower)) {
-        console.log(`✅ ${nome} → Salada 2 (Legumes frescos)`);
+        console.log(`✅ ${nome} → Salada 2 (Legumes/Maionese)`);
         return "Salada 2 (Legumes)";
       }
       
@@ -534,8 +536,24 @@ Deno.serve(async (req) => {
           .eq('filial_id', filialId)
           .single();
         
+        console.log("CUSTOS FILIAL:", data, error);
+        
         if (error || !data) {
-          console.warn(`⚠️ Filial ${filialId} sem dados, usando padrão`);
+          console.warn(`⚠️ Filial ${filialId} sem dados de custo, tentando buscar contrato...`);
+          
+          // Buscar contrato como fallback
+          const { data: contratoData, error: contratoError } = await supabase
+            .from('contratos_corporativos')
+            .select('*')
+            .eq('filial_id_legado', filialId)
+            .single();
+          
+          console.log("CONTRATO:", contratoData, contratoError);
+          
+          if (contratoData) {
+            return { custo_diario: 9.00, nome_filial: contratoData.nome_fantasia };
+          }
+          
           return { custo_diario: 9.00 };
         }
         
@@ -1045,7 +1063,7 @@ Deno.serve(async (req) => {
     // HANDLER PRINCIPAL
     if (requestData.action === 'generate_menu') {
       const mealQuantity = requestData.refeicoesPorDia || requestData.meal_quantity || 100;
-      const filialId = requestData.filialIdLegado || null;
+      const filialId = requestData.filialIdLegado || requestData.filial_id || null;
       const clientName = requestData.cliente || 'Cliente';
       const numDays = requestData.numDays || 7;
       
