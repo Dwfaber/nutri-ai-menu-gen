@@ -641,20 +641,23 @@ export type Database = {
         Row: {
           ativo: boolean | null
           created_at: string | null
-          id: number
           nome: string
+          produto_base_id: number
+          tipo: string
         }
         Insert: {
           ativo?: boolean | null
           created_at?: string | null
-          id: number
           nome: string
+          produto_base_id: number
+          tipo: string
         }
         Update: {
           ativo?: boolean | null
           created_at?: string | null
-          id?: number
           nome?: string
+          produto_base_id?: number
+          tipo?: string
         }
         Relationships: []
       }
