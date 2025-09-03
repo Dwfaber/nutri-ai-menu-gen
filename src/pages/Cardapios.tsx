@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, Search, Filter, Database, ShoppingCart, DollarSign, Eye, Download, Copy, Trash2 } from 'lucide-react';
+import { Plus, Search, Filter, Database, ShoppingCart, DollarSign, Eye, Download, Copy, Trash2, TestTube } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -12,19 +12,22 @@ import { useShoppingList } from '../hooks/useShoppingList';
 import { useClientContracts, ContractFormData } from '../hooks/useClientContracts';
 import { useSelectedClient } from '@/contexts/SelectedClientContext';
 import { useIntegratedMenuGeneration, GeneratedMenu } from '../hooks/useIntegratedMenuGeneration';
-import { Client } from '../types/client';
+import { useJuiceConfiguration } from '../hooks/useJuiceConfiguration';
+import { Client, ContractClient } from '../types/client';
 import SyncMonitor from '../components/SyncMonitor/SyncMonitor';
 import NLPInput from '../components/MenuGenerator/NLPInput';
 import PreviewTabs from '../components/MenuGenerator/PreviewTabs';
 import { MenuCreationForm } from '../components/MenuGenerator/MenuCreationForm';
 import IntegratedMenuGenerator from '../components/MenuGeneration/IntegratedMenuGenerator';
 import { WeeklyMenuView } from '../components/MenuGeneration/WeeklyMenuView';
+import { JuiceMenuDisplay } from '../components/MenuGeneration/JuiceMenuDisplay';
 
 const Cardapios = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [selectedMenuForShopping, setSelectedMenuForShopping] = useState<string | null>(null);
   const [viewingMenu, setViewingMenu] = useState<GeneratedMenu | null>(null);
+  const [juiceTestResult, setJuiceTestResult] = useState<any>(null);
   
   const { 
     isGenerating, 
@@ -38,6 +41,7 @@ const Cardapios = () => {
   const { createFromMenu, isLoading: isCreatingList } = useShoppingList();
   const { clients, generateAIContextSummary } = useClientContracts();
   const { selectedClient } = useSelectedClient();
+  const { generateJuiceConfig } = useJuiceConfiguration();
   const { toast } = useToast();
 
   const handleGenerateShoppingList = async (menu: GeneratedMenu) => {
@@ -147,6 +151,32 @@ const Cardapios = () => {
     }
   };
 
+  const handleTestJuiceConfiguration = async () => {
+    if (!selectedClient) {
+      toast({
+        title: "Cliente não selecionado",
+        description: "Selecione um cliente para testar a configuração de sucos.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const startDate = new Date().toISOString().split('T')[0];
+    const endDate = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    
+    const config = {
+      use_pro_mix: selectedClient.use_pro_mix || false,
+      use_pro_vita: selectedClient.use_pro_vita || false,
+      use_suco_diet: selectedClient.use_suco_diet || false,
+      use_suco_natural: selectedClient.use_suco_natural || true, // default fallback
+    };
+
+    const result = await generateJuiceConfig(startDate, endDate, config);
+    if (result) {
+      setJuiceTestResult(result);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
@@ -154,19 +184,30 @@ const Cardapios = () => {
           <h1 className="text-2xl font-bold text-gray-900">Cardápios</h1>
           <p className="text-gray-600">Sistema inteligente de cardápios com receitas reais e lista de compras automática</p>
         </div>
-        <Button 
-          onClick={() => setShowCreateForm(true)}
-          className="bg-green-600 hover:bg-green-700"
-          disabled={!selectedClient}
-        >
-          <Plus className="w-4 h-4 mr-2" />
-          Novo Cardápio
-        </Button>
+        <div className="flex space-x-2">
+          <Button 
+            onClick={handleTestJuiceConfiguration}
+            variant="outline"
+            disabled={!selectedClient}
+          >
+            <TestTube className="w-4 h-4 mr-2" />
+            Testar Sucos
+          </Button>
+          <Button 
+            onClick={() => setShowCreateForm(true)}
+            className="bg-green-600 hover:bg-green-700"
+            disabled={!selectedClient}
+          >
+            <Plus className="w-4 h-4 mr-2" />
+            Novo Cardápio
+          </Button>
+        </div>
       </div>
 
       <Tabs defaultValue="integrated" className="w-full">
-        <TabsList className="grid w-full grid-cols-3">
+        <TabsList className="grid w-full grid-cols-4">
           <TabsTrigger value="integrated">Gerador Inteligente</TabsTrigger>
+          <TabsTrigger value="juice-test">Teste de Sucos</TabsTrigger>
           <TabsTrigger value="menus">Cardápios Salvos</TabsTrigger>
           <TabsTrigger value="sync">Sincronização</TabsTrigger>
         </TabsList>
@@ -174,6 +215,48 @@ const Cardapios = () => {
         <TabsContent value="integrated" className="space-y-6">
           <IntegratedMenuGenerator />
         </TabsContent>
+        
+        <TabsContent value="juice-test" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Teste da Nova Estrutura de Sucos</CardTitle>
+              <p className="text-sm text-muted-foreground">
+                Teste a configuração melhorada de sucos com IDs reais dos produtos e variedade por categoria.
+              </p>
+            </CardHeader>
+            <CardContent>
+              {selectedClient ? (
+                <div className="space-y-4">
+                  <div className="text-sm">
+                    <p><strong>Cliente:</strong> {selectedClient?.nome_fantasia}</p>
+                    <p><strong>Configurações:</strong></p>
+                    <ul className="list-disc list-inside ml-4 text-muted-foreground">
+                      <li>Pró Mix: {selectedClient.use_pro_mix ? 'Sim' : 'Não'}</li>
+                      <li>Vita Suco: {selectedClient.use_pro_vita ? 'Sim' : 'Não'}</li>
+                      <li>Suco Diet: {selectedClient.use_suco_diet ? 'Sim' : 'Não'}</li>
+                      <li>Suco Natural: {selectedClient.use_suco_natural ? 'Sim' : 'Não'}</li>
+                    </ul>
+                  </div>
+                  
+                  <Button 
+                    onClick={handleTestJuiceConfiguration}
+                    className="w-full"
+                  >
+                    <TestTube className="w-4 h-4 mr-2" />
+                    Gerar Configuração de Sucos
+                  </Button>
+                  
+                  {juiceTestResult && (
+                    <JuiceMenuDisplay juiceConfig={juiceTestResult} />
+                  )}
+                </div>
+              ) : (
+                <p className="text-muted-foreground">Selecione um cliente para testar a configuração de sucos.</p>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+        
         <TabsContent value="menus" className="space-y-6">
           <div className="flex space-x-4">
             <div className="relative flex-1">

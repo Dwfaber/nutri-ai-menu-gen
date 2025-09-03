@@ -79,7 +79,7 @@ export const useJuiceConfiguration = () => {
     }
   };
 
-  // Gerar configuração de sucos usando a RPC
+  // Gerar configuração de sucos usando a RPC melhorada
   const generateJuiceConfig = async (
     startDate: string,
     endDate: string,
@@ -100,6 +100,15 @@ export const useJuiceConfiguration = () => {
       });
 
       if (error) throw error;
+      
+      // A nova função retorna uma estrutura mais rica
+      if (data?.cardapio_semanal) {
+        toast({
+          title: "Configuração gerada",
+          description: `Cardápio de sucos criado para ${data.cardapio_semanal.length} dias úteis.`,
+        });
+      }
+      
       return data;
     } catch (error) {
       console.error('Erro ao gerar configuração de sucos:', error);
