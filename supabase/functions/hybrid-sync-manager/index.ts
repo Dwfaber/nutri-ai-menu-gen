@@ -107,6 +107,57 @@ function getTableStrategy(tableName: string) {
   );
 }
 
+// Função centralizada para normalizar dados do SQL Server para Supabase
+function normalizeData(tableName: string, data: any[]) {
+  console.log(`Normalizing ${data.length} records for table ${tableName}`);
+  
+  if (tableName === 'receitas_legado') {
+    return data.map(item => ({
+      receita_id_legado: item.ReceitaId || item.receita_id_legado || String(item.CpReceitaId || ''),
+      nome_receita: item.Nome || item.nome_receita || item.NomeReceita || '',
+      modo_preparo: item.ModoPreparo || item.modo_preparo || item.ModoPreparoDescricao || '',
+      categoria_receita: item.CategoriaReceita || item.categoria_receita || item.CategoriaDescricao || '',
+      categoria_descricao: item.CategoriaDescricao || item.categoria_descricao || item.categoria_receita || '',
+      categoria_id: item.CategoriaId || item.categoria_id || 1,
+      tempo_preparo: item.TempoPreparo || item.tempo_preparo || 0,
+      quantidade_refeicoes: item.QuantidadeRefeicoes || item.quantidade_refeicoes || 1,
+      porcoes: item.Porcoes || item.porcoes || 1,
+      custo_total: item.CustoTotal || item.custo_total || 0,
+      usuario: item.Usuario || item.usuario || item.UserName || '',
+      inativa: item.Inativa || item.inativa || false,
+      sync_at: new Date().toISOString(),
+      created_at: item.UserDateTime || item.created_at || new Date().toISOString(),
+      ...item
+    }));
+  }
+  
+  if (tableName === 'receita_ingredientes') {
+    return data.map(item => ({
+      receita_id_legado: item.ReceitaId || item.receita_id_legado || String(item.CpReceitaId || ''),
+      produto_base_id: item.ProdutoBaseId || item.produto_base_id || 0,
+      quantidade: item.Quantidade || item.quantidade || 0,
+      unidade: item.Unidade || item.unidade || '',
+      nome: item.Nome || item.nome || item.ProdutoBaseDescricao || '',
+      produto_base_descricao: item.ProdutoBaseDescricao || item.produto_base_descricao || item.Nome || '',
+      categoria_descricao: item.CategoriaDescricao || item.categoria_descricao || '',
+      receita_produto_id: item.ReceitaProdutoId || item.receita_produto_id || 0,
+      produto_id: item.ProdutoId || item.produto_id || 1,
+      unidade_medida_id: item.UnidadeMedidaId || item.unidade_medida_id || 1,
+      receita_produto_classificacao_id: item.ReceitaProdutoClassificacaoId || item.receita_produto_classificacao_id || 1,
+      quantidade_refeicoes: item.QuantidadeRefeicoes || item.quantidade_refeicoes || 1,
+      notas: item.Notas || item.notas || '',
+      user_name: item.UserName || item.user_name || '',
+      sync_at: new Date().toISOString(),
+      created_at: item.UserDateTime || item.created_at || new Date().toISOString(),
+      user_date_time: item.UserDateTime || item.user_date_time || new Date().toISOString(),
+      ...item
+    }));
+  }
+  
+  // Para outras tabelas, retorna os dados como estão
+  return data;
+}
+
 async function syncTable(supabaseClient: any, tableName: string, data: any[], syncConfig?: any) {
   const startTime = Date.now();
   const strategy = SYNC_STRATEGIES[tableName as keyof typeof SYNC_STRATEGIES] || { 
@@ -116,6 +167,10 @@ async function syncTable(supabaseClient: any, tableName: string, data: any[], sy
   };
 
   console.log(`Syncing table ${tableName} with strategy: ${strategy.strategy}`);
+  
+  // Normalizar dados antes de processar
+  const normalizedData = normalizeData(tableName, data);
+  console.log(`Data normalized for ${tableName}: ${data.length} -> ${normalizedData.length} records`);
 
   // Log início da sincronização
   const { data: logData } = await supabaseClient
@@ -127,6 +182,7 @@ async function syncTable(supabaseClient: any, tableName: string, data: any[], sy
       detalhes: { 
         strategy: strategy.strategy,
         recordCount: data.length,
+        normalizedRecords: normalizedData.length,
         backup: strategy.backup
       }
     })
@@ -150,17 +206,17 @@ async function syncTable(supabaseClient: any, tableName: string, data: any[], sy
 
     let processedRecords = 0;
 
-    // 2. Executar estratégia específica
+    // 2. Executar estratégia específica com dados normalizados
     switch (strategy.strategy) {
       case 'truncate_insert':
-        processedRecords = await truncateAndInsert(supabaseClient, tableName, data, strategy.batchSize);
+        processedRecords = await truncateAndInsert(supabaseClient, tableName, normalizedData, strategy.batchSize);
         break;
       case 'upsert_cleanup':
-        processedRecords = await upsertWithCleanup(supabaseClient, tableName, data, strategy);
+        processedRecords = await upsertWithCleanup(supabaseClient, tableName, normalizedData, strategy);
         break;
       case 'upsert':
       default:
-        processedRecords = await upsertData(supabaseClient, tableName, data, strategy.batchSize);
+        processedRecords = await upsertData(supabaseClient, tableName, normalizedData, strategy.batchSize, strategy.uniqueColumns);
         break;
     }
 
@@ -218,7 +274,7 @@ async function syncTable(supabaseClient: any, tableName: string, data: any[], sy
       }
     }
     
-    // Log erro
+    // Log erro com detalhes completos
     if (logId) {
       await supabaseClient
         .from('sync_logs')
@@ -229,8 +285,12 @@ async function syncTable(supabaseClient: any, tableName: string, data: any[], sy
           detalhes: {
             strategy: strategy.strategy,
             recordCount: data.length,
+            normalizedRecords: normalizedData.length,
             backupId,
-            rollbackAttempted: !!backupId
+            rollbackAttempted: !!backupId,
+            erro_msg_completo: error.stack || error.toString(),
+            sample_original_data: data.slice(0, 2),
+            sample_normalized_data: normalizedData.slice(0, 2)
           }
         })
         .eq('id', logId);
@@ -303,25 +363,37 @@ async function upsertWithCleanup(supabaseClient: any, tableName: string, data: a
   }
 }
 
-async function upsertData(supabaseClient: any, tableName: string, data: any[], batchSize: number, syncTimestamp?: string) {
+async function upsertData(supabaseClient: any, tableName: string, data: any[], batchSize: number, uniqueColumns?: string[]) {
   console.log(`UPSERT strategy for ${tableName} - ${data.length} records`);
   
   let processedRecords = 0;
   
+  // Configurar opções de conflito baseado na tabela
+  let upsertOptions: any = {};
+  
+  if (tableName === 'receitas_legado' && uniqueColumns?.includes('receita_id_legado')) {
+    upsertOptions.onConflict = 'receita_id_legado';
+  } else if (tableName === 'receita_ingredientes') {
+    upsertOptions.onConflict = 'receita_id_legado,produto_base_id';
+  }
+  
   for (let i = 0; i < data.length; i += batchSize) {
     const batch = data.slice(i, i + batchSize);
     
-    // Adicionar timestamp de sincronização se fornecido
-    const batchWithSync = syncTimestamp 
-      ? batch.map(record => ({ ...record, sync_at: syncTimestamp }))
-      : batch;
+    // Garantir que sync_at está presente
+    const batchWithSync = batch.map(record => ({ 
+      ...record, 
+      sync_at: record.sync_at || new Date().toISOString() 
+    }));
     
     const { error: upsertError } = await supabaseClient
       .from(tableName)
-      .upsert(batchWithSync);
+      .upsert(batchWithSync, upsertOptions);
 
     if (upsertError) {
       console.error(`Batch upsert error for ${tableName}:`, upsertError);
+      console.error('Error details:', JSON.stringify(upsertError, null, 2));
+      console.error('Sample batch data:', JSON.stringify(batchWithSync.slice(0, 2), null, 2));
       throw new Error(`Batch upsert failed: ${upsertError.message}`);
     }
 
