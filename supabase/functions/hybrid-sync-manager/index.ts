@@ -11,10 +11,10 @@ const corsHeaders = {
 const SYNC_STRATEGIES = {
   'co_solicitacao_produto_listagem': {
     strategy: 'upsert_cleanup', // Mudança: agora usa UPSERT com limpeza
-    backup: true,
-    batchSize: 1000,
+    backup: false, // Não precisa backup pois dados vêm do sistema legado
+    batchSize: 500, // Otimizado para performance
     cleanupOrphans: true,
-    orphanDays: 30,
+    orphanDays: 7, // Limpeza mais agressiva para evitar acúmulo
     uniqueColumns: ['solicitacao_id', 'produto_base_id'] // Chave natural para UPSERT
   },
   'produtos_base': {
