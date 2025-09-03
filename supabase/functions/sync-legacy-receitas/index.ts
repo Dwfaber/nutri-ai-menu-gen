@@ -65,8 +65,53 @@ serve(async (req) => {
     console.log(`Recebido lote com ${receitasData.length} receitas do n8n`);
     console.log(`IDs das receitas recebidas: ${receitasData.slice(0, 10).map(r => r.receita_id).join(', ')}${receitasData.length > 10 ? '...' : ''}`);
 
-    // Sincronizar receitas
-    const result = await syncReceitas(supabaseClient, receitasData);
+    // Mapear dados para o formato esperado pelo hybrid-sync-manager
+    const mappedData = receitasData
+      .filter(receita => !receita.inativa) // Filtrar receitas inativas
+      .map(receita => ({
+        receita_id_legado: receita.receita_id.toString(),
+        nome_receita: receita.nome,
+        modo_preparo: receita.modo_preparo || '',
+        tempo_preparo: receita.tempo_preparo || 0,
+        porcoes: receita.porcoes || 1,
+        custo_total: receita.custo_total || 0,
+        categoria_id: receita.categoria_id,
+        categoria_receita: receita.categoria_descricao,
+        categoria_descricao: receita.categoria_descricao,
+        quantidade_refeicoes: receita.quantidade_refeicoes || 1,
+        inativa: receita.inativa || false,
+        usuario: receita.usuario,
+        sync_at: new Date().toISOString()
+      }));
+
+    console.log(`Chamando hybrid-sync-manager para ${mappedData.length} receitas filtradas`);
+
+    // Chamar o hybrid-sync-manager
+    const hybridSyncResponse = await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/hybrid-sync-manager`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`
+      },
+      body: JSON.stringify({
+        action: 'sync_table',
+        targetTable: 'receitas_legado',
+        data: mappedData
+      })
+    });
+
+    if (!hybridSyncResponse.ok) {
+      throw new Error(`Hybrid sync failed: ${hybridSyncResponse.statusText}`);
+    }
+
+    const hybridResult = await hybridSyncResponse.json();
+    
+    const result = {
+      processed: receitasData.length,
+      success: hybridResult.processedRecords || 0,
+      errors: receitasData.length - (hybridResult.processedRecords || 0),
+      skipped: receitasData.filter(r => r.inativa).length
+    };
 
     const executionTime = Date.now() - startTime;
 
@@ -135,85 +180,4 @@ serve(async (req) => {
   }
 });
 
-async function syncReceitas(supabaseClient: any, receitas: CpReceita[]) {
-  let processed = 0;
-  let success = 0;
-  let errors = 0;
-  let skipped = 0;
-
-  for (const receita of receitas) {
-    try {
-      processed++;
-
-      // Log para rastrear progresso em lotes grandes
-      if (processed % 50 === 0) {
-        console.log(`Processando receita ${processed}/${receitas.length}: ID ${receita.receita_id}`);
-      }
-
-      // Pular receitas inativas
-      if (receita.inativa === true) {
-        skipped++;
-        console.log(`Receita ${receita.receita_id} pulada - marcada como inativa`);
-        continue;
-      }
-
-      // Validar dados obrigatórios
-      if (!receita.receita_id || !receita.nome) {
-        console.error(`Receita ${receita.receita_id || 'sem ID'} pulada - dados obrigatórios ausentes`);
-        errors++;
-        continue;
-      }
-
-      // Preparar dados da receita (sem campo ingredientes que não existe na tabela)
-      const receitaData = {
-        receita_id_legado: receita.receita_id.toString(),
-        nome_receita: receita.nome,
-        modo_preparo: receita.modo_preparo || '',
-        tempo_preparo: receita.tempo_preparo || 0,
-        porcoes: receita.porcoes || 1,
-        custo_total: receita.custo_total || 0,
-        categoria_id: receita.categoria_id,
-        categoria_receita: receita.categoria_descricao,
-        categoria_descricao: receita.categoria_descricao,
-        quantidade_refeicoes: receita.quantidade_refeicoes || 1,
-        inativa: receita.inativa || false,
-        usuario: receita.usuario,
-        sync_at: new Date().toISOString()
-      };
-
-      // Usar UPSERT para inserir ou atualizar automaticamente
-      const { error } = await supabaseClient
-        .from('receitas_legado')
-        .upsert(receitaData, {
-          onConflict: 'receita_id_legado',
-          ignoreDuplicates: false
-        });
-
-      if (error) {
-        console.error(`Erro ao fazer upsert da receita ${receita.receita_id}:`, {
-          error: error.message,
-          code: error.code,
-          details: error.details,
-          hint: error.hint,
-          receitaData: {
-            receita_id_legado: receitaData.receita_id_legado,
-            nome_receita: receitaData.nome_receita
-          }
-        });
-        errors++;
-      } else {
-        success++;
-        if (processed <= 10 || processed % 100 === 0) {
-          console.log(`Receita ${receita.receita_id} sincronizada com sucesso (upsert)`);
-        }
-      }
-
-    } catch (error) {
-      console.error(`Erro ao processar receita ${receita.receita_id}:`, error);
-      errors++;
-    }
-  }
-
-  console.log(`Sincronização finalizada: ${success} sucessos, ${errors} erros de ${processed} processadas`);
-  return { processed, success, errors, skipped };
-}
+// Função removida - agora usa hybrid-sync-manager

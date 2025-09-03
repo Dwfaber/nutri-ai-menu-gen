@@ -31,10 +31,12 @@ const SYNC_STRATEGIES = {
     orphanDays: 7
   },
   'receitas_legado': {
-    strategy: 'upsert', // Tabela pequena, muitos relacionamentos
+    strategy: 'upsert_cleanup', // Mudança: agora usa UPSERT com limpeza
     backup: false,
     batchSize: 100,
-    cleanupOrphans: false
+    cleanupOrphans: true,
+    orphanDays: 30,
+    uniqueColumns: ['receita_id_legado'] // Chave natural para UPSERT
   },
   'receita_ingredientes': {
     strategy: 'upsert', // Dados relacionais críticos
