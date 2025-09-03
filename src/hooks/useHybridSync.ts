@@ -194,7 +194,17 @@ export const useHybridSync = () => {
       console.log(`Using strategy for ${tableName}:`, strategy);
       return await syncTable(tableName, data, strategy);
     } else {
-      // Fallback para UPSERT padrão
+      // Fallback otimizado: usar upsert_cleanup para co_solicitacao_produto_listagem
+      if (tableName === 'co_solicitacao_produto_listagem') {
+        return await syncTable(tableName, data, { 
+          strategy: 'upsert_cleanup',
+          backup: true,
+          batchSize: 1000,
+          cleanupOrphans: true,
+          orphanDays: 30
+        });
+      }
+      // Fallback padrão para outras tabelas
       return await syncTable(tableName, data, { strategy: 'upsert' });
     }
   };
