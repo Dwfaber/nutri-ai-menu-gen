@@ -49,7 +49,6 @@ const ESTRUTURA_CARDAPIO = {
   SALADA2: { categoria: 'Salada 2 (Legumes)', budget_percent: 8 },
   SOBREMESA: { categoria: 'Sobremesa', budget_percent: 2 }
 };
-};
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
