@@ -895,17 +895,19 @@ Deno.serve(async (req) => {
               };
             }
            } else if (catConfig.codigo === 'SUCO1' || catConfig.codigo === 'SUCO2') {
-            // Sucos configurados via RPC melhorada
-            if (dadosFilial) {
-              try {
-                const { data: sucoConfig } = await supabase.rpc('gerar_cardapio', {
-                  p_data_inicio: new Date().toISOString().split('T')[0],
-                  p_data_fim: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-                  p_use_pro_mix: dadosFilial.use_pro_mix || false,
-                  p_use_pro_vita: dadosFilial.use_pro_vita || false,
-                  p_use_suco_diet: dadosFilial.use_suco_diet || false,
-                  p_use_suco_natural: dadosFilial.use_suco_natural || false
-                });
+            // Sucos configurados via RPC melhorada - usar configuração do frontend
+            const juiceConfig = requestData.juice_config || {};
+            console.log("🧃 Configuração de suco recebida:", juiceConfig);
+            
+            try {
+              const { data: sucoConfig } = await supabase.rpc('gerar_cardapio', {
+                p_data_inicio: new Date().toISOString().split('T')[0],
+                p_data_fim: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+                p_use_pro_mix: juiceConfig.use_pro_mix || false,
+                p_use_pro_vita: juiceConfig.use_pro_vita || false,
+                p_use_suco_diet: juiceConfig.use_suco_diet || false,
+                p_use_suco_natural: juiceConfig.use_suco_natural || true // fallback para natural
+              });
 
                 if (sucoConfig?.cardapio_semanal?.length > 0) {
                   const diaAtual = sucoConfig.cardapio_semanal[i % sucoConfig.cardapio_semanal.length];
@@ -931,21 +933,16 @@ Deno.serve(async (req) => {
                 } else {
                   throw new Error('Configuração de suco não retornou dados válidos');
                 }
-              } catch (error) {
-                console.warn(`Erro ao configurar suco via RPC: ${error.message}`);
-                // Fallback para suco padrão
-                receita = {
-                  id: -999,
-                  nome: catConfig.codigo === 'SUCO1' ? '(Padrão) Suco Natural' : '(Padrão) Suco de Fruta',
-                  custo_por_refeicao: 0.40,
-                  custo_total: 0.40 * mealQuantity
-                };
-              }
-            } else {
-              // Fallback quando não há dados de filial
+            } catch (error) {
+              console.warn(`Erro ao configurar suco via RPC: ${error.message}`);
+              // Fallback para suco padrão
               receita = {
                 id: -999,
                 nome: catConfig.codigo === 'SUCO1' ? '(Padrão) Suco Natural' : '(Padrão) Suco de Fruta',
+                custo_por_refeicao: 0.40,
+                custo_total: 0.40 * mealQuantity
+              };
+            }
                 custo_por_refeicao: 0.40,
                 custo_total: 0.40 * mealQuantity
               };
@@ -1072,6 +1069,10 @@ Deno.serve(async (req) => {
       const numDays = requestData.numDays || 7;
       
       console.log(`🍽️ Gerando cardápio: ${numDays} dias, ${mealQuantity} refeições/dia`);
+      console.log(`🔍 FILIAL_ID DEBUG: filialId=${filialId}, origem:`, {
+        filialIdLegado: requestData.filialIdLegado,
+        filial_id: requestData.filial_id
+      });
       
       try {
         // Buscar orçamento
@@ -1081,6 +1082,9 @@ Deno.serve(async (req) => {
         if (filialId) {
           dadosFilial = await buscarOrcamentoFilial(filialId);
           budget = dadosFilial.custo_diario || 9.00;
+          console.log(`💰 Dados filial encontrados:`, { budget, dadosFilial: !!dadosFilial });
+        } else {
+          console.warn(`⚠️ Sem filialId - usando fallback`);
         }
         
         console.log(`💰 Orçamento: R$ ${budget.toFixed(2)}/refeição`);
