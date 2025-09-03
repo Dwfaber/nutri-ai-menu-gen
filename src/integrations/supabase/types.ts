@@ -701,6 +701,10 @@ export type Database = {
         }
         Returns: boolean
       }
+      simple_upsert_cleanup: {
+        Args: { cleanup_days?: number; data_json: Json; target_table: string }
+        Returns: Json
+      }
       upsert_with_cleanup: {
         Args: {
           cleanup_days?: number

@@ -72,11 +72,11 @@ export const ProductRequestManager = ({ menuId, clientId, onCostChange }: Produc
     const fetchProducts = async () => {
       try {
         const operation = async () => {
+          // Usar produtos_base em vez de produtos_legado
           const { data, error } = await supabase
-            .from('produtos_legado')
+            .from('produtos_base')
             .select('*')
-            .eq('disponivel', true)
-            .order('nome')
+            .order('descricao')
             .limit(100); // Limitar para evitar sobrecarga
 
           if (error) throw error;
@@ -84,7 +84,18 @@ export const ProductRequestManager = ({ menuId, clientId, onCostChange }: Produc
         };
 
         const data = await withRetry(operation, { maxRetries: 2 });
-        setAvailableProducts(data);
+        // Mapear dados de produtos_base para o formato esperado
+        const mappedProducts = data.map(item => ({
+          id: item.id || '',
+          produto_id_legado: item.produto_base_id?.toString() || '',
+          nome: item.descricao || '',
+          categoria: 'Produto Base',
+          unidade: item.unidade || 'UN',
+          peso_unitario: 0,
+          preco_unitario: 0,
+          disponivel: true
+        }));
+        setAvailableProducts(mappedProducts);
       } catch (error) {
         console.error('Error fetching products:', error);
       }

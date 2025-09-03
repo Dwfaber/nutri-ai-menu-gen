@@ -279,20 +279,19 @@ async function upsertWithCleanup(supabaseClient: any, tableName: string, data: a
   console.log(`UPSERT + CLEANUP strategy for ${tableName} - ${data.length} records`);
   
   try {
-    // Usar a nova função PostgreSQL upsert_with_cleanup
-    const { data: result, error } = await supabaseClient.rpc('upsert_with_cleanup', {
+    // Usar a nova função PostgreSQL simple_upsert_cleanup
+    const { data: result, error } = await supabaseClient.rpc('simple_upsert_cleanup', {
       target_table: tableName,
       data_json: data,
-      unique_columns: strategy.uniqueColumns || ['id'],
       cleanup_days: strategy.orphanDays || 30
     });
 
     if (error) {
-      console.error(`Upsert with cleanup error for ${tableName}:`, error);
-      throw new Error(`Upsert with cleanup failed: ${error.message}`);
+      console.error(`Simple upsert cleanup error for ${tableName}:`, error);
+      throw new Error(`Simple upsert cleanup failed: ${error.message}`);
     }
 
-    console.log(`Upsert with cleanup completed for ${tableName}:`, result);
+    console.log(`Simple upsert cleanup completed for ${tableName}:`, result);
     return result.processed_records || 0;
     
   } catch (error) {
