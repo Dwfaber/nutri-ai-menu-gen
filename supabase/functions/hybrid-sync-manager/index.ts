@@ -39,10 +39,12 @@ const SYNC_STRATEGIES = {
     uniqueColumns: ['receita_id_legado'] // Chave natural para UPSERT
   },
   'receita_ingredientes': {
-    strategy: 'upsert', // Dados relacionais críticos
+    strategy: 'upsert_cleanup', // Mudança: agora usa UPSERT com limpeza
     backup: false,
     batchSize: 500,
-    cleanupOrphans: false
+    cleanupOrphans: true,
+    orphanDays: 30,
+    uniqueColumns: ['receita_id_legado', 'produto_base_id'] // Chave natural para UPSERT
   },
   'contratos_corporativos': {
     strategy: 'upsert', // Dados contratuais críticos

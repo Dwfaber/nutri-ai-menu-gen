@@ -58,5 +58,11 @@ verify_jwt = false
 [functions.hybrid-sync-manager]
 verify_jwt = false
 
+[functions.sync-legacy-receitas]
+verify_jwt = false
+
+[functions.sync-legacy-ingredientes]
+verify_jwt = false
+
 [edge-runtime]
 inspector_port = 8083
