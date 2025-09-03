@@ -909,30 +909,30 @@ Deno.serve(async (req) => {
                 p_use_suco_natural: juiceConfig.use_suco_natural || true // fallback para natural
               });
 
-                if (sucoConfig?.cardapio_semanal?.length > 0) {
-                  const diaAtual = sucoConfig.cardapio_semanal[i % sucoConfig.cardapio_semanal.length];
-                  const sucoInfo = catConfig.codigo === 'SUCO1' ? diaAtual.suco1 : diaAtual.suco2;
-                  
-                  // Buscar custo real do produto
-                  const { data: precoProduto } = await supabase
-                    .from('co_solicitacao_produto_listagem')
-                    .select('preco')
-                    .eq('produto_base_id', sucoInfo.id)
-                    .gt('preco', 0)
-                    .limit(1)
-                    .single();
-                  
-                  const custoSuco = precoProduto?.preco ? (precoProduto.preco * 0.1) : 0.40; // 10% do preço do produto ou fallback
-                  
-                  receita = {
-                    id: sucoInfo.id,
-                    nome: sucoInfo.nome,
-                    custo_por_refeicao: custoSuco,
-                    custo_total: custoSuco * mealQuantity
-                  };
-                } else {
-                  throw new Error('Configuração de suco não retornou dados válidos');
-                }
+              if (sucoConfig?.cardapio_semanal?.length > 0) {
+                const diaAtual = sucoConfig.cardapio_semanal[i % sucoConfig.cardapio_semanal.length];
+                const sucoInfo = catConfig.codigo === 'SUCO1' ? diaAtual.suco1 : diaAtual.suco2;
+                
+                // Buscar custo real do produto
+                const { data: precoProduto } = await supabase
+                  .from('co_solicitacao_produto_listagem')
+                  .select('preco')
+                  .eq('produto_base_id', sucoInfo.id)
+                  .gt('preco', 0)
+                  .limit(1)
+                  .single();
+                
+                const custoSuco = precoProduto?.preco ? (precoProduto.preco * 0.1) : 0.40; // 10% do preço do produto ou fallback
+                
+                receita = {
+                  id: sucoInfo.id,
+                  nome: sucoInfo.nome,
+                  custo_por_refeicao: custoSuco,
+                  custo_total: custoSuco * mealQuantity
+                };
+              } else {
+                throw new Error('Configuração de suco não retornou dados válidos');
+              }
             } catch (error) {
               console.warn(`Erro ao configurar suco via RPC: ${error.message}`);
               // Fallback para suco padrão
