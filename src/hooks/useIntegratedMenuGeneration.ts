@@ -683,8 +683,52 @@ export const useIntegratedMenuGeneration = () => {
         mpd ?? 50
       );
 
-      const mapCategory = (c: string) => {
+      // Funções auxiliares para validação
+      const isProteinRecipe = (recipeName: string): boolean => {
+        const name = recipeName.toUpperCase();
+        return name.includes('FRANGO') || name.includes('CARNE') || name.includes('BIFE') || 
+               name.includes('PEIXE') || name.includes('OVO') || name.includes('LINGUIÇA') ||
+               name.includes('ALMÔNDEGA') || name.includes('ALMONDEGA') || name.includes('PERNIL') ||
+               name.includes('ACÉM') || name.includes('SUÍNO') || name.includes('BOVINO') ||
+               name.includes('FILÉ') || name.includes('COXA') || name.includes('PEITO');
+      };
+
+      const isGuarnitionRecipe = (recipeName: string): boolean => {
+        const name = recipeName.toUpperCase();
+        return name.includes('BATATA') || name.includes('LEGUMES') || name.includes('MANDIOCA') ||
+               name.includes('PURÊ') || name.includes('REFOGADO') || name.includes('COZIDO') ||
+               name.includes('MACARRÃO') || name.includes('POLENTA') || name.includes('FAROFA');
+      };
+
+      const isFreshSalad = (recipeName: string): boolean => {
+        const name = recipeName.toUpperCase();
+        return name.includes('SALADA') && (name.includes('VERDE') || name.includes('ALFACE') ||
+               name.includes('RÚCULA') || name.includes('FOLHA') || name.includes('MISTA')) &&
+               !name.includes('COZIDA') && !name.includes('COZIDO');
+      };
+
+      const isVegetableSalad = (recipeName: string): boolean => {
+        const name = recipeName.toUpperCase();
+        return name.includes('SALADA') && (name.includes('TOMATE') || name.includes('CENOURA') ||
+               name.includes('PEPINO') || name.includes('RUSSA') || name.includes('MAIONESE'));
+      };
+
+      const mapCategory = (c: string, recipeName: string = '') => {
         const s = String(c || '').toUpperCase();
+        const recipeUpper = recipeName.toUpperCase();
+        
+        console.log(`🔄 Mapeando categoria: "${c}" para receita: "${recipeName}"`);
+        
+        // Validação prévia - verificar se categoria faz sentido
+        if ((s.includes('PROTEÍNA') || s.includes('PRATO PRINCIPAL')) && 
+            !isProteinRecipe(recipeName)) {
+          console.log(`⚠️ CORREÇÃO: ${recipeName} marcada como proteína mas não parece proteína`);
+          if (isGuarnitionRecipe(recipeName)) {
+            console.log(`✅ Reclassificando para Guarnição`);
+            return 'Guarnição';
+          }
+        }
+        
         if (s.includes('PROTEÍNA PRINCIPAL 1') || s.includes('PROTEINA PRINCIPAL 1')) return 'PP1';
         if (s.includes('PROTEÍNA PRINCIPAL 2') || s.includes('PROTEINA PRINCIPAL 2')) return 'PP2';
         if (s.includes('PRATO PRINCIPAL 1')) return 'PP1';
@@ -692,12 +736,33 @@ export const useIntegratedMenuGeneration = () => {
         if (s.includes('ARROZ BRANCO') || s.includes('ARROZ')) return 'Arroz Branco';
         if (s.includes('FEIJ')) return 'Feijão';
         if (s.includes('GUARNIÇÃO') || s.includes('ACOMPANHAMENTO')) return 'Guarnição';
-        if (s.includes('SALADA 1') || s.includes('VERDURAS')) return 'Salada 1';
-        if (s.includes('SALADA 2') || s.includes('LEGUMES')) return 'Salada 2';
+        
+        // Saladas com validação
+        if (s.includes('SALADA 1') || s.includes('VERDURAS')) {
+          if (isFreshSalad(recipeName)) {
+            return 'Salada 1';
+          } else {
+            console.log(`⚠️ ${recipeName} marcada como Salada 1 mas não é salada fresca - movendo para Guarnição`);
+            return 'Guarnição';
+          }
+        }
+        
+        if (s.includes('SALADA 2') || s.includes('LEGUMES')) {
+          if (isFreshSalad(recipeName) || isVegetableSalad(recipeName)) {
+            return 'Salada 2';
+          } else {
+            console.log(`⚠️ ${recipeName} marcada como Salada 2 mas não é salada - movendo para Guarnição`);
+            return 'Guarnição';
+          }
+        }
+        
         if (s.includes('SUCO 1')) return 'Suco 1';
         if (s.includes('SUCO 2')) return 'Suco 2';
         if (s.includes('SOBREMESA') || s.includes('CREME') || s.includes('DOCE')) return 'Sobremesa';
-        return mapCategoryToMenuStructure(c);
+        
+        const mapped = mapCategoryToMenuStructure(c);
+        console.log(`✅ Resultado: ${c} → ${mapped} para ${recipeName}`);
+        return mapped;
       };
 
       const receitasCardapio: MenuRecipe[] = [];

@@ -98,23 +98,84 @@ Deno.serve(async (req) => {
 
     // Corrigir inferência PP1 vs PP2 e validação rigorosa
     function inferirCategoria(nome: string): string {
+      const nomeUpper = nome.toUpperCase();
       const lower = nome.toLowerCase();
-
+      
+      console.log(`🔍 Classificando receita: ${nome}`);
+      
+      // 1. PROTEÍNAS - Prioridade máxima (carnes, ovos, frango, peixe, embutidos)
       if (getProteinType(nome)) {
-        if (/(filé|filé|bife|cox|peito|assado|grelhado|costela|cupim|ensopado)/.test(lower)) {
+        console.log(`✅ ${nome} → PROTEINA (detectou proteína via getProteinType)`);
+        
+        // Subcategorização para PP1 vs PP2
+        if (/(filé|filé|bife|cox|peito|assado|grelhado|costela|cupim|ensopado|almôndega|almondega|pernil|acém)/.test(lower)) {
+          console.log(`  → Proteína Principal 1 (prato principal)`);
           return 'Proteína Principal 1';
         }
+        
+        console.log(`  → Proteína Principal 2 (proteína secundária)`);
+        return 'Proteína Principal 2';
+      }
+      
+      // Verificação adicional para proteínas não detectadas
+      if (nomeUpper.includes('ALMÔNDEGA') || nomeUpper.includes('ALMONDEGA') ||
+          nomeUpper.includes('LINGUIÇA') || nomeUpper.includes('SALSICHA') ||
+          nomeUpper.includes('OVO') || nomeUpper.includes('HAMBÚRGUER')) {
+        console.log(`✅ ${nome} → PROTEINA (detectou proteína adicional)`);
         return 'Proteína Principal 2';
       }
 
-      if (lower.includes("arroz")) return "Arroz Branco";
-      if (lower.includes("feijão") || lower.includes("feijao")) return "Feijão";
-      if (/(salada|alface|rúcula|couve|folha|espinafre)/.test(lower)) return "Salada 1 (Verduras)";
-      if (/(tomate|pepino|cenoura|abobrinha|legume|beterraba|chuchu)/.test(lower)) return "Salada 2 (Legumes)";
-      if (/(suco|refresco|bebida)/.test(lower)) return "Suco 1";
-      if (/(bolo|pudim|mousse|doce|fruta|gelatina|sobremesa|brigadeiro)/.test(lower)) return "Sobremesa";
+      // 2. ARROZ
+      if (lower.includes("arroz")) {
+        console.log(`✅ ${nome} → Arroz Branco`);
+        return "Arroz Branco";
+      }
+      
+      // 3. FEIJÃO
+      if (lower.includes("feijão") || lower.includes("feijao")) {
+        console.log(`✅ ${nome} → Feijão`);
+        return "Feijão";
+      }
+      
+      // 4. SUCOS (evitar conflito com saladas)
+      if (/(suco|refresco|bebida)/.test(lower) && !/(salada|legume)/.test(lower)) {
+        console.log(`✅ ${nome} → Suco 1`);
+        return "Suco 1";
+      }
+      
+      // 5. SOBREMESAS
+      if (/(bolo|pudim|mousse|doce|fruta|gelatina|sobremesa|brigadeiro|torta)/.test(lower)) {
+        console.log(`✅ ${nome} → Sobremesa`);
+        return "Sobremesa";
+      }
+      
+      // 6. SALADAS - Apenas verduras FRESCAS/CRUAS
+      if (/(salada|alface|rúcula|couve|folha|espinafre)/.test(lower) && 
+          !/(cozida|cozido|refogada|refogado)/.test(lower)) {
+        console.log(`✅ ${nome} → Salada 1 (Verduras frescas)`);
+        return "Salada 1 (Verduras)";
+      }
+      
+      // 7. SALADAS DE LEGUMES (cruas/frescas)
+      if ((/(tomate|pepino|cenoura|abobrinha|beterraba|chuchu)/.test(lower) ||
+           (nomeUpper.includes('SALADA') && (nomeUpper.includes('RUSSA') || nomeUpper.includes('MISTA')))) &&
+          !/(cozida|cozido|refogada|refogado)/.test(lower)) {
+        console.log(`✅ ${nome} → Salada 2 (Legumes frescos)`);
+        return "Salada 2 (Legumes)";
+      }
+      
+      // 8. GUARNIÇÕES - Pratos quentes/cozidos (não são proteína principal)
+      if (/(batata|mandioca|purê|legumes|cozido|refogado|polenta|macarrão|nhoque|farofa)/.test(lower) ||
+          (nomeUpper.includes('LEGUMES') && (nomeUpper.includes('COZIDO') || nomeUpper.includes('REFOGADO')))) {
+        console.log(`✅ ${nome} → Guarnição (prato quente cozido)`);
+        return "Guarnição";
+      }
 
-      return "Guarnição"; // fallback
+      // Default com log detalhado
+      console.log(`⚠️ CATEGORIA NÃO IDENTIFICADA para: ${nome}`);
+      console.log(`   - Não detectou: proteína, arroz, feijão, suco, sobremesa, salada ou guarnição`);
+      console.log(`   - Assumindo Guarnição como fallback`);
+      return "Guarnição";
     }
 
     // Fallback para categorias vazias
