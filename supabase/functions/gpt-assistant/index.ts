@@ -943,10 +943,6 @@ Deno.serve(async (req) => {
                 custo_total: 0.40 * mealQuantity
               };
             }
-                custo_por_refeicao: 0.40,
-                custo_total: 0.40 * mealQuantity
-              };
-            }
           } else {
             // Receitas variáveis com controle de variedade
             if (catConfig.codigo === 'GUARNICAO') {
