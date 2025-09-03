@@ -11,13 +11,17 @@ import {
   Clock, 
   TrendingUp,
   Sparkles,
-  CheckCircle
+  CheckCircle,
+  Grape
 } from 'lucide-react';
 import { VegetableIntelligencePanel } from './VegetableIntelligencePanel';
 import { IngredientSuggestionsPanel } from './IngredientSuggestionsPanel';
 import { SimpleMenuForm } from './SimpleMenuForm';
+import { JuiceMenuDisplay } from './JuiceMenuDisplay';
 import { useSimplifiedMenuGeneration } from '@/hooks/useSimplifiedMenuGeneration';
 import { useVegetableIntelligence } from '@/hooks/useVegetableIntelligence';
+import { useJuiceConfiguration } from '@/hooks/useJuiceConfiguration';
+import { useSelectedClient } from '@/contexts/SelectedClientContext';
 import { type VegetableInfo } from '@/utils/vegetablesCategorization';
 
 interface EnhancedMenuGeneratorProps {
@@ -38,6 +42,15 @@ export const EnhancedMenuGenerator: React.FC<EnhancedMenuGeneratorProps> = ({
     includeVegetableRotation: true,
     optimizeForSeason: true
   });
+  const [juiceSettings, setJuiceSettings] = useState({
+    use_pro_mix: false,
+    use_pro_vita: false,
+    use_suco_diet: false,
+    use_suco_natural: true
+  });
+
+  const { selectedClient } = useSelectedClient();
+  const { updateClientJuiceConfig } = useJuiceConfiguration();
 
   const {
     isGenerating,
@@ -54,7 +67,7 @@ export const EnhancedMenuGenerator: React.FC<EnhancedMenuGeneratorProps> = ({
     generateRecommendations
   } = useVegetableIntelligence();
 
-  // Gerar cardápio com inteligência de verduras
+  // Gerar cardápio com inteligência de verduras e sucos
   const handleEnhancedGeneration = async (formData: any) => {
     try {
       // Aplicar recomendações de verduras se habilitado
@@ -71,13 +84,22 @@ export const EnhancedMenuGenerator: React.FC<EnhancedMenuGeneratorProps> = ({
         formData.nutritionalRequirements = generationSettings.nutritionalFocus;
       }
 
+      // Adicionar configurações de sucos
+      formData.juiceConfig = juiceSettings;
+
+      // Atualizar configuração de sucos no cliente se necessário
+      if (selectedClient?.id) {
+        await updateClientJuiceConfig(selectedClient.id, juiceSettings);
+      }
+
       // Gerar cardápio
       const menu = await generateMenu(
         formData.clientData,
         formData.period,
         formData.mealQuantity,
         formData.restrictions || [],
-        formData.preferences || []
+        formData.preferences || [],
+        juiceSettings
       );
 
       if (menu && onMenuGenerated) {
@@ -178,47 +200,98 @@ export const EnhancedMenuGenerator: React.FC<EnhancedMenuGeneratorProps> = ({
                         ))}
                       </div>
                     </div>
+
+                    <div>
+                      <label className="text-sm font-medium">Configuração de Sucos</label>
+                      <div className="space-y-2 mt-1">
+                        {[
+                          { key: 'use_pro_mix', label: 'Pró Mix', priority: 1 },
+                          { key: 'use_pro_vita', label: 'Vita Suco', priority: 2 },
+                          { key: 'use_suco_diet', label: 'Suco Diet', priority: 3 },
+                          { key: 'use_suco_natural', label: 'Suco Natural', priority: 4 }
+                        ].map(juice => (
+                          <label key={juice.key} className="flex items-center gap-2 text-xs">
+                            <input
+                              type="checkbox"
+                              checked={juiceSettings[juice.key as keyof typeof juiceSettings]}
+                              onChange={(e) => setJuiceSettings(prev => ({
+                                ...prev,
+                                [juice.key]: e.target.checked
+                              }))}
+                              className="w-3 h-3"
+                            />
+                            <span className="flex-1">{juice.label}</span>
+                            <Badge variant="outline" className="text-xs">#{juice.priority}</Badge>
+                          </label>
+                        ))}
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Prioridade: menor número = maior prioridade
+                      </p>
+                    </div>
                   </CardContent>
                 </Card>
 
                 <Card>
                   <CardHeader>
-                    <CardTitle className="text-sm">Verduras Selecionadas</CardTitle>
+                    <CardTitle className="text-sm">Verduras e Sucos Selecionados</CardTitle>
                   </CardHeader>
-                  <CardContent>
-                    {selectedVegetables.length > 0 ? (
-                      <div className="space-y-2">
-                        <div className="flex flex-wrap gap-1">
-                          {selectedVegetables.map(veg => (
-                            <Badge key={veg.id} variant="outline" className="text-xs">
-                              {veg.name}
-                            </Badge>
-                          ))}
+                  <CardContent className="space-y-3">
+                    <div>
+                      <label className="text-xs font-medium text-muted-foreground">VERDURAS</label>
+                      {selectedVegetables.length > 0 ? (
+                        <div className="space-y-2">
+                          <div className="flex flex-wrap gap-1">
+                            {selectedVegetables.map(veg => (
+                              <Badge key={veg.id} variant="outline" className="text-xs">
+                                {veg.name}
+                              </Badge>
+                            ))}
+                          </div>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setSelectedVegetables([])}
+                            className="w-full"
+                          >
+                            Limpar Verduras
+                          </Button>
                         </div>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => setSelectedVegetables([])}
-                          className="w-full"
-                        >
-                          Limpar Seleção
-                        </Button>
+                      ) : (
+                        <div className="text-center text-muted-foreground py-2">
+                          <Leaf className="h-6 w-6 mx-auto mb-1 opacity-50" />
+                          <div className="text-xs">Nenhuma verdura selecionada</div>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={handleApplyAutoRecommendations}
+                            className="mt-1"
+                          >
+                            <Sparkles className="h-3 w-3 mr-1" />
+                            Sugestões Automáticas
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+
+                    <div>
+                      <label className="text-xs font-medium text-muted-foreground">SUCOS ATIVOS</label>
+                      <div className="space-y-1">
+                        {Object.entries(juiceSettings).filter(([_, active]) => active).length > 0 ? (
+                          Object.entries(juiceSettings)
+                            .filter(([_, active]) => active)
+                            .map(([key, _]) => (
+                              <Badge key={key} variant="default" className="text-xs mr-1">
+                                {key === 'use_pro_mix' ? 'Pró Mix' :
+                                 key === 'use_pro_vita' ? 'Vita Suco' :
+                                 key === 'use_suco_diet' ? 'Diet' : 'Natural'}
+                              </Badge>
+                            ))
+                        ) : (
+                          <div className="text-xs text-muted-foreground">Nenhum suco selecionado (usará Natural)</div>
+                        )}
                       </div>
-                    ) : (
-                      <div className="text-center text-muted-foreground py-4">
-                        <Leaf className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                        <div className="text-sm">Nenhuma verdura selecionada</div>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={handleApplyAutoRecommendations}
-                          className="mt-2"
-                        >
-                          <Sparkles className="h-3 w-3 mr-1" />
-                          Sugestões Automáticas
-                        </Button>
-                      </div>
-                    )}
+                    </div>
                   </CardContent>
                 </Card>
               </div>
@@ -300,6 +373,20 @@ export const EnhancedMenuGenerator: React.FC<EnhancedMenuGeneratorProps> = ({
                             </div>
                           ))}
                         </div>
+                      </CardContent>
+                    </Card>
+                  )}
+
+                  {generatedMenu.juiceMenu && (
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="text-sm flex items-center gap-2">
+                          <Grape className="h-4 w-4 text-purple-600" />
+                          Cardápio de Sucos
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <JuiceMenuDisplay juiceConfig={generatedMenu.juiceMenu} />
                       </CardContent>
                     </Card>
                   )}

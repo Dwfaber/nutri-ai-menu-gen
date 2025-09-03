@@ -186,14 +186,6 @@ const Cardapios = () => {
         </div>
         <div className="flex space-x-2">
           <Button 
-            onClick={handleTestJuiceConfiguration}
-            variant="outline"
-            disabled={!selectedClient}
-          >
-            <TestTube className="w-4 h-4 mr-2" />
-            Testar Sucos
-          </Button>
-          <Button 
             onClick={() => setShowCreateForm(true)}
             className="bg-green-600 hover:bg-green-700"
             disabled={!selectedClient}
@@ -205,9 +197,8 @@ const Cardapios = () => {
       </div>
 
       <Tabs defaultValue="integrated" className="w-full">
-        <TabsList className="grid w-full grid-cols-4">
+        <TabsList className="grid w-full grid-cols-3">
           <TabsTrigger value="integrated">Gerador Inteligente</TabsTrigger>
-          <TabsTrigger value="juice-test">Teste de Sucos</TabsTrigger>
           <TabsTrigger value="menus">Cardápios Salvos</TabsTrigger>
           <TabsTrigger value="sync">Sincronização</TabsTrigger>
         </TabsList>
@@ -216,46 +207,6 @@ const Cardapios = () => {
           <IntegratedMenuGenerator />
         </TabsContent>
         
-        <TabsContent value="juice-test" className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Teste da Nova Estrutura de Sucos</CardTitle>
-              <p className="text-sm text-muted-foreground">
-                Teste a configuração melhorada de sucos com IDs reais dos produtos e variedade por categoria.
-              </p>
-            </CardHeader>
-            <CardContent>
-              {selectedClient ? (
-                <div className="space-y-4">
-                  <div className="text-sm">
-                    <p><strong>Cliente:</strong> {selectedClient?.nome_fantasia}</p>
-                    <p><strong>Configurações:</strong></p>
-                    <ul className="list-disc list-inside ml-4 text-muted-foreground">
-                      <li>Pró Mix: {selectedClient.use_pro_mix ? 'Sim' : 'Não'}</li>
-                      <li>Vita Suco: {selectedClient.use_pro_vita ? 'Sim' : 'Não'}</li>
-                      <li>Suco Diet: {selectedClient.use_suco_diet ? 'Sim' : 'Não'}</li>
-                      <li>Suco Natural: {selectedClient.use_suco_natural ? 'Sim' : 'Não'}</li>
-                    </ul>
-                  </div>
-                  
-                  <Button 
-                    onClick={handleTestJuiceConfiguration}
-                    className="w-full"
-                  >
-                    <TestTube className="w-4 h-4 mr-2" />
-                    Gerar Configuração de Sucos
-                  </Button>
-                  
-                  {juiceTestResult && (
-                    <JuiceMenuDisplay juiceConfig={juiceTestResult} />
-                  )}
-                </div>
-              ) : (
-                <p className="text-muted-foreground">Selecione um cliente para testar a configuração de sucos.</p>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
         
         <TabsContent value="menus" className="space-y-6">
           <div className="flex space-x-4">

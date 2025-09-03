@@ -23,6 +23,7 @@ export interface GeneratedMenu {
   createdAt: string;
   menu?: any;
   warnings?: string[];
+  juiceMenu?: any;
 }
 
 export function useSimplifiedMenuGeneration() {
@@ -80,7 +81,8 @@ export function useSimplifiedMenuGeneration() {
     period: string,
     mealQuantity: number,
     restrictions: string[],
-    preferences: string[]
+    preferences: string[],
+    juiceConfig?: any
   ): Promise<GeneratedMenu | null> => {
     setIsGenerating(true);
     setError(null);
@@ -106,12 +108,13 @@ export function useSimplifiedMenuGeneration() {
         throw new Error('IA não conseguiu gerar receitas');
       }
 
-      // Step 2: Calculate costs using Edge Function
+      // Step 2: Calculate costs using Edge Function with juice config
       const { data: costData, error: costError } = await supabase.functions.invoke('gpt-assistant', {
         body: {
           action: 'calculate_recipes_cost',
           recipes: recipes,
-          mealQuantity: mealQuantity
+          mealQuantity: mealQuantity,
+          juice_config: juiceConfig
         }
       });
 
@@ -156,7 +159,8 @@ export function useSimplifiedMenuGeneration() {
           violations: calculatedMenu.violatedIngredients
         },
         warnings: calculatedMenu.violatedIngredients.map(ing => 
-          `Ingrediente não encontrado: ${ing.nome}`)
+          `Ingrediente não encontrado: ${ing.nome}`),
+        juiceMenu: costData?.juice_menu || null
       };
 
       // Step 6: Save to database

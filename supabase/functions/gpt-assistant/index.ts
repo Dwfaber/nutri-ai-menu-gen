@@ -1076,6 +1076,35 @@ Deno.serve(async (req) => {
           diasUteis,
           supabase
         }, budget, origemOrcamento);
+
+        // Processar configuração de sucos se fornecida
+        let juiceMenu = null;
+        if (requestData.juice_config) {
+          console.log('🧃 Processando configuração de sucos:', requestData.juice_config);
+          
+          try {
+            const startDate = new Date().toISOString().split('T')[0];
+            const endDate = new Date(Date.now() + (numDays - 1) * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+            
+            const { data: juiceData, error: juiceError } = await supabase.rpc('gerar_cardapio', {
+              p_data_inicio: startDate,
+              p_data_fim: endDate,
+              p_use_pro_mix: requestData.juice_config.use_pro_mix || false,
+              p_use_pro_vita: requestData.juice_config.use_pro_vita || false,
+              p_use_suco_diet: requestData.juice_config.use_suco_diet || false,
+              p_use_suco_natural: requestData.juice_config.use_suco_natural || true
+            });
+            
+            if (juiceError) {
+              console.error('❌ Erro ao gerar cardápio de sucos:', juiceError);
+            } else {
+              juiceMenu = juiceData;
+              console.log('✅ Cardápio de sucos gerado com sucesso');
+            }
+          } catch (error) {
+            console.error('❌ Erro ao processar configuração de sucos:', error);
+          }
+        }
         
         // Calcular totais
         const diasGerados = cardapioPorDia.length;
@@ -1197,7 +1226,8 @@ Deno.serve(async (req) => {
             id: savedMenu.id,
             message: "Cardápio gerado com sucesso e salvo no banco.",
             resumo_financeiro: response.resumo_financeiro,
-            cardapio: response.cardapio
+            cardapio: response.cardapio,
+            juice_menu: juiceMenu
           }),
           { headers: { "Content-Type": "application/json", ...corsHeaders } }
         );
