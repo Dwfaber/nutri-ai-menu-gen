@@ -10,10 +10,12 @@ const corsHeaders = {
 // Configuração da estratégia híbrida por tabela
 const SYNC_STRATEGIES = {
   'co_solicitacao_produto_listagem': {
-    strategy: 'truncate_insert', // Tabela grande, dados voláteis
+    strategy: 'upsert_cleanup', // Mudança: agora usa UPSERT com limpeza
     backup: true,
     batchSize: 1000,
-    cleanupOrphans: false
+    cleanupOrphans: true,
+    orphanDays: 30,
+    uniqueColumns: ['solicitacao_id', 'produto_base_id'] // Chave natural para UPSERT
   },
   'produtos_base': {
     strategy: 'truncate_insert', // Tabela simples, dados voláteis  
@@ -276,14 +278,28 @@ async function truncateAndInsert(supabaseClient: any, tableName: string, data: a
 async function upsertWithCleanup(supabaseClient: any, tableName: string, data: any[], strategy: any) {
   console.log(`UPSERT + CLEANUP strategy for ${tableName} - ${data.length} records`);
   
-  // 1. Marcar registros atuais como "não sincronizados"
-  const syncTimestamp = new Date().toISOString();
-  
-  // 2. Upsert dados
-  const processedRecords = await upsertData(supabaseClient, tableName, data, strategy.batchSize, syncTimestamp);
-  
-  // 3. Cleanup será feito depois se configurado
-  return processedRecords;
+  try {
+    // Usar a nova função PostgreSQL upsert_with_cleanup
+    const { data: result, error } = await supabaseClient.rpc('upsert_with_cleanup', {
+      target_table: tableName,
+      data_json: data,
+      unique_columns: strategy.uniqueColumns || ['id'],
+      cleanup_days: strategy.orphanDays || 30
+    });
+
+    if (error) {
+      console.error(`Upsert with cleanup error for ${tableName}:`, error);
+      throw new Error(`Upsert with cleanup failed: ${error.message}`);
+    }
+
+    console.log(`Upsert with cleanup completed for ${tableName}:`, result);
+    return result.processed_records || 0;
+    
+  } catch (error) {
+    console.error(`Falling back to standard upsert for ${tableName}:`, error);
+    // Fallback para método padrão se a função falhar
+    return await upsertData(supabaseClient, tableName, data, strategy.batchSize);
+  }
 }
 
 async function upsertData(supabaseClient: any, tableName: string, data: any[], batchSize: number, syncTimestamp?: string) {
