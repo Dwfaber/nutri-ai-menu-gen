@@ -125,11 +125,21 @@ export const useIntegratedMenuGeneration = () => {
   const mapCategoryToMenuStructure = (category: string): string => {
     const normalizedCategory = category.toLowerCase().trim();
     
-    if (normalizedCategory.includes('prato principal 1') || normalizedCategory === 'pp1') {
+    console.log('🔄 Mapeando categoria:', category, '→', normalizedCategory);
+    
+    // PP1 - aceita tanto "proteína principal" quanto "prato principal"
+    if (normalizedCategory.includes('proteína principal 1') || 
+        normalizedCategory.includes('prato principal 1') || 
+        normalizedCategory === 'pp1') {
+      console.log('✅ Categoria mapeada para PP1');
       return 'PP1';
     }
     
-    if (normalizedCategory.includes('prato principal 2') || normalizedCategory === 'pp2') {
+    // PP2 - aceita tanto "proteína principal" quanto "prato principal"
+    if (normalizedCategory.includes('proteína principal 2') || 
+        normalizedCategory.includes('prato principal 2') || 
+        normalizedCategory === 'pp2') {
+      console.log('✅ Categoria mapeada para PP2');
       return 'PP2';
     }
     
@@ -157,6 +167,8 @@ export const useIntegratedMenuGeneration = () => {
       return 'Guarnição';
     }
     
+    // Log para categorias não reconhecidas
+    console.log('⚠️ Categoria não reconhecida:', category, '→ usando "Outros"');
     return 'Outros';
   };
 

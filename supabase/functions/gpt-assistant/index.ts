@@ -12,7 +12,7 @@ const corsHeaders = {
 const STANDARD_PROTEIN_GRAMS = 120;
 
 const PROTEIN_TYPES: Record<string, string[]> = {
-  "Carne Vermelha": ["carne bovina", "boi", "coxão", "acém", "maminha", "alcatra", "patinho", "carne moída", "hambúrguer", "almôndega", "bife", "costela", "picanha", "suína", "porco", "lombo"],
+  "Carne Vermelha": ["carne bovina", "boi", "coxão", "acém", "maminha", "alcatra", "patinho", "carne moída", "hambúrguer", "almôndega", "almondega", "bife", "costela", "picanha", "suína", "porco", "lombo", "strogonoff", "estrogonofe", "iscas", "rabada", "cozido", "pernil", "bisteca", "cupim", "cassoulet"],
   "Frango": ["frango", "galinha", "peito", "coxa", "asa", "chester"],
   "Peixe": ["peixe", "tilápia", "salmão", "sardinha", "bacalhau", "pescada", "merluza"],
   "Ovo": ["ovo", "omelete", "fritada", "mexido"],
@@ -85,12 +85,20 @@ Deno.serve(async (req) => {
 
     // ========== FUNÇÕES DE CONTROLE DA NUTRICIONISTA ==========
     
-    // Identifica tipo da proteína baseado no nome
+    // Identifica tipo da proteína baseado no nome (EXPANDIDO COM LOGGING)
     function getProteinType(name: string): string | null {
       const nomeLower = name.toLowerCase();
+      console.log(`🔍 Analisando proteína: "${name}" → "${nomeLower}"`);
+      
       for (const [tipo, palavras] of Object.entries(PROTEIN_TYPES)) {
-        if (palavras.some(p => nomeLower.includes(p))) return tipo;
+        const match = palavras.find(p => nomeLower.includes(p));
+        if (match) {
+          console.log(`✅ Proteína "${name}" classificada como "${tipo}" (match: "${match}")`);
+          return tipo;
+        }
       }
+      
+      console.log(`❌ "${name}" rejeitada para proteína (sem proteína detectada)`);
       return null;
     }
 
@@ -105,8 +113,8 @@ Deno.serve(async (req) => {
       if (getProteinType(nome)) {
         console.log(`✅ ${nome} → PROTEINA (detectou proteína via getProteinType)`);
         
-        // Subcategorização para PP1 vs PP2
-        if (/(filé|filé|bife|cox|peito|assado|grelhado|costela|cupim|ensopado|almôndega|almondega|pernil|acém)/.test(lower)) {
+        // Subcategorização para PP1 vs PP2 (INCLUINDO STROGONOFF)
+        if (/(filé|filé|bife|cox|peito|assado|grelhado|costela|cupim|ensopado|almôndega|almondega|pernil|acém|strogonoff|estrogonofe|cozido|rabada|iscas)/.test(lower)) {
           console.log(`  → Proteína Principal 1 (prato principal)`);
           return 'Proteína Principal 1';
         }
@@ -115,12 +123,14 @@ Deno.serve(async (req) => {
         return 'Proteína Principal 2';
       }
       
-      // Verificação adicional para proteínas não detectadas
+      // Verificação adicional para proteínas não detectadas (INCLUINDO STROGONOFF)
       if (nomeUpper.includes('ALMÔNDEGA') || nomeUpper.includes('ALMONDEGA') ||
           nomeUpper.includes('LINGUIÇA') || nomeUpper.includes('SALSICHA') ||
-          nomeUpper.includes('OVO') || nomeUpper.includes('HAMBÚRGUER')) {
+          nomeUpper.includes('OVO') || nomeUpper.includes('HAMBÚRGUER') ||
+          nomeUpper.includes('STROGONOFF') || nomeUpper.includes('ESTROGONOFE') ||
+          nomeUpper.includes('COZIDO') || nomeUpper.includes('CASSOULET')) {
         console.log(`✅ ${nome} → PROTEINA (detectou proteína adicional)`);
-        return 'Proteína Principal 2';
+        return 'Proteína Principal 1'; // Mudado para PP1 pois são pratos principais
       }
 
       // 2. ARROZ
