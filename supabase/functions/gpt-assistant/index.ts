@@ -148,9 +148,13 @@ Deno.serve(async (req) => {
       }
       
       // 6. SALADAS - Verduras FRESCAS/CRUAS e saladas à base de maionese
-      if (/(salada|alface|rúcula|couve|folha|espinafre|maionese|macarronese)/.test(lower) || 
-          /(ese$|salada\s+(de\s+)?maionese)/.test(lower) &&
-          !/(cozida|cozido|refogada|refogado)/.test(lower)) {
+      if (
+        (
+          /(salada|alface|rúcula|couve|folha|espinafre|maionese|macarronese)/.test(lower) ||
+          /(ese$|salada\s+(de\s+)?maionese)/.test(lower)
+        ) &&
+        !/(cozida|cozido|refogada|refogado)/.test(lower)
+      ) {
         console.log(`✅ ${nome} → Salada 1 (Verduras frescas)`);
         return "Salada 1 (Verduras)";
       }
@@ -931,8 +935,8 @@ Deno.serve(async (req) => {
                 console.warn(`Erro ao configurar suco via RPC: ${error.message}`);
                 // Fallback para suco padrão
                 receita = {
-                  id: 104,
-                  nome: catConfig.codigo === 'SUCO1' ? 'Suco Natural' : 'Suco de Fruta',
+                  id: -999,
+                  nome: catConfig.codigo === 'SUCO1' ? '(Padrão) Suco Natural' : '(Padrão) Suco de Fruta',
                   custo_por_refeicao: 0.40,
                   custo_total: 0.40 * mealQuantity
                 };
@@ -940,8 +944,8 @@ Deno.serve(async (req) => {
             } else {
               // Fallback quando não há dados de filial
               receita = {
-                id: 104,
-                nome: catConfig.codigo === 'SUCO1' ? 'Suco Natural' : 'Suco de Fruta',
+                id: -999,
+                nome: catConfig.codigo === 'SUCO1' ? '(Padrão) Suco Natural' : '(Padrão) Suco de Fruta',
                 custo_por_refeicao: 0.40,
                 custo_total: 0.40 * mealQuantity
               };
@@ -1206,6 +1210,14 @@ Deno.serve(async (req) => {
 
         // Captura o client_id correto do requestData
         const clientId = requestData.client_id || requestData.clientId || requestData.filial_id || requestData.filialIdLegado;
+        
+        console.log("🆔 Client ID usado no insert:", {
+          clientId_final: clientId,
+          client_id: requestData.client_id,
+          clientId: requestData.clientId, 
+          filial_id: requestData.filial_id,
+          filialIdLegado: requestData.filialIdLegado
+        });
         
         if (!clientId || clientId === "sem-id") {
           console.warn('⚠️  CLIENT_ID não encontrado no payload:', requestData);
