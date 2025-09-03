@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { CalendarDays, ChefHat, X, Loader2 } from 'lucide-react';
+import { Checkbox } from '@/components/ui/checkbox';
 import { useSelectedClient } from '@/contexts/SelectedClientContext';
 
 interface SimpleMenuFormProps {
@@ -27,6 +28,14 @@ export const SimpleMenuForm: React.FC<SimpleMenuFormProps> = ({
   const [mealsPerDay, setMealsPerDay] = useState(50);
   const [totalDays, setTotalDays] = useState(1);
   const [totalMeals, setTotalMeals] = useState(50);
+  
+  // Estados para seleção de sucos
+  const [selectedJuices, setSelectedJuices] = useState({
+    use_pro_mix: false,
+    use_vita_suco: false,
+    use_suco_diet: false,
+    use_suco_natural: true // Padrão
+  });
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -47,7 +56,8 @@ export const SimpleMenuForm: React.FC<SimpleMenuFormProps> = ({
       estimatedMeals: totalMeals,
       budgetPerMeal: selectedClient?.custo_medio_diario || 0,
       totalBudget: (selectedClient?.custo_medio_diario || 0) * totalMeals,
-      preferences: preferences.trim() || undefined
+      preferences: preferences.trim() || undefined,
+      juiceConfig: selectedJuices
     };
 
     onSubmit(formData);
@@ -81,6 +91,13 @@ export const SimpleMenuForm: React.FC<SimpleMenuFormProps> = ({
   const handleMealsPerDayChange = (value: number) => {
     setMealsPerDay(value);
     calculatePeriodData(periodStart, periodEnd, value);
+  };
+
+  const handleJuiceChange = (juiceType: keyof typeof selectedJuices, checked: boolean) => {
+    setSelectedJuices(prev => ({
+      ...prev,
+      [juiceType]: checked
+    }));
   };
 
   return (
@@ -176,6 +193,48 @@ export const SimpleMenuForm: React.FC<SimpleMenuFormProps> = ({
                   className="bg-gray-50"
                 />
               </div>
+            </div>
+            
+            {/* Seleção de Sucos */}
+            <div className="mt-4">
+              <Label className="text-sm font-medium mb-3 block">Tipos de Sucos</Label>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="flex items-center space-x-2">
+                  <Checkbox
+                    id="pro_mix"
+                    checked={selectedJuices.use_pro_mix}
+                    onCheckedChange={(checked) => handleJuiceChange('use_pro_mix', checked as boolean)}
+                  />
+                  <Label htmlFor="pro_mix" className="text-sm">Pró Mix</Label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <Checkbox
+                    id="vita_suco"
+                    checked={selectedJuices.use_vita_suco}
+                    onCheckedChange={(checked) => handleJuiceChange('use_vita_suco', checked as boolean)}
+                  />
+                  <Label htmlFor="vita_suco" className="text-sm">Vita Suco</Label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <Checkbox
+                    id="suco_diet"
+                    checked={selectedJuices.use_suco_diet}
+                    onCheckedChange={(checked) => handleJuiceChange('use_suco_diet', checked as boolean)}
+                  />
+                  <Label htmlFor="suco_diet" className="text-sm">Suco Diet</Label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <Checkbox
+                    id="suco_natural"
+                    checked={selectedJuices.use_suco_natural}
+                    onCheckedChange={(checked) => handleJuiceChange('use_suco_natural', checked as boolean)}
+                  />
+                  <Label htmlFor="suco_natural" className="text-sm">Suco Natural</Label>
+                </div>
+              </div>
+              <p className="text-xs text-gray-500 mt-2">
+                {Object.values(selectedJuices).filter(Boolean).length} tipo{Object.values(selectedJuices).filter(Boolean).length !== 1 ? 's' : ''} selecionado{Object.values(selectedJuices).filter(Boolean).length !== 1 ? 's' : ''}
+              </p>
             </div>
           </div>
 
