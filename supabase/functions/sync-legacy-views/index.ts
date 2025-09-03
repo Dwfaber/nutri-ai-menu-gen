@@ -469,7 +469,6 @@ async function processViewData(supabaseClient: any, viewName: string, data: any[
     
     console.log(`✅ co_solicitacao_produto_listagem sync completed: ${result.processedRecords}/${data.length} registros usando ${result.strategy}`);
     return result.processedRecords;
-    }
   }
 
   // Processamento padrão para outras views
