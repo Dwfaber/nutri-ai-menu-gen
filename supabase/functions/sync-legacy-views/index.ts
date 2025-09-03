@@ -437,167 +437,38 @@ async function processViewData(supabaseClient: any, viewName: string, data: any[
   }
 
   // TRATAMENTO ESPECIAL PARA co_solicitacao_produto_listagem: REPLACE ALL
+  // USAR HYBRID SYNC MANAGER para co_solicitacao_produto_listagem
   if (mapping.targetTable === 'co_solicitacao_produto_listagem') {
-    console.log(`🔄 Iniciando sincronização REPLACE ALL para produtos - ${data.length} registros`);
+    console.log(`🔄 Usando Hybrid Sync Manager para co_solicitacao_produto_listagem - ${data.length} registros`);
     
-    // Estratégia de sincronização completa com versionamento
-    const currentSolicitacaoId = Math.floor(Date.now() / 1000);
-    console.log(`📌 Novo ID de solicitação: ${currentSolicitacaoId}`);
+    // Usar hybrid sync manager com UPSERT_CLEANUP para evitar duplicatas
+    const hybridResponse = await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/hybrid-sync-manager`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        action: 'sync_table',
+        targetTable: 'co_solicitacao_produto_listagem',
+        data: data,
+        syncConfig: {
+          strategy: 'upsert_cleanup',
+          cleanup: true,
+          batchSize: 100,
+          uniqueColumns: ['solicitacao_id', 'produto_base_id']
+        }
+      })
+    });
+
+    const result = await hybridResponse.json();
     
-    try {
-      // PASSO 1: Verificar produtos existentes
-      const { data: existingProducts, error: countError } = await supabaseClient
-        .from('co_solicitacao_produto_listagem')
-        .select('solicitacao_id', { count: 'exact' });
-      
-      if (countError) {
-        console.error('❌ Erro ao verificar produtos existentes:', countError);
-        throw countError;
-      }
-      
-      const existingCount = existingProducts?.length || 0;
-      console.log(`📊 Produtos existentes na tabela: ${existingCount}`);
-      
-      // PASSO 2: Preparar novos dados com validação
-      const newProductsData = [];
-      for (const record of data) {
-        const dataToInsert = {
-          solicitacao_produto_listagem_id: record.solicitacao_produto_listagem_id ? parseInt(record.solicitacao_produto_listagem_id.toString()) : null,
-          solicitacao_produto_categoria_id: record.solicitacao_produto_categoria_id ? parseInt(record.solicitacao_produto_categoria_id.toString()) : null,
-          categoria_descricao: record.categoria_descricao?.toString() || null,
-          grupo: record.grupo?.toString() || null,
-          produto_id: record.produto_id ? parseInt(record.produto_id.toString()) : null,
-          preco: record.preco ? parseFloat(record.preco.toString()) : null,
-          per_capita: record.per_capita ? parseFloat(record.per_capita.toString()) : null,
-          apenas_valor_inteiro_sim_nao: record.apenas_valor_inteiro_sim_nao === true || record.apenas_valor_inteiro_sim_nao === 'true',
-          arredondar_tipo: record.arredondar_tipo ? parseInt(record.arredondar_tipo.toString()) : null,
-          em_promocao_sim_nao: record.em_promocao_sim_nao === true || record.em_promocao_sim_nao === 'true',
-          descricao: record.descricao?.toString() || null,
-          unidade: record.unidade?.toString() || null,
-          preco_compra: record.preco_compra ? parseFloat(record.preco_compra.toString()) : null,
-          produto_base_id: record.produto_base_id ? parseInt(record.produto_base_id.toString()) : null,
-          produto_base_quantidade_embalagem: record.produto_base_quantidade_embalagem ? parseFloat(record.produto_base_quantidade_embalagem.toString()) : null,
-          quantidade_embalagem: record.quantidade_embalagem ? parseFloat(record.quantidade_embalagem.toString()) : null,
-          inteiro: record.inteiro === true || record.inteiro === 'true',
-          promocao: record.promocao === true || record.promocao === 'true',
-          criado_em: new Date().toISOString(),
-          solicitacao_id: currentSolicitacaoId // ID único desta sincronização
-        };
-        
-        // Validar dados essenciais antes de incluir
-        if (dataToInsert.produto_id && dataToInsert.descricao) {
-          newProductsData.push(dataToInsert);
-        } else {
-          console.warn(`⚠️ Produto ignorado - dados insuficientes:`, {
-            produto_id: dataToInsert.produto_id,
-            descricao: dataToInsert.descricao,
-            id_original: record.solicitacao_produto_listagem_id
-          });
-        }
-      }
-      
-      console.log(`✅ Produtos válidos preparados: ${newProductsData.length}/${data.length}`);
-      
-      // PASSO 3: Executar Replace All Strategy
-      if (newProductsData.length > 0) {
-        
-        // 3.1: Marcar produtos antigos como obsoletos (soft delete)
-        if (existingCount > 0) {
-          console.log(`🗑️ Marcando ${existingCount} produtos antigos como obsoletos...`);
-          const { error: markError } = await supabaseClient
-            .from('co_solicitacao_produto_listagem')
-            .update({ 
-              solicitacao_id: -1, // Flag de obsoleto
-              criado_em: new Date().toISOString() 
-            })
-            .neq('solicitacao_id', currentSolicitacaoId);
-          
-          if (markError) {
-            console.error('❌ Erro ao marcar produtos antigos:', markError);
-            throw markError;
-          }
-          console.log('✅ Produtos antigos marcados como obsoletos');
-        }
-        
-        // 3.2: Inserir novos produtos em lotes otimizados
-        const batchSize = 100;
-        let insertedCount = 0;
-        
-        console.log(`📦 Iniciando inserção em lotes de ${batchSize} produtos...`);
-        for (let i = 0; i < newProductsData.length; i += batchSize) {
-          const batch = newProductsData.slice(i, i + batchSize);
-          const batchNum = Math.floor(i / batchSize) + 1;
-          const totalBatches = Math.ceil(newProductsData.length / batchSize);
-          
-          console.log(`📋 Processando lote ${batchNum}/${totalBatches} (${batch.length} produtos)`);
-          
-          const { error: insertError } = await supabaseClient
-            .from('co_solicitacao_produto_listagem')
-            .upsert(batch, { 
-              onConflict: 'solicitacao_produto_listagem_id',
-              ignoreDuplicates: false 
-            });
-          
-          if (insertError) {
-            console.error(`❌ Erro ao inserir lote ${batchNum}:`, insertError);
-            console.error('📄 Amostra dos dados problemáticos:', batch.slice(0, 2));
-            throw insertError;
-          }
-          
-          insertedCount += batch.length;
-          console.log(`✅ Lote ${batchNum} inserido. Progresso: ${insertedCount}/${newProductsData.length}`);
-          
-          // Pequena pausa entre lotes para evitar sobrecarga
-          if (batchNum < totalBatches) {
-            await new Promise(resolve => setTimeout(resolve, 100));
-          }
-        }
-        
-        // 3.3: Limpeza física dos produtos obsoletos
-        if (existingCount > 0) {
-          console.log(`🧹 Removendo ${existingCount} produtos obsoletos da tabela...`);
-          const { error: deleteError } = await supabaseClient
-            .from('co_solicitacao_produto_listagem')
-            .delete()
-            .eq('solicitacao_id', -1);
-          
-          if (deleteError) {
-            console.error('⚠️ Erro ao remover produtos obsoletos:', deleteError);
-            console.warn('⚠️ Continuando sincronização apesar do erro de limpeza');
-          } else {
-            console.log(`✅ ${existingCount} produtos obsoletos removidos com sucesso`);
-          }
-        }
-        
-        processedCount = insertedCount;
-        console.log(`🎉 REPLACE ALL CONCLUÍDO: ${processedCount} produtos sincronizados. Versão: ${currentSolicitacaoId}`);
-        
-        // 3.4: Executar limpeza automática de versões antigas (se configurado)
-        if (syncConfig?.cleanup !== false) {
-          console.log(`🧹 Executando limpeza automática de versões antigas...`);
-          try {
-            const { error: cleanupError } = await supabaseClient.rpc('cleanup_old_product_versions');
-            
-            if (cleanupError) {
-              console.error('⚠️ Erro na limpeza automática:', cleanupError);
-              console.warn('⚠️ Sincronização concluída, mas limpeza automática falhou');
-            } else {
-              console.log('✅ Limpeza automática executada com sucesso');
-            }
-          } catch (error) {
-            console.error('⚠️ Erro inesperado na limpeza automática:', error);
-          }
-        }
-        
-      } else {
-        console.log('⚠️ Nenhum produto válido encontrado para sincronização');
-      }
-      
-      return processedCount;
-      
-    } catch (error) {
-      console.error('💥 Erro na sincronização REPLACE ALL:', error);
-      throw error;
+    if (!result.success) {
+      throw new Error(`co_solicitacao_produto_listagem sync failed: ${result.error}`);
+    }
+    
+    console.log(`✅ co_solicitacao_produto_listagem sync completed: ${result.processedRecords}/${data.length} registros usando ${result.strategy}`);
+    return result.processedRecords;
     }
   }
 

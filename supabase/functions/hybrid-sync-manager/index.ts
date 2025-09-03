@@ -172,6 +172,31 @@ function normalizeData(tableName: string, data: any[]) {
     }));
   }
   
+  if (tableName === 'co_solicitacao_produto_listagem') {
+    const currentSolicitacaoId = Math.floor(Date.now() / 1000);
+    console.log(`📌 Normalizando co_solicitacao_produto_listagem com ID: ${currentSolicitacaoId}`);
+    
+    return data.map(item => ({
+      // Não incluir solicitacao_produto_listagem_id para permitir auto-increment
+      solicitacao_id: currentSolicitacaoId,
+      solicitacao_produto_categoria_id: item.solicitacao_produto_categoria_id ? parseInt(item.solicitacao_produto_categoria_id.toString()) : 1,
+      categoria_descricao: item.categoria_descricao?.toString() || null,
+      grupo: item.grupo?.toString() || null,
+      produto_id: item.produto_id ? parseInt(item.produto_id.toString()) : 1,
+      preco: item.preco ? parseFloat(item.preco.toString()) : 0,
+      per_capita: item.per_capita ? parseFloat(item.per_capita.toString()) : 0,
+      apenas_valor_inteiro_sim_nao: item.apenas_valor_inteiro_sim_nao === true || item.apenas_valor_inteiro_sim_nao === 'true' || false,
+      arredondar_tipo: item.arredondar_tipo ? parseInt(item.arredondar_tipo.toString()) : 0,
+      em_promocao_sim_nao: item.em_promocao_sim_nao === true || item.em_promocao_sim_nao === 'true' || false,
+      descricao: item.descricao?.toString() || null,
+      unidade: item.unidade?.toString() || null,
+      produto_base_id: item.produto_base_id ? parseInt(item.produto_base_id.toString()) : null,
+      produto_base_quantidade_embalagem: item.produto_base_quantidade_embalagem ? parseFloat(item.produto_base_quantidade_embalagem.toString()) : 0,
+      criado_em: new Date().toISOString(),
+      sync_at: new Date().toISOString()
+    })).filter(item => item.produto_base_id && item.descricao); // Filtrar apenas registros válidos
+  }
+  
   // Para outras tabelas, retorna os dados como estão
   return data;
 }
