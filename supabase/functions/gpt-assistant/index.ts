@@ -92,10 +92,15 @@ function escolherSucosDia(juiceConfig: any): [string, string] {
   console.log(`🧃 Grupos marcados: ${gruposMarcados}, Sucos disponíveis: ${sucosDisponiveis.length}`);
 
   if (gruposMarcados === 1) {
-    // Exclusivo: escolher 2 do mesmo grupo
-    return sampleTwoDistinct(sucosDisponiveis);
+    // Exclusivo: escolher dois diferentes do mesmo grupo
+    console.log(`🧃 Grupo único detectado, gerando 2 variações do mesmo tipo`);
+    if (juiceConfig.use_pro_mix) return sampleTwoDistinct(SUCOS_PRO_MIX);
+    if (juiceConfig.use_pro_vita) return sampleTwoDistinct(SUCOS_VITA);
+    if (juiceConfig.use_suco_diet) return sampleTwoDistinct(SUCOS_DIET);
+    if (juiceConfig.use_suco_natural) return sampleTwoDistinct(SUCOS_NATURAIS);
   } else {
-    // Vários grupos possíveis: escolha 2 quaisquer diferentes
+    // Mistura permitida: escolher em todo o pool
+    console.log(`🧃 Múltiplos grupos (${gruposMarcados}), permitindo mistura`);
     return sampleTwoDistinct(sucosDisponiveis);
   }
 }
@@ -1152,34 +1157,9 @@ Deno.serve(async (req) => {
           supabase
         }, budget, origemOrcamento);
 
-        // Processar configuração de sucos se fornecida
-        let juiceMenu = null;
-        if (requestData.juice_config) {
-          console.log('🧃 Processando configuração de sucos:', requestData.juice_config);
-          
-          try {
-            const startDate = new Date().toISOString().split('T')[0];
-            const endDate = new Date(Date.now() + (numDays - 1) * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-            
-            const { data: juiceData, error: juiceError } = await supabase.rpc('gerar_cardapio', {
-              p_data_inicio: startDate,
-              p_data_fim: endDate,
-              p_use_pro_mix: requestData.juice_config.use_pro_mix || false,
-              p_use_pro_vita: requestData.juice_config.use_pro_vita || false,
-              p_use_suco_diet: requestData.juice_config.use_suco_diet || false,
-              p_use_suco_natural: requestData.juice_config.use_suco_natural || true
-            });
-            
-            if (juiceError) {
-              console.error('❌ Erro ao gerar cardápio de sucos:', juiceError);
-            } else {
-              juiceMenu = juiceData;
-              console.log('✅ Cardápio de sucos gerado com sucesso');
-            }
-          } catch (error) {
-            console.error('❌ Erro ao processar configuração de sucos:', error);
-          }
-        }
+        // A configuração de sucos já é processada dentro de gerarCardapioComRegras
+        // através da função escolherSucosDia(), não precisamos do RPC redundante
+        console.log('✅ Sucos já processados pela lógica local escolherSucosDia()');
         
         // Calcular totais
         const diasGerados = cardapioPorDia.length;
