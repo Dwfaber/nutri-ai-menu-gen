@@ -1284,16 +1284,16 @@ Deno.serve(async (req) => {
 
         // Retorno final da Edge Function
         return new Response(
-          JSON.stringify({
-            success: true,
-            id: savedMenu.id,
-            message: "Cardápio gerado com sucesso e salvo no banco.",
-            resumo_financeiro: response.resumo_financeiro,
-            cardapio: response.cardapio,
-            juice_menu: juiceMenu
-          }),
-          { headers: { "Content-Type": "application/json", ...corsHeaders } }
-        );
+  JSON.stringify({
+    success: true,
+    id: savedMenu.id,
+    message: "Cardápio gerado com sucesso e salvo no banco.",
+    resumo_financeiro: response.resumo_financeiro,
+    cardapio: response.cardapio
+    // ❌ removido juice_menu
+  }),
+  { headers: { "Content-Type": "application/json", ...corsHeaders } }
+);
         
       } catch (error) {
         console.error('💥 ERRO:', error);
