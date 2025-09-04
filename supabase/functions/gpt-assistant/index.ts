@@ -50,6 +50,56 @@ const ESTRUTURA_CARDAPIO = {
   SOBREMESA: { categoria: 'Sobremesa', budget_percent: 2 }
 };
 
+// ========== LISTAS MESTRE DE SUCOS ==========
+const SUCOS_PRO_MIX = ["Pro Mix Laranja", "Pro Mix Goiaba", "Pro Mix Manga", "Pro Mix Uva", "Pro Mix Maracujá"];
+const SUCOS_DIET = ["Diet Uva", "Diet Maracujá", "Diet Laranja", "Diet Limão"];
+const SUCOS_NATURAIS = ["Suco Natural Laranja", "Suco Natural Limão", "Suco Natural Maracujá", "Suco Natural Goiaba"];
+const SUCOS_VITA = ["Vita Suco Caju", "Vita Suco Acerola", "Vita Suco Manga", "Vita Suco Uva"];
+
+// ========== FUNÇÕES HELPER PARA SUCOS ==========
+
+// Helper => escolhe 2 diferentes do pool
+function sampleTwoDistinct(pool: string[]): [string, string] {
+  if (pool.length < 2) {
+    return [pool[0], pool[0]]; // fallback se só existir 1 no grupo
+  }
+  const shuffled = [...pool].sort(() => 0.5 - Math.random());
+  return [shuffled[0], shuffled[1]];
+}
+
+// Função para escolher os 2 sucos do dia
+function escolherSucosDia(juiceConfig: any): [string, string] {
+  let sucosDisponiveis: string[] = [];
+
+  if (juiceConfig.use_pro_mix) sucosDisponiveis.push(...SUCOS_PRO_MIX);
+  if (juiceConfig.use_pro_vita) sucosDisponiveis.push(...SUCOS_VITA);
+  if (juiceConfig.use_suco_diet) sucosDisponiveis.push(...SUCOS_DIET);
+  if (juiceConfig.use_suco_natural) sucosDisponiveis.push(...SUCOS_NATURAIS);
+
+  // Se nenhuma opção marcada → defaulta para suco natural
+  if (sucosDisponiveis.length === 0) {
+    sucosDisponiveis = [...SUCOS_NATURAIS];
+  }
+
+  // Detectar se cliente ativou só 1 grupo
+  const gruposMarcados = [
+    juiceConfig.use_pro_mix,
+    juiceConfig.use_pro_vita,
+    juiceConfig.use_suco_diet,
+    juiceConfig.use_suco_natural,
+  ].filter(Boolean).length;
+
+  console.log(`🧃 Grupos marcados: ${gruposMarcados}, Sucos disponíveis: ${sucosDisponiveis.length}`);
+
+  if (gruposMarcados === 1) {
+    // Exclusivo: escolher 2 do mesmo grupo
+    return sampleTwoDistinct(sucosDisponiveis);
+  } else {
+    // Vários grupos possíveis: escolha 2 quaisquer diferentes
+    return sampleTwoDistinct(sucosDisponiveis);
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -905,54 +955,47 @@ Deno.serve(async (req) => {
               };
             }
            } else if (catConfig.codigo === 'SUCO1' || catConfig.codigo === 'SUCO2') {
-            // Sucos configurados via RPC melhorada - usar configuração do frontend
-            const juiceConfig = requestData.juice_config || {};
-            console.log("🧃 Configuração de suco recebida:", juiceConfig);
-            
-            try {
-              const { data: sucoConfig } = await supabase.rpc('gerar_cardapio', {
-                p_data_inicio: new Date().toISOString().split('T')[0],
-                p_data_fim: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-                p_use_pro_mix: juiceConfig.use_pro_mix || false,
-                p_use_pro_vita: juiceConfig.use_pro_vita || false,
-                p_use_suco_diet: juiceConfig.use_suco_diet || false,
-                p_use_suco_natural: juiceConfig.use_suco_natural || true // fallback para natural
-              });
-
-              if (sucoConfig?.cardapio_semanal?.length > 0) {
-                const diaAtual = sucoConfig.cardapio_semanal[i % sucoConfig.cardapio_semanal.length];
-                const sucoInfo = catConfig.codigo === 'SUCO1' ? diaAtual.suco1 : diaAtual.suco2;
-                
-                // Buscar custo real do produto
-                const { data: precoProduto } = await supabase
-                  .from('co_solicitacao_produto_listagem')
-                  .select('preco')
-                  .eq('produto_base_id', sucoInfo.id)
-                  .gt('preco', 0)
-                  .limit(1)
-                  .single();
-                
-                const custoSuco = precoProduto?.preco ? (precoProduto.preco * 0.1) : 0.40; // 10% do preço do produto ou fallback
-                
-                receita = {
-                  id: sucoInfo.id,
-                  nome: sucoInfo.nome,
-                  custo_por_refeicao: custoSuco,
-                  custo_total: custoSuco * mealQuantity
-                };
-              } else {
-                throw new Error('Configuração de suco não retornou dados válidos');
-              }
-            } catch (error) {
-              console.warn(`Erro ao configurar suco via RPC: ${error.message}`);
-              // Fallback para suco padrão
-              receita = {
-                id: -999,
-                nome: catConfig.codigo === 'SUCO1' ? '(Padrão) Suco Natural' : '(Padrão) Suco de Fruta',
-                custo_por_refeicao: 0.40,
-                custo_total: 0.40 * mealQuantity
-              };
-            }
+             // Nova lógica simplificada de seleção de sucos
+             const juiceConfig = requestData.juice_config || {};
+             console.log("🧃 Configuração de suco recebida:", juiceConfig);
+             
+             try {
+               // Escolher os 2 sucos do dia
+               const [suco1, suco2] = escolherSucosDia(juiceConfig);
+               const nomeEscolhido = catConfig.codigo === 'SUCO1' ? suco1 : suco2;
+               
+               console.log(`🧃 Suco escolhido para ${catConfig.codigo}: ${nomeEscolhido}`);
+               
+               // Buscar custo real do produto (tentativa de encontrar por nome)
+               const { data: precoProduto } = await supabase
+                 .from('co_solicitacao_produto_listagem')
+                 .select('preco, produto_base_id')
+                 .ilike('descricao', `%${nomeEscolhido.split(' ').pop()}%`) // busca por parte do nome
+                 .gt('preco', 0)
+                 .limit(1)
+                 .maybeSingle();
+               
+               const custoSuco = precoProduto?.preco ? (precoProduto.preco * 0.1) : 0.40; // 10% do preço ou fallback
+               
+               receita = {
+                 id: precoProduto?.produto_base_id || -999,
+                 nome: nomeEscolhido,
+                 custo_por_refeicao: custoSuco,
+                 custo_total: custoSuco * mealQuantity
+               };
+               
+               console.log(`✅ Suco configurado: ${nomeEscolhido} - R$ ${custoSuco.toFixed(2)}`);
+               
+             } catch (error) {
+               console.warn(`Erro ao configurar suco: ${error.message}`);
+               // Fallback para suco padrão
+               receita = {
+                 id: -999,
+                 nome: catConfig.codigo === 'SUCO1' ? 'Suco Natural Laranja' : 'Suco Natural Limão',
+                 custo_por_refeicao: 0.40,
+                 custo_total: 0.40 * mealQuantity
+               };
+             }
           } else {
             // Receitas variáveis com controle de variedade
             if (catConfig.codigo === 'GUARNICAO') {
