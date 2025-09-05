@@ -56,6 +56,14 @@ const SUCOS_DIET = ["Diet Uva", "Diet Maracujá", "Diet Laranja", "Diet Limão"]
 const SUCOS_NATURAIS = ["Suco Natural Laranja", "Suco Natural Limão", "Suco Natural Maracujá", "Suco Natural Goiaba"];
 const SUCOS_VITA = ["Vita Suco Caju", "Vita Suco Acerola", "Vita Suco Manga", "Vita Suco Uva"];
 
+const SOBREMESAS = [
+  "Fruta da estação",
+  "Gelatina colorida",
+  "Mousse de maracujá",
+  "Bolo simples",
+  "Salada de frutas"
+];
+
 // ========== FUNÇÕES HELPER PARA SUCOS ==========
 
 // Helper => escolhe 2 diferentes do pool
@@ -69,40 +77,21 @@ function sampleTwoDistinct(pool: string[]): [string, string] {
 
 // Função para escolher os 2 sucos do dia
 function escolherSucosDia(juiceConfig: any): [string, string] {
-  let sucosDisponiveis: string[] = [];
+  if (!juiceConfig) return ["Suco Natural Laranja", "Suco Natural Maracujá"];
 
-  if (juiceConfig.use_pro_mix) sucosDisponiveis.push(...SUCOS_PRO_MIX);
-  if (juiceConfig.use_pro_vita) sucosDisponiveis.push(...SUCOS_VITA);
-  if (juiceConfig.use_suco_diet) sucosDisponiveis.push(...SUCOS_DIET);
-  if (juiceConfig.use_suco_natural) sucosDisponiveis.push(...SUCOS_NATURAIS);
+  const grupos = [];
+  if (juiceConfig.use_pro_mix) grupos.push(SUCOS_PRO_MIX);
+  if (juiceConfig.use_pro_vita) grupos.push(SUCOS_VITA);
+  if (juiceConfig.use_suco_diet) grupos.push(SUCOS_DIET);
+  if (juiceConfig.use_suco_natural) grupos.push(SUCOS_NATURAIS);
 
-  // Se nenhuma opção marcada → defaulta para suco natural
-  if (sucosDisponiveis.length === 0) {
-    sucosDisponiveis = [...SUCOS_NATURAIS];
-  }
+  if (grupos.length === 0) return sampleTwoDistinct(SUCOS_NATURAIS);
 
-  // Detectar se cliente ativou só 1 grupo
-  const gruposMarcados = [
-    juiceConfig.use_pro_mix,
-    juiceConfig.use_pro_vita,
-    juiceConfig.use_suco_diet,
-    juiceConfig.use_suco_natural,
-  ].filter(Boolean).length;
+  if (grupos.length === 1) return sampleTwoDistinct(grupos[0]);
 
-  console.log(`🧃 Grupos marcados: ${gruposMarcados}, Sucos disponíveis: ${sucosDisponiveis.length}`);
-
-  if (gruposMarcados === 1) {
-    // Exclusivo: escolher dois diferentes do mesmo grupo
-    console.log(`🧃 Grupo único detectado, gerando 2 variações do mesmo tipo`);
-    if (juiceConfig.use_pro_mix) return sampleTwoDistinct(SUCOS_PRO_MIX);
-    if (juiceConfig.use_pro_vita) return sampleTwoDistinct(SUCOS_VITA);
-    if (juiceConfig.use_suco_diet) return sampleTwoDistinct(SUCOS_DIET);
-    if (juiceConfig.use_suco_natural) return sampleTwoDistinct(SUCOS_NATURAIS);
-  } else {
-    // Mistura permitida: escolher em todo o pool
-    console.log(`🧃 Múltiplos grupos (${gruposMarcados}), permitindo mistura`);
-    return sampleTwoDistinct(sucosDisponiveis);
-  }
+  // Se mais de um grupo foi marcado → mistura
+  const pool = grupos.flat();
+  return sampleTwoDistinct(pool);
 }
 
 Deno.serve(async (req) => {
@@ -162,88 +151,41 @@ Deno.serve(async (req) => {
       const nomeUpper = nome.toUpperCase();
       const lower = nome.toLowerCase();
       
-      console.log(`🔍 Classificando receita: ${nome}`);
-      
-      // 1. PROTEÍNAS - Prioridade máxima (carnes, ovos, frango, peixe, embutidos)
+      // 1. PROTEÍNA
       if (getProteinType(nome)) {
-        console.log(`✅ ${nome} → PROTEINA (detectou proteína via getProteinType)`);
-        
-        // Subcategorização para PP1 vs PP2 (INCLUINDO STROGONOFF)
-        if (/(filé|filé|bife|cox|peito|assado|grelhado|costela|cupim|ensopado|almôndega|almondega|pernil|acém|strogonoff|estrogonofe|cozido|rabada|iscas)/.test(lower)) {
-          console.log(`  → Proteína Principal 1 (prato principal)`);
+        if (/(filé|bife|cox|peito|assado|grelhado|costela|cupim|ensopado|almôndega|almondega|pernil|acém|strogonoff|estrogonofe|cozido|rabada|iscas)/.test(lower)) {
           return 'Proteína Principal 1';
         }
-        
-        console.log(`  → Proteína Principal 2 (proteína secundária)`);
         return 'Proteína Principal 2';
-      }
-      
-      // Verificação adicional para proteínas não detectadas (INCLUINDO STROGONOFF)
-      if (nomeUpper.includes('ALMÔNDEGA') || nomeUpper.includes('ALMONDEGA') ||
-          nomeUpper.includes('LINGUIÇA') || nomeUpper.includes('SALSICHA') ||
-          nomeUpper.includes('OVO') || nomeUpper.includes('HAMBÚRGUER') ||
-          nomeUpper.includes('STROGONOFF') || nomeUpper.includes('ESTROGONOFE') ||
-          nomeUpper.includes('COZIDO') || nomeUpper.includes('CASSOULET')) {
-        console.log(`✅ ${nome} → PROTEINA (detectou proteína adicional)`);
-        return 'Proteína Principal 1'; // Mudado para PP1 pois são pratos principais
       }
 
       // 2. ARROZ
-      if (lower.includes("arroz")) {
-        console.log(`✅ ${nome} → Arroz Branco`);
-        return "Arroz Branco";
-      }
-      
+      if (lower.includes("arroz")) return "Arroz Branco";
+
       // 3. FEIJÃO
-      if (lower.includes("feijão") || lower.includes("feijao")) {
-        console.log(`✅ ${nome} → Feijão`);
-        return "Feijão";
-      }
-      
-      // 4. SUCOS (evitar conflito com saladas)
-      if (/(suco|refresco|bebida)/.test(lower) && !/(salada|legume)/.test(lower)) {
-        console.log(`✅ ${nome} → Suco 1`);
-        return "Suco 1";
-      }
-      
+      if (lower.includes("feijão") || lower.includes("feijao")) return "Feijão";
+
+      // 4. SUCOS
+      if (/(suco|refresco|bebida)/.test(lower)) return "Suco 1";
+
       // 5. SOBREMESAS
       if (/(bolo|pudim|mousse|doce|fruta|gelatina|sobremesa|brigadeiro|torta)/.test(lower)) {
-        console.log(`✅ ${nome} → Sobremesa`);
         return "Sobremesa";
       }
-      
-      // 6. SALADAS - Verduras FRESCAS/CRUAS e saladas à base de maionese
-      if (
-        (
-          /(salada|alface|rúcula|couve|folha|espinafre|maionese|macarronese)/.test(lower) ||
-          /(ese$|salada\s+(de\s+)?maionese)/.test(lower)
-        ) &&
-        !/(cozida|cozido|refogada|refogado)/.test(lower)
-      ) {
-        console.log(`✅ ${nome} → Salada 1 (Verduras frescas)`);
-        return "Salada 1 (Verduras)";
-      }
-      
-      // 7. SALADAS DE LEGUMES/MAIONESE (cruas/frescas)
-      if ((/(tomate|pepino|cenoura|abobrinha|beterraba|chuchu|maionese|colorida)/.test(lower) ||
-           (nomeUpper.includes('SALADA') && (nomeUpper.includes('RUSSA') || nomeUpper.includes('MISTA'))) ||
-           (nomeUpper.includes('MAIONESE') || nomeUpper.includes('MACARRONESE'))) &&
-          !/(cozida|cozido|refogada|refogado)/.test(lower)) {
-        console.log(`✅ ${nome} → Salada 2 (Legumes/Maionese)`);
+
+      // 6. SALADAs
+      if (/(salada russa|salada mista|maionese|macarronese|colorida)/.test(lower)) {
         return "Salada 2 (Legumes)";
       }
-      
-      // 8. GUARNIÇÕES - Pratos quentes/cozidos (não são proteína principal)
-      if (/(batata|mandioca|purê|legumes|cozido|refogado|polenta|macarrão|nhoque|farofa)/.test(lower) ||
-          (nomeUpper.includes('LEGUMES') && (nomeUpper.includes('COZIDO') || nomeUpper.includes('REFOGADO')))) {
-        console.log(`✅ ${nome} → Guarnição (prato quente cozido)`);
+      if (/(salada|alface|rúcula|couve|espinafre|folha|verdura)/.test(lower)) {
+        return "Salada 1 (Verduras)";
+      }
+
+      // 7. GUARNIÇÕES
+      if (/(batata|mandioca|purê|legumes|refogado|polenta|macarrão|nhoque|farofa|canelone|lasanha)/.test(lower)) {
         return "Guarnição";
       }
 
-      // Default com log detalhado
-      console.log(`⚠️ CATEGORIA NÃO IDENTIFICADA para: ${nome}`);
-      console.log(`   - Não detectou: proteína, arroz, feijão, suco, sobremesa, salada ou guarnição`);
-      console.log(`   - Assumindo Guarnição como fallback`);
       return "Guarnição";
     }
 
@@ -254,7 +196,9 @@ Deno.serve(async (req) => {
         case "Salada 2 (Legumes)": return { id: -2, nome: "Salada de legumes cozidos", custo_por_refeicao: 0.6 };
         case "Suco 1": return { id: -3, nome: "Suco de laranja natural", custo_por_refeicao: 0.4 };
         case "Suco 2": return { id: -4, nome: "Suco de uva", custo_por_refeicao: 0.4 };
-        case "Sobremesa": return { id: -5, nome: "Fruta da estação", custo_por_refeicao: 0.5 };
+        case "Sobremesa": 
+          const idx = Math.floor(Math.random() * SOBREMESAS.length);
+          return { id: -5, nome: SOBREMESAS[idx], custo_por_refeicao: 0.5 };
         default: return null;
       }
     }
@@ -765,6 +709,8 @@ Deno.serve(async (req) => {
     if (diasUteis) {
       totalDias = Math.min(totalDias, 5);
     }
+      const startDate = new Date(requestData.startDate || Date.now());
+      let diaAtual = new Date(startDate);
       let cardapioPorDia = [];
       let contadorCarnesVermelhas = 0;
       let guarnicoesUsadas: string[] = [];
@@ -801,10 +747,15 @@ Deno.serve(async (req) => {
         ? ['Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira']
         : ['Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado', 'Domingo'];
       
-      for (let i = 0; i < totalDias; i++) {
-        const nomeDia = diasSemana[i % diasSemana.length];
-        
-        // Pular fins de semana se diasUteis = true
+      for (let i = 0; i < totalDias; ) {
+        const weekday = diaAtual.getDay(); // 0=domingo, 6=sábado
+        if (diasUteis && (weekday === 0 || weekday === 6)) {
+          diaAtual.setDate(diaAtual.getDate() + 1);
+          continue; // pula fim de semana
+        }
+
+        const nomeDia = diaAtual.toLocaleDateString("pt-BR", { weekday: "long" });
+        const diaIndex = i;
         
         console.log(`\n📅 === ${nomeDia} (Dia ${i + 1}) ===`);
         
@@ -1091,8 +1042,8 @@ Deno.serve(async (req) => {
         }
         
         cardapioPorDia.push({
-          dia: nomeDia,
-          data: new Date(Date.now() + i * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+          dia: nomeDia.charAt(0).toUpperCase() + nomeDia.slice(1),
+          data: diaAtual.toISOString().split("T")[0],
           receitas: receitasDia,
           custo_total_dia: custoDia * mealQuantity,
           custo_por_refeicao: custoDia,
@@ -1103,6 +1054,9 @@ Deno.serve(async (req) => {
             guarnicoes_usadas: guarnicoesUsadas.length
           }
         });
+
+        diaAtual.setDate(diaAtual.getDate() + 1);
+        i++;
         
         console.log(`💰 ${nomeDia}: R$ ${custoDia.toFixed(2)}/refeição ${custoDia <= budget ? '✅' : '⚠️'}`);
         if (substituicoesPorOrcamento.length > 0) {
