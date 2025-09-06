@@ -3,8 +3,9 @@ import { createClient } from '@supabase/supabase-js';
 import { useToast } from '@/hooks/use-toast';
 
 export interface JuiceOption {
-  id: number;
+  produto_base_id: number;
   nome: string;
+  tipo: string;
   ativo?: boolean;
 }
 
@@ -30,9 +31,9 @@ export const useJuiceConfiguration = () => {
       );
       const { data, error } = await supabase
         .from('sucos_disponiveis')
-        .select('*')
+        .select('produto_base_id, nome, tipo, ativo')
         .eq('ativo', true)
-        .order('id');
+        .order('produto_base_id');
 
       if (error) throw error;
       setAvailableJuices(data || []);
