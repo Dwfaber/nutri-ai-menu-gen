@@ -173,16 +173,18 @@ Deno.serve(async (req) => {
         return "Sobremesa";
       }
 
-      // 6. SALADAs
-      if (/(salada russa|salada mista|maionese|macarronese|colorida)/.test(lower)) {
+      // 6. Salada 2 (Legumes e maionese)
+      if (/(abóbora|abobora|cenoura|beterraba|chuchu|macarronese|maionese|colorida|salada russa|salada mista)/.test(lower)) {
         return "Salada 2 (Legumes)";
       }
-      if (/(salada|alface|rúcula|couve|espinafre|folha|verdura)/.test(lower)) {
+
+      // 7. Salada 1 (Verduras frescas)
+      if (/(alface|rúcula|couve|espinafre|folha|verdura|agrião|acelga|almeirão)/.test(lower)) {
         return "Salada 1 (Verduras)";
       }
 
-      // 7. GUARNIÇÕES
-      if (/(batata|mandioca|purê|legumes|refogado|polenta|macarrão|nhoque|farofa|canelone|lasanha)/.test(lower)) {
+      // 8. Guarnição (sem carne)
+      if (/(batata|mandioca|purê|polenta|farofa|macarrão|nhoque|refogado|escondidinho|quiche|lasanha)/.test(lower)) {
         return "Guarnição";
       }
 
@@ -223,6 +225,14 @@ Deno.serve(async (req) => {
     // Valida categoria para não cruzar (ex: sobremesa != frango) - FILTRO RIGOROSO
     function validarCategoriaReceita(receita: any, categoria: string): boolean {
       const nome = receita.nome?.toLowerCase() || receita.name?.toLowerCase() || '';
+      
+      if (categoria === "Guarnição") {
+        // Rejeita se for proteína
+        if (getProteinType(nome)) {
+          console.log(`❌ ${receita.nome} rejeitada para guarnição (é proteína)`);
+          return false;
+        }
+      }
       
       if (categoria.includes("sobremesa") || categoria.includes("Sobremesa")) {
         // Sobremesa RIGOROSA: rejeita qualquer prato salgado/proteína/massa
@@ -911,9 +921,9 @@ Deno.serve(async (req) => {
               };
             }
            } else if (catConfig.codigo === 'SUCO1' || catConfig.codigo === 'SUCO2') {
-             // Nova lógica simplificada de seleção de sucos
-             const juiceConfig = requestData.juice_config || {};
-             console.log("🧃 Configuração de suco recebida:", juiceConfig);
+              // Nova lógica simplificada de seleção de sucos
+              const juiceConfig = requestData.juice_config || {};
+              console.log("🧃 Configuração de suco recebida:", JSON.stringify(juiceConfig));
              
              try {
                // Escolher os 2 sucos do dia
