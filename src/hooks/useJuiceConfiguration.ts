@@ -68,8 +68,8 @@ export const useJuiceConfiguration = () => {
     try {
       const { error } = await supabase
         .from('contratos_corporativos')
-        .update(config)
-        .eq('id', clientId);
+        .update(config as any)
+        .eq('filial_id_legado', parseInt(clientId));
 
       if (error) throw error;
 
@@ -109,10 +109,11 @@ export const useJuiceConfiguration = () => {
       if (error) throw error;
       
       // A nova função retorna uma estrutura mais rica
-      if (data?.cardapio_semanal) {
+      if (data && typeof data === 'object' && 'cardapio_semanal' in data) {
+        const cardapioData = data as { cardapio_semanal: any[] };
         toast({
           title: "Configuração gerada",
-          description: `Cardápio de sucos criado para ${data.cardapio_semanal.length} dias úteis.`,
+          description: `Cardápio de sucos criado para ${cardapioData.cardapio_semanal?.length || 0} dias úteis.`,
         });
       }
       
@@ -173,10 +174,16 @@ export const useProteinConfiguration = () => {
   // Atualizar configuração de proteínas para um cliente
   const updateClientProteinConfig = async (clientId: string, config: Partial<ProteinConfiguration>) => {
     try {
+      // Map protein config to database columns
+      const dbConfig: Record<string, boolean> = {};
+      Object.entries(config).forEach(([key, value]) => {
+        dbConfig[key] = value;
+      });
+      
       const { error } = await supabase
         .from('contratos_corporativos')
-        .update(config)
-        .eq('id', clientId);
+        .update(dbConfig as any)
+        .eq('filial_id_legado', parseInt(clientId));
 
       if (error) throw error;
 
