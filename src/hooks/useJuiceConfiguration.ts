@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { createClient } from '@supabase/supabase-js';
+import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 
 export interface JuiceOption {
@@ -16,6 +16,24 @@ export interface JuiceConfiguration {
   use_suco_natural: boolean;
 }
 
+export interface ProteinConfiguration {
+  use_carne_vermelha: boolean;
+  use_carne_suina: boolean;
+  use_frango: boolean;
+  use_peixe: boolean;
+  use_ovo: boolean;
+  use_vegetariano: boolean;
+}
+
+export interface ProteinOption {
+  produto_base_id: number;
+  receita_id_legado: string;
+  nome: string;
+  tipo: string;
+  subcategoria: string;
+  ativo?: boolean;
+}
+
 export const useJuiceConfiguration = () => {
   const [availableJuices, setAvailableJuices] = useState<JuiceOption[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -25,10 +43,6 @@ export const useJuiceConfiguration = () => {
   const loadAvailableJuices = async () => {
     try {
       setIsLoading(true);
-      const supabase = createClient(
-        'https://wzbhhioegxdpegirglbq.supabase.co',
-        'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind6YmhoaW9lZ3hkcGVnaXJnbGJxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTI1MDA0MDUsImV4cCI6MjA2ODA3NjQwNX0.ufwv_XD8LZ2SGMPYUy7Z-CkK2GRNx8mailJb6ZRZHXQ'
-      );
       const { data, error } = await supabase
         .from('sucos_disponiveis')
         .select('produto_base_id, nome, tipo, ativo')
@@ -52,10 +66,6 @@ export const useJuiceConfiguration = () => {
   // Atualizar configuração de sucos para um cliente
   const updateClientJuiceConfig = async (clientId: string, config: Partial<JuiceConfiguration>) => {
     try {
-      const supabase = createClient(
-        'https://wzbhhioegxdpegirglbq.supabase.co',
-        'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind6YmhoaW9lZ3hkcGVnaXJnbGJxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTI1MDA0MDUsImV4cCI6MjA2ODA3NjQwNX0.ufwv_XD8LZ2SGMPYUy7Z-CkK2GRNx8mailJb6ZRZHXQ'
-      );
       const { error } = await supabase
         .from('contratos_corporativos')
         .update(config)
@@ -87,10 +97,6 @@ export const useJuiceConfiguration = () => {
     config: JuiceConfiguration
   ) => {
     try {
-      const supabase = createClient(
-        'https://wzbhhioegxdpegirglbq.supabase.co',
-        'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind6YmhoaW9lZ3hkcGVnaXJnbGJxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTI1MDA0MDUsImV4cCI6MjA2ODA3NjQwNX0.ufwv_XD8LZ2SGMPYUy7Z-CkK2GRNx8mailJb6ZRZHXQ'
-      );
       const { data, error } = await supabase.rpc('gerar_cardapio', {
         p_data_inicio: startDate,
         p_data_fim: endDate,
@@ -132,5 +138,105 @@ export const useJuiceConfiguration = () => {
     loadAvailableJuices,
     updateClientJuiceConfig,
     generateJuiceConfig
+  };
+};
+
+export const useProteinConfiguration = () => {
+  const [availableProteins, setAvailableProteins] = useState<ProteinOption[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const { toast } = useToast();
+
+  // Carregar proteínas disponíveis
+  const loadAvailableProteins = async () => {
+    try {
+      setIsLoading(true);
+      const { data, error } = await supabase
+        .from('proteinas_disponiveis')
+        .select('produto_base_id, receita_id_legado, nome, tipo, subcategoria, ativo')
+        .eq('ativo', true)
+        .order('tipo, subcategoria, nome');
+
+      if (error) throw error;
+      setAvailableProteins(data || []);
+    } catch (error) {
+      console.error('Erro ao carregar proteínas disponíveis:', error);
+      toast({
+        title: "Erro",
+        description: "Erro ao carregar lista de proteínas disponíveis.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Atualizar configuração de proteínas para um cliente
+  const updateClientProteinConfig = async (clientId: string, config: Partial<ProteinConfiguration>) => {
+    try {
+      const { error } = await supabase
+        .from('contratos_corporativos')
+        .update(config)
+        .eq('id', clientId);
+
+      if (error) throw error;
+
+      toast({
+        title: "Configuração atualizada",
+        description: "As configurações de proteína foram salvas com sucesso.",
+      });
+
+      return true;
+    } catch (error) {
+      console.error('Erro ao atualizar configuração de proteínas:', error);
+      toast({
+        title: "Erro",
+        description: "Erro ao salvar as configurações de proteína.",
+        variant: "destructive",
+      });
+      return false;
+    }
+  };
+
+  // Buscar receitas por tipo de proteína
+  const getProteinsByType = (tipo: string, subcategoria?: string) => {
+    return availableProteins.filter(protein => 
+      protein.tipo === tipo && 
+      (subcategoria ? protein.subcategoria === subcategoria : true)
+    );
+  };
+
+  // Gerar seleção de proteínas baseada na configuração
+  const generateProteinSelection = (config: ProteinConfiguration) => {
+    const selectedTypes = Object.entries(config)
+      .filter(([_, enabled]) => enabled)
+      .map(([key, _]) => key.replace('use_', ''));
+
+    const selection = {
+      principal_1: [] as ProteinOption[],
+      principal_2: [] as ProteinOption[]
+    };
+
+    selectedTypes.forEach(tipo => {
+      const proteins1 = getProteinsByType(tipo, 'principal_1');
+      const proteins2 = getProteinsByType(tipo, 'principal_2');
+      
+      selection.principal_1.push(...proteins1);
+      selection.principal_2.push(...proteins2);
+    });
+
+    return selection;
+  };
+
+  useEffect(() => {
+    loadAvailableProteins();
+  }, []);
+
+  return {
+    availableProteins,
+    isLoading,
+    loadAvailableProteins,
+    updateClientProteinConfig,
+    getProteinsByType,
+    generateProteinSelection
   };
 };

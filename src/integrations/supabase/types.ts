@@ -431,6 +431,47 @@ export type Database = {
         }
         Relationships: []
       }
+      proteinas_disponiveis: {
+        Row: {
+          ativo: boolean | null
+          created_at: string | null
+          nome: string
+          prioridade: number | null
+          produto_base_id: number
+          receita_id_legado: string
+          subcategoria: string
+          tipo: string
+        }
+        Insert: {
+          ativo?: boolean | null
+          created_at?: string | null
+          nome: string
+          prioridade?: number | null
+          produto_base_id: number
+          receita_id_legado: string
+          subcategoria: string
+          tipo: string
+        }
+        Update: {
+          ativo?: boolean | null
+          created_at?: string | null
+          nome?: string
+          prioridade?: number | null
+          produto_base_id?: number
+          receita_id_legado?: string
+          subcategoria?: string
+          tipo?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "proteinas_disponiveis_receita_id_legado_fkey"
+            columns: ["receita_id_legado"]
+            isOneToOne: false
+            referencedRelation: "receitas_legado"
+            referencedColumns: ["receita_id_legado"]
+          },
+        ]
+      }
       receita_ingredientes: {
         Row: {
           categoria_descricao: string | null
