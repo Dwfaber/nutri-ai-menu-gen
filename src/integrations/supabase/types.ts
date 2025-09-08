@@ -158,8 +158,16 @@ export type Database = {
           ratear_custo: boolean | null
           razao_social: string | null
           tipo_custo: number | null
+          use_guarnicao_batatas: boolean | null
+          use_guarnicao_cereais: boolean | null
+          use_guarnicao_legumes: boolean | null
+          use_guarnicao_massas: boolean | null
+          use_guarnicao_raizes: boolean | null
           use_pro_mix: boolean | null
           use_pro_vita: boolean | null
+          use_salada_legumes_cozidos: boolean | null
+          use_salada_molhos: boolean | null
+          use_salada_verduras: boolean | null
           use_suco_diet: boolean | null
           use_suco_natural: boolean | null
         }
@@ -183,8 +191,16 @@ export type Database = {
           ratear_custo?: boolean | null
           razao_social?: string | null
           tipo_custo?: number | null
+          use_guarnicao_batatas?: boolean | null
+          use_guarnicao_cereais?: boolean | null
+          use_guarnicao_legumes?: boolean | null
+          use_guarnicao_massas?: boolean | null
+          use_guarnicao_raizes?: boolean | null
           use_pro_mix?: boolean | null
           use_pro_vita?: boolean | null
+          use_salada_legumes_cozidos?: boolean | null
+          use_salada_molhos?: boolean | null
+          use_salada_verduras?: boolean | null
           use_suco_diet?: boolean | null
           use_suco_natural?: boolean | null
         }
@@ -208,8 +224,16 @@ export type Database = {
           ratear_custo?: boolean | null
           razao_social?: string | null
           tipo_custo?: number | null
+          use_guarnicao_batatas?: boolean | null
+          use_guarnicao_cereais?: boolean | null
+          use_guarnicao_legumes?: boolean | null
+          use_guarnicao_massas?: boolean | null
+          use_guarnicao_raizes?: boolean | null
           use_pro_mix?: boolean | null
           use_pro_vita?: boolean | null
+          use_salada_legumes_cozidos?: boolean | null
+          use_salada_molhos?: boolean | null
+          use_salada_verduras?: boolean | null
           use_suco_diet?: boolean | null
           use_suco_natural?: boolean | null
         }
@@ -361,6 +385,44 @@ export type Database = {
           week_period?: string
         }
         Relationships: []
+      }
+      guarnicoes_disponiveis: {
+        Row: {
+          ativo: boolean | null
+          created_at: string | null
+          nome: string
+          prioridade: number | null
+          produto_base_id: number
+          receita_id_legado: string
+          tipo: string
+        }
+        Insert: {
+          ativo?: boolean | null
+          created_at?: string | null
+          nome: string
+          prioridade?: number | null
+          produto_base_id: number
+          receita_id_legado: string
+          tipo: string
+        }
+        Update: {
+          ativo?: boolean | null
+          created_at?: string | null
+          nome?: string
+          prioridade?: number | null
+          produto_base_id?: number
+          receita_id_legado?: string
+          tipo?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "guarnicoes_disponiveis_receita_id_legado_fkey"
+            columns: ["receita_id_legado"]
+            isOneToOne: false
+            referencedRelation: "receitas_legado"
+            referencedColumns: ["receita_id_legado"]
+          },
+        ]
       }
       produtos_base: {
         Row: {
@@ -588,6 +650,44 @@ export type Database = {
           usuario?: string | null
         }
         Relationships: []
+      }
+      saladas_disponiveis: {
+        Row: {
+          ativo: boolean | null
+          created_at: string | null
+          nome: string
+          prioridade: number | null
+          produto_base_id: number
+          receita_id_legado: string
+          tipo: string
+        }
+        Insert: {
+          ativo?: boolean | null
+          created_at?: string | null
+          nome: string
+          prioridade?: number | null
+          produto_base_id: number
+          receita_id_legado: string
+          tipo: string
+        }
+        Update: {
+          ativo?: boolean | null
+          created_at?: string | null
+          nome?: string
+          prioridade?: number | null
+          produto_base_id?: number
+          receita_id_legado?: string
+          tipo?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "saladas_disponiveis_receita_id_legado_fkey"
+            columns: ["receita_id_legado"]
+            isOneToOne: false
+            referencedRelation: "receitas_legado"
+            referencedColumns: ["receita_id_legado"]
+          },
+        ]
       }
       shopping_list_items: {
         Row: {
