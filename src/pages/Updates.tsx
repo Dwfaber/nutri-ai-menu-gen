@@ -8,6 +8,22 @@ import { CheckCircle, Clock, Code, Database, Cpu, GitBranch, Zap, Bug, Plus, Cal
 export default function Updates() {
   const recentUpdates = [
     {
+      date: "07/09/2025",
+      title: "Fase 1 - Sistema de Proteínas Categorizadas",
+      description: "Nova estrutura baseada em tabelas para classificação automática de proteínas",
+      type: "feature",
+      impact: "crítico",
+      details: [
+        "Criação da tabela proteinas_disponiveis com 371 receitas categorizadas",
+        "Classificação automática por tipos: carne vermelha, suína, frango, peixe, ovo, vegetariano",
+        "Subcategorias principal_1 e principal_2 implementadas",
+        "Configuração personalizada por cliente via useProteinConfiguration",
+        "Eliminação de erros de classificação por regex",
+        "Compatibilidade completa com sistema legacy mantida",
+        "Hook useProteinConfiguration implementado com filtros avançados"
+      ]
+    },
+    {
       date: "02/09/2025",
       title: "Sistema de Orçamento Dinâmico",
       description: "Orçamento específico por filial implementado substituindo valor fixo",
@@ -79,6 +95,12 @@ export default function Updates() {
   const completeHistory = {
     backend: [
       {
+        date: "07/09/2025",
+        title: "Tabela de Proteínas Categorizadas",
+        description: "Migração de 371 receitas para estrutura categorizada",
+        status: "concluído"
+      },
+      {
         date: "02/09/2025",
         title: "Sistema de Orçamento Dinâmico",
         description: "Orçamento específico por filial implementado",
@@ -117,6 +139,12 @@ export default function Updates() {
     ],
     frontend: [
       {
+        date: "07/09/2025",
+        title: "Hook de Configuração de Proteínas",
+        description: "useProteinConfiguration implementado com filtros avançados",
+        status: "concluído"
+      },
+      {
         date: "02/09/2025",
         title: "WeeklyMenuView Completo",
         description: "Renderização de 10 categorias fixas sem duplicação",
@@ -148,6 +176,12 @@ export default function Updates() {
       }
     ],
     ai: [
+      {
+        date: "07/09/2025",
+        title: "Eliminação de Classificação por Regex",
+        description: "Substituição da lógica regex por busca direta em tabela categorizada",
+        status: "concluído"
+      },
       {
         date: "02/09/2025",
         title: "IA com Orçamento Personalizado",
@@ -187,6 +221,12 @@ export default function Updates() {
     ],
     integrations: [
       {
+        date: "07/09/2025",
+        title: "Compatibilidade Sistema Legacy",
+        description: "Manutenção da integração com classificação categorizadas",
+        status: "concluído"
+      },
+      {
         date: "27/08/2024",
         title: "Sincronização Legacy",
         description: "Integração com sistema antigo aprimorada",
@@ -209,32 +249,53 @@ export default function Updates() {
 
   const roadmap = [
     {
+      title: "Fase 1 - Sistema de Proteínas",
+      description: "Estrutura categorizada para classificação automática",
+      status: "concluído",
+      priority: "crítica",
+      quarter: "Q3 2025"
+    },
+    {
+      title: "Fase 2 - Guarnições e Saladas",
+      description: "Categorização de acompanhamentos e saladas por tabela",
+      status: "em-desenvolvimento",
+      priority: "alta",
+      quarter: "Q3 2025"
+    },
+    {
+      title: "Fase 3 - Sobremesas e Bebidas",
+      description: "Finalização da migração para sistema categorizado",
+      status: "planejado",
+      priority: "alta",
+      quarter: "Q4 2025"
+    },
+    {
       title: "Sistema de Notificações",
       description: "Alertas em tempo real para aprovações e alterações",
       status: "planejado",
-      priority: "alta",
-      quarter: "Q3 2024"
+      priority: "média",
+      quarter: "Q4 2025"
     },
     {
       title: "Relatórios Avançados",
       description: "Analytics detalhados e exportação personalizada",
-      status: "em-desenvolvimento",
+      status: "planejado",
       priority: "média",
-      quarter: "Q4 2024"
+      quarter: "Q1 2026"
     },
     {
       title: "App Mobile",
       description: "Versão mobile para gestores e nutricionistas",
       status: "planejado",
       priority: "alta",
-      quarter: "Q1 2025"
+      quarter: "Q2 2026"
     },
     {
       title: "IA Preditiva",
       description: "Previsão de demanda e otimização automática",
       status: "pesquisa",
       priority: "baixa",
-      quarter: "Q2 2025"
+      quarter: "Q3 2026"
     }
   ];
 
