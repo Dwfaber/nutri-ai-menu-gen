@@ -43,6 +43,8 @@ const ClientInfoForm = ({ client, onComplete, onCancel }: ClientInfoFormProps) =
     use_pro_vita?: boolean;
     use_suco_diet?: boolean;
     use_suco_natural?: boolean;
+    protein_grams_pp1?: number;
+    protein_grams_pp2?: number;
   }) => {
     try {
       const supabase = createClient(
@@ -58,13 +60,13 @@ const ClientInfoForm = ({ client, onComplete, onCancel }: ClientInfoFormProps) =
 
       toast({
         title: "Configuração atualizada",
-        description: "As configurações de suco foram salvas com sucesso.",
+        description: "As configurações de suco e gramagem foram salvas com sucesso.",
       });
     } catch (error) {
       console.error('Erro ao atualizar configuração de sucos:', error);
       toast({
         title: "Erro",
-        description: "Erro ao salvar as configurações de suco.",
+        description: "Erro ao salvar as configurações de suco e gramagem.",
         variant: "destructive",
       });
     }

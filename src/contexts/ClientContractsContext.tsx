@@ -29,6 +29,9 @@ export interface ContractClient {
   use_pro_vita?: boolean;
   use_suco_diet?: boolean;
   use_suco_natural?: boolean;
+  // Configurações de gramagem das proteínas
+  protein_grams_pp1?: number;
+  protein_grams_pp2?: number;
 }
 
 interface ClientContractsContextType {

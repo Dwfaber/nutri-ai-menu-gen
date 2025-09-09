@@ -155,6 +155,8 @@ export type Database = {
           filial_id_legado: number
           inscricao_estadual: string | null
           nome_fantasia: string | null
+          protein_grams_pp1: number | null
+          protein_grams_pp2: number | null
           ratear_custo: boolean | null
           razao_social: string | null
           tipo_custo: number | null
@@ -188,6 +190,8 @@ export type Database = {
           filial_id_legado: number
           inscricao_estadual?: string | null
           nome_fantasia?: string | null
+          protein_grams_pp1?: number | null
+          protein_grams_pp2?: number | null
           ratear_custo?: boolean | null
           razao_social?: string | null
           tipo_custo?: number | null
@@ -221,6 +225,8 @@ export type Database = {
           filial_id_legado?: number
           inscricao_estadual?: string | null
           nome_fantasia?: string | null
+          protein_grams_pp1?: number | null
+          protein_grams_pp2?: number | null
           ratear_custo?: boolean | null
           razao_social?: string | null
           tipo_custo?: number | null
