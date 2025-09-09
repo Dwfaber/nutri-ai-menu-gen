@@ -366,6 +366,7 @@ export const useIntegratedMenuGeneration = () => {
         refeicoesPorDia: formData.mealsPerDay || clientToUse.total_funcionarios || 100,
         preferences: formData.preferences ? [formData.preferences] : [],
         proteinGrams: formData.proteinGrams || '100',
+        juiceConfig: formData.juiceConfig || {},
         baseRecipes: {
           arroz: 580,
           feijao: 1600

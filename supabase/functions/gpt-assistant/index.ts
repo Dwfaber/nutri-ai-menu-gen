@@ -777,9 +777,10 @@ Deno.serve(async (req) => {
       periodo: string,
       diasUteis: boolean,
       supabase: any,
-      proteinGrams: string
+      proteinGrams: string,
+      juiceConfig: any
     }, budget: number, origemOrcamento: string) {
-      const { mealQuantity, numDays, periodo, diasUteis, supabase, proteinGrams } = config;
+      const { mealQuantity, numDays, periodo, diasUteis, supabase, proteinGrams, juiceConfig } = config;
       
       // NOVO: Usar configurações do cliente carregadas anteriormente
       console.log('📏 Gramagem configurada:', proteinGrams);
@@ -1173,6 +1174,7 @@ Deno.serve(async (req) => {
       const numDays = requestData.numDays || 7;
       // ✅ Configuração consolidada de gramagem (vem do formulário ou contrato, default 100g)
       const proteinGrams = requestData.proteinGrams || requestData.protein_grams || '100';
+      const juiceConfig = requestData.juiceConfig || {};
       
       console.log(`🍽️ Gerando cardápio: ${numDays} dias, ${mealQuantity} refeições/dia`);
       console.log(`🔍 FILIAL_ID DEBUG: filialId=${filialId}, origem:`, {
@@ -1207,7 +1209,8 @@ Deno.serve(async (req) => {
         periodo,
         diasUteis,
         supabase,
-        proteinGrams
+        proteinGrams,
+        juiceConfig
       }, budget, origemOrcamento);
 
         // A configuração de sucos já é processada dentro de gerarCardapioComRegras
