@@ -48,8 +48,8 @@ const VIEW_MAPPING = {
   },
   vwOrFiliaisAtiva: {
     description: 'Filiais Ativas (Contratos)',
-    targetTable: 'contratos_corporativos', // Mantém na tabela original
-    fields: ['cliente_id_legado', 'nome_empresa', 'total_funcionarios', 'ativo', 'periodicidade', 'restricoes_alimentares']
+    targetTable: 'contratos_corporativos',
+    fields: ['filial_id_legado', 'empresa_id_legado', 'nome_fantasia', 'razao_social', 'cnpj', 'endereco', 'endereco_numero', 'endereco_complemento', 'inscricao_estadual', 'codigo_externo', 'codigo_externo_empresa_id', 'codigo_externo_2', 'codigo_externo_2_empresa_id', 'custo_separado', 'tipo_custo', 'estoque_central', 'ratear_custo', 'controle_interno_custo', 'data_contrato', 'use_pro_mix', 'use_pro_vita', 'use_suco_diet', 'use_suco_natural', 'use_guarnicao_batatas', 'use_guarnicao_massas', 'use_guarnicao_legumes', 'use_guarnicao_raizes', 'use_guarnicao_cereais', 'use_salada_verduras', 'use_salada_legumes_cozidos', 'use_salada_molhos', 'protein_grams_pp1', 'protein_grams_pp2']
   }
 };
 
@@ -557,23 +557,59 @@ async function processViewData(supabaseClient: any, viewName: string, data: any[
           }
         }
       } else if (mapping.targetTable === 'contratos_corporativos' && viewName === 'vwOrFiliaisAtiva') {
-        // CORREÇÃO: Usar upsert com onConflict para evitar erro de chave duplicada
+        // CORREÇÃO: Mapear para campos que existem na tabela contratos_corporativos
+        const contractData: any = {
+          filial_id_legado: parseInt(record.filial_id?.toString() || record.id?.toString()) || null,
+          empresa_id_legado: parseInt(record.empresa_id?.toString() || record.empresa_id_legado?.toString()) || null,
+          nome_fantasia: record.nome_fantasia || record.nome_empresa || record.nome_filial || null,
+          razao_social: record.razao_social || record.nome_empresa || null,
+          cnpj: record.cnpj || null,
+          endereco: record.endereco || null,
+          endereco_numero: record.endereco_numero || null,
+          endereco_complemento: record.endereco_complemento || null,
+          inscricao_estadual: record.inscricao_estadual || null,
+          codigo_externo: parseInt(record.codigo_externo?.toString()) || null,
+          codigo_externo_empresa_id: parseInt(record.codigo_externo_empresa_id?.toString()) || null,
+          codigo_externo_2: parseInt(record.codigo_externo_2?.toString()) || null,
+          codigo_externo_2_empresa_id: parseInt(record.codigo_externo_2_empresa_id?.toString()) || null,
+          custo_separado: record.custo_separado === true || record.custo_separado === 'true',
+          tipo_custo: parseInt(record.tipo_custo?.toString()) || null,
+          estoque_central: record.estoque_central === true || record.estoque_central === 'true',
+          ratear_custo: record.ratear_custo === true || record.ratear_custo === 'true',
+          controle_interno_custo: record.controle_interno_custo === true || record.controle_interno_custo === 'true',
+          data_contrato: record.data_contrato || null,
+          // Configurações padrão para sucos
+          use_pro_mix: record.use_pro_mix === true || record.use_pro_mix === 'true' || false,
+          use_pro_vita: record.use_pro_vita === true || record.use_pro_vita === 'true' || false,
+          use_suco_diet: record.use_suco_diet === true || record.use_suco_diet === 'true' || false,
+          use_suco_natural: record.use_suco_natural === true || record.use_suco_natural === 'true' || false,
+          // Configurações padrão para guarnições (padrão true)
+          use_guarnicao_batatas: record.use_guarnicao_batatas !== false,
+          use_guarnicao_massas: record.use_guarnicao_massas !== false,
+          use_guarnicao_legumes: record.use_guarnicao_legumes !== false,
+          use_guarnicao_raizes: record.use_guarnicao_raizes !== false,
+          use_guarnicao_cereais: record.use_guarnicao_cereais !== false,
+          // Configurações padrão para saladas (padrão true)
+          use_salada_verduras: record.use_salada_verduras !== false,
+          use_salada_legumes_cozidos: record.use_salada_legumes_cozidos !== false,
+          use_salada_molhos: record.use_salada_molhos !== false,
+          // Gramas de proteína por pessoa
+          protein_grams_pp1: parseInt(record.protein_grams_pp1?.toString()) || 100,
+          protein_grams_pp2: parseInt(record.protein_grams_pp2?.toString()) || 90
+        };
+
         const { error } = await supabaseClient
           .from('contratos_corporativos')
-          .upsert({
-            cliente_id_legado: record.filial_id?.toString() || record.cliente_id_legado?.toString() || record.id?.toString(),
-            nome_empresa: record.nome_empresa || record.nome_filial || 'Empresa',
-            total_funcionarios: record.total_funcionarios || 0,
-            custo_maximo_refeicao: record.custo_maximo_refeicao || 15.0,
-            total_refeicoes_mes: record.total_refeicoes_mes || (record.total_funcionarios * 22) || 0,
-            periodicidade: record.periodicidade || 'mensal',
-            restricoes_alimentares: record.restricoes_alimentares || [],
-            ativo: record.ativo !== false,
-            sync_at: new Date().toISOString()
-          }, { onConflict: 'cliente_id_legado' });
+          .upsert(contractData, { 
+            onConflict: 'filial_id_legado,empresa_id_legado',
+            ignoreDuplicates: false 
+          });
 
         if (error) {
-          console.error(`Erro ao processar contrato:`, error);
+          console.error(`Erro ao processar contrato corporativo:`, error);
+          console.error(`Dados problemáticos:`, contractData);
+        } else {
+          console.log(`Contrato corporativo processado: filial ${contractData.filial_id_legado}, empresa ${contractData.empresa_id_legado}`);
         }
       }
       
