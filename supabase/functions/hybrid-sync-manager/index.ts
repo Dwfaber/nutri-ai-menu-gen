@@ -10,7 +10,7 @@ const corsHeaders = {
 // Configuração da estratégia híbrida por tabela
 const SYNC_STRATEGIES = {
   'co_solicitacao_produto_listagem': {
-    strategy: 'upsert_cleanup', // Mudança: agora usa UPSERT com limpeza
+    strategy: 'upsert_cleanup', // Mantém upsert_cleanup pois já funciona bem
     backup: false, // Não precisa backup pois dados vêm do sistema legado
     batchSize: 500, // Otimizado para performance
     cleanupOrphans: true,
@@ -18,33 +18,34 @@ const SYNC_STRATEGIES = {
     uniqueColumns: ['solicitacao_id', 'produto_base_id'] // Chave natural para UPSERT
   },
   'produtos_base': {
-    strategy: 'upsert_cleanup',
+    strategy: 'upsert', // Alterado para evitar função PostgreSQL hardcoded
     backup: true,
     batchSize: 500,
-    cleanupOrphans: true,
+    cleanupOrphans: false, // Desabilitado para usar apenas upsert
     orphanDays: 30,
     uniqueColumns: ['produto_base_id']
   },
   'custos_filiais': {
-    strategy: 'upsert_cleanup', // Tabela média, relacionamentos importantes
+    strategy: 'upsert', // Alterado para evitar função PostgreSQL hardcoded
     backup: true,
     batchSize: 200,
-    cleanupOrphans: true,
-    orphanDays: 7
+    cleanupOrphans: false, // Desabilitado para usar apenas upsert
+    orphanDays: 7,
+    uniqueColumns: ['filial_id', 'data_referencia'] // Adicionadas colunas únicas
   },
   'receitas_legado': {
-    strategy: 'upsert_cleanup', // Mudança: agora usa UPSERT com limpeza
+    strategy: 'upsert', // Alterado para evitar função PostgreSQL hardcoded
     backup: false,
     batchSize: 100,
-    cleanupOrphans: true,
+    cleanupOrphans: false, // Desabilitado para usar apenas upsert
     orphanDays: 30,
     uniqueColumns: ['receita_id_legado'] // Chave natural para UPSERT
   },
   'receita_ingredientes': {
-    strategy: 'upsert_cleanup', // Mudança: agora usa UPSERT com limpeza
+    strategy: 'upsert', // Alterado para evitar função PostgreSQL hardcoded
     backup: false,
     batchSize: 500,
-    cleanupOrphans: true,
+    cleanupOrphans: false, // Desabilitado para usar apenas upsert
     orphanDays: 30,
     uniqueColumns: ['receita_id_legado', 'produto_base_id'] // Chave natural para UPSERT
   },
