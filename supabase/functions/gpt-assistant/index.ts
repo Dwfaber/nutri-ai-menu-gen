@@ -758,7 +758,7 @@ Deno.serve(async (req) => {
             name: p.nome,
             categoria: categoria,
             category: categoria,
-            tipo_proteina: p.tipo
+            tipo_proteina: p.tipo || "desconhecido"
           });
         });
       }
@@ -828,13 +828,16 @@ Deno.serve(async (req) => {
             pp1.grams = proteinGrams;
             
             // Controle de carne vermelha
-            const tipoPP1 = pp1.tipo_proteina || getProteinType(pp1.nome);
-            if (tipoPP1 === "Carne Vermelha") {
+            const tipoPP1 = pp1.tipo_proteina;
+            if (!tipoPP1 || tipoPP1 === "desconhecido") {
+              console.warn(`⚠️ Proteína sem tipo definido: ${pp1.nome}`);
+            }
+            if (tipoPP1 === "carne_vermelha") {
               if (contadorCarnesVermelhas >= 2) {
                 console.log(`⚠️ Limite de carne vermelha atingido, buscando alternativa para PP1`);
                 const alternativa = receitasPool.find(r => 
                   r.categoria === "Proteína Principal 1" && 
-                  getProteinType(r.nome) !== "Carne Vermelha" &&
+                  r.tipo_proteina !== "carne_vermelha" &&
                   (!proteinGrams || r.nome.toUpperCase().includes(`${proteinGrams}G`))
                 );
                 if (alternativa) {
@@ -861,11 +864,11 @@ Deno.serve(async (req) => {
             pp2.grams = proteinGrams;
             
             // Garantir tipos diferentes no mesmo dia
-            if (pp1 && (pp1.tipo_proteina || getProteinType(pp1.nome)) === (pp2.tipo_proteina || getProteinType(pp2.nome))) {
+            if (pp1 && pp1.tipo_proteina === pp2.tipo_proteina) {
               console.log(`⚠️ Mesmo tipo de proteína no dia, buscando alternativa para PP2`);
               const alternativa = receitasPool.find(r =>
                 r.categoria === "Proteína Principal 2" &&
-                getProteinType(r.nome) !== getProteinType(pp1.nome) &&
+                r.tipo_proteina !== pp1.tipo_proteina &&
                 (!proteinGrams || r.nome.toUpperCase().includes(`${proteinGrams}G`))
               );
               if (alternativa) {
@@ -880,13 +883,16 @@ Deno.serve(async (req) => {
             }
             
             // Controle de carne vermelha para PP2
-            const tipoPP2 = pp2.tipo_proteina || getProteinType(pp2.nome);
-            if (tipoPP2 === "Carne Vermelha") {
+            const tipoPP2 = pp2.tipo_proteina;
+            if (!tipoPP2 || tipoPP2 === "desconhecido") {
+              console.warn(`⚠️ Proteína sem tipo definido: ${pp2.nome}`);
+            }
+            if (tipoPP2 === "carne_vermelha") {
               if (contadorCarnesVermelhas >= 2) {
                 console.log(`⚠️ Limite de carne vermelha atingido, buscando alternativa para PP2`);
                 const alternativa = receitasPool.find(r => 
                   r.categoria === "Proteína Principal 2" && 
-                  getProteinType(r.nome) !== "Carne Vermelha" &&
+                  r.tipo_proteina !== "carne_vermelha" &&
                   (!proteinGrams || r.nome.toUpperCase().includes(`${proteinGrams}G`))
                 );
                 if (alternativa) {
@@ -917,7 +923,7 @@ Deno.serve(async (req) => {
             porcoes: mealQuantity,
             ingredientes: [],
             grams: pp1.grams,
-            protein_type: pp1.tipo_proteina || getProteinType(pp1.nome)
+            protein_type: pp1.tipo_proteina
           });
           custoDia += pp1.custo_por_refeicao;
         }
@@ -933,7 +939,7 @@ Deno.serve(async (req) => {
             porcoes: mealQuantity,
             ingredientes: [],
             grams: pp2.grams,
-            protein_type: pp2.tipo_proteina || getProteinType(pp2.nome)
+            protein_type: pp2.tipo_proteina
           });
           custoDia += pp2.custo_por_refeicao;
         }
@@ -1025,11 +1031,15 @@ Deno.serve(async (req) => {
             const guarnicaoEscolhida = escolherGuarnicaoDia(guarnicoesDisponiveis);
             if (guarnicaoEscolhida) {
               const resultado = await calculateSimpleCost(guarnicaoEscolhida.id, mealQuantity);
+              const custoFinal = resultado.custo_por_refeicao > 0 ? resultado.custo_por_refeicao : 0.8;
+              if (resultado.custo_por_refeicao <= 0) {
+                console.warn(`⚠️ Usando custo padrão para ${guarnicaoEscolhida.nome} (guarnição: 0.8)`);
+              }
               receita = {
                 id: guarnicaoEscolhida.id,
                 nome: guarnicaoEscolhida.nome,
-                custo_por_refeicao: resultado.custo_por_refeicao || 1.0,
-                custo_total: (resultado.custo_por_refeicao || 1.0) * mealQuantity
+                custo_por_refeicao: custoFinal,
+                custo_total: custoFinal * mealQuantity
               };
               guarnicoesUsadas.push(guarnicaoEscolhida.nome);
             }
@@ -1038,11 +1048,15 @@ Deno.serve(async (req) => {
             const saladaEscolhida = escolherSaladaDia("verdura", saladasDisponiveis);
             if (saladaEscolhida) {
               const resultado = await calculateSimpleCost(saladaEscolhida.id, mealQuantity);
+              const custoFinal = resultado.custo_por_refeicao > 0 ? resultado.custo_por_refeicao : 0.4;
+              if (resultado.custo_por_refeicao <= 0) {
+                console.warn(`⚠️ Usando custo padrão para ${saladaEscolhida.nome} (verdura: 0.4)`);
+              }
               receita = {
                 id: saladaEscolhida.id,
                 nome: saladaEscolhida.nome,
-                custo_por_refeicao: resultado.custo_por_refeicao || 0.5,
-                custo_total: (resultado.custo_por_refeicao || 0.5) * mealQuantity
+                custo_por_refeicao: custoFinal,
+                custo_total: custoFinal * mealQuantity
               };
             }
           } else if (catConfig.codigo === 'SALADA2') {
@@ -1050,11 +1064,15 @@ Deno.serve(async (req) => {
             const saladaEscolhida = escolherSaladaDia("legume", saladasDisponiveis);
             if (saladaEscolhida) {
               const resultado = await calculateSimpleCost(saladaEscolhida.id, mealQuantity);
+              const custoFinal = resultado.custo_por_refeicao > 0 ? resultado.custo_por_refeicao : 0.5;
+              if (resultado.custo_por_refeicao <= 0) {
+                console.warn(`⚠️ Usando custo padrão para ${saladaEscolhida.nome} (legume: 0.5)`);
+              }
               receita = {
                 id: saladaEscolhida.id,
                 nome: saladaEscolhida.nome,
-                custo_por_refeicao: resultado.custo_por_refeicao || 0.6,
-                custo_total: (resultado.custo_por_refeicao || 0.6) * mealQuantity
+                custo_por_refeicao: custoFinal,
+                custo_total: custoFinal * mealQuantity
               };
             }
           } else if (catConfig.codigo === 'SOBREMESA') {
