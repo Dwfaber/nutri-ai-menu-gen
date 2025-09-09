@@ -19,11 +19,23 @@ export default function ResetPassword() {
   const [searchParams] = useSearchParams();
 
   useEffect(() => {
-    // Check if we have the required tokens from the URL
-    const accessToken = searchParams.get('access_token');
-    const refreshToken = searchParams.get('refresh_token');
+    // Check tokens from URL query parameters first
+    let accessToken = searchParams.get('access_token');
+    let refreshToken = searchParams.get('refresh_token');
+    
+    // If not found in query params, check hash fragments
+    if (!accessToken || !refreshToken) {
+      const hash = window.location.hash.substring(1);
+      const hashParams = new URLSearchParams(hash);
+      accessToken = hashParams.get('access_token');
+      refreshToken = hashParams.get('refresh_token');
+    }
+    
+    console.log('Reset password tokens:', { accessToken: !!accessToken, refreshToken: !!refreshToken });
+    console.log('Full URL:', window.location.href);
     
     if (!accessToken || !refreshToken) {
+      console.error('Missing tokens for password reset');
       toast({
         title: "Link inválido",
         description: "Este link de redefinição é inválido ou expirou.",
@@ -37,6 +49,18 @@ export default function ResetPassword() {
     supabase.auth.setSession({
       access_token: accessToken,
       refresh_token: refreshToken,
+    }).then(({ data, error }) => {
+      if (error) {
+        console.error('Error setting session:', error);
+        toast({
+          title: "Erro de autenticação",
+          description: "Não foi possível validar o link de redefinição.",
+          variant: "destructive",
+        });
+        navigate("/auth");
+      } else {
+        console.log('Session set successfully');
+      }
     });
   }, [searchParams, navigate, toast]);
 
