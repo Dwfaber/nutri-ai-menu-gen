@@ -1171,7 +1171,8 @@ Deno.serve(async (req) => {
       const filialId = requestData.filialIdLegado || requestData.filial_id || null;
       const clientName = requestData.cliente || 'Cliente';
       const numDays = requestData.numDays || 7;
-      const proteinGramsSelected = requestData.proteinGrams || requestData.protein_grams || '100';
+      // ✅ Configuração consolidada de gramagem (vem do formulário ou contrato, default 100g)
+      const proteinGrams = requestData.proteinGrams || requestData.protein_grams || '100';
       
       console.log(`🍽️ Gerando cardápio: ${numDays} dias, ${mealQuantity} refeições/dia`);
       console.log(`🔍 FILIAL_ID DEBUG: filialId=${filialId}, origem:`, {
@@ -1194,10 +1195,6 @@ Deno.serve(async (req) => {
       
       console.log(`💰 Orçamento: R$ ${budget.toFixed(2)}/refeição`);
       
-      // ✅ Extrair gramagens do contrato ou usar defaults
-      const gramsPP1 = dadosFilial?.protein_grams_pp1 ?? 100;
-      const gramsPP2 = dadosFilial?.protein_grams_pp2 ?? 90;
-      
       // ========== NOVA LÓGICA COM REGRAS DA NUTRICIONISTA ==========
       const periodo = requestData.periodo || 'semanal';
       const diasUteis = requestData.diasUteis || false;
@@ -1210,7 +1207,7 @@ Deno.serve(async (req) => {
         periodo,
         diasUteis,
         supabase,
-        proteinGrams: proteinGramsSelected
+        proteinGrams
       }, budget, origemOrcamento);
 
         // A configuração de sucos já é processada dentro de gerarCardapioComRegras
