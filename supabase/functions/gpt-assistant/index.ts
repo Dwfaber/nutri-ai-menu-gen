@@ -239,7 +239,7 @@ Deno.serve(async (req) => {
             grams: proteinGrams
           };
         } else {
-          console.log(`⚠️ ${proteinaEstruturada.nome} (${tipo}) excederia limite semanal`);
+          console.log(`⚠️ ${proteinaEstruturada.nome} (${tipo}) ignorada: limite atingido (${contadorProteinas[tipo]}/${LIMITE_PROTEINAS_SEMANA[tipo]})`);
         }
       }
       
@@ -715,6 +715,26 @@ Deno.serve(async (req) => {
       let guarnicoesUsadas: string[] = [];
       let receitasPool: any[] = [];
 
+      // Função para normalizar tipos de proteína vindos do banco
+      function normalizarTipoProteina(tipo: string): string {
+        const map = {
+          "carne_suina": "Carne Vermelha",
+          "carne_vermelha": "Carne Vermelha", 
+          "bovino": "Carne Vermelha",
+          "frango": "Frango",
+          "peixe": "Peixe",
+          "ovo": "Ovo",
+          "vegetariano": "Vegetariano"
+        };
+        const tipoNormalizado = map[tipo?.toLowerCase()] || "desconhecido";
+        
+        if (tipoNormalizado === "desconhecido") {
+          console.log(`⚠️ Tipo de proteína não reconhecido: "${tipo}"`);
+        }
+        
+        return tipoNormalizado;
+      }
+
       // Resetar contadores de proteínas para nova geração
       contadorProteinas = {
         "Carne Vermelha": 0, 
@@ -758,7 +778,7 @@ Deno.serve(async (req) => {
             name: p.nome,
             categoria: categoria,
             category: categoria,
-            tipo_proteina: p.tipo || "desconhecido"
+            tipo_proteina: normalizarTipoProteina(p.tipo || "desconhecido")
           });
         });
       }
@@ -809,6 +829,18 @@ Deno.serve(async (req) => {
         const diaIndex = i;
         
         console.log(`\n📅 === ${nomeDia} (Dia ${i + 1}) ===`);
+        
+        // Reset semanal inteligente dos contadores de proteína
+        if (i % 7 === 0 && i > 0) {
+          contadorProteinas = {
+            "Carne Vermelha": 0,
+            "Frango": 0,
+            "Peixe": 0,
+            "Ovo": 0,
+            "Vegetariano": 0
+          };
+          console.log("♻️ Resetando limites de proteína para nova semana");
+        }
         
         let receitasDia: any[] = [];
         let custoDia = 0;
