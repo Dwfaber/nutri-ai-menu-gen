@@ -862,12 +862,12 @@ Deno.serve(async (req) => {
             if (!tipoPP1 || tipoPP1 === "desconhecido") {
               console.warn(`⚠️ Proteína sem tipo definido: ${pp1.nome}`);
             }
-            if (tipoPP1 === "carne_vermelha") {
+            if (tipoPP1 === "Carne Vermelha") {
               if (contadorCarnesVermelhas >= 2) {
                 console.log(`⚠️ Limite de carne vermelha atingido, buscando alternativa para PP1`);
                 const alternativa = receitasPool.find(r => 
                   r.categoria === "Proteína Principal 1" && 
-                  r.tipo_proteina !== "carne_vermelha" &&
+                  r.tipo_proteina !== "Carne Vermelha" &&
                   (!proteinGrams || r.nome.toUpperCase().includes(`${proteinGrams}G`))
                 );
                 if (alternativa) {
@@ -917,12 +917,12 @@ Deno.serve(async (req) => {
             if (!tipoPP2 || tipoPP2 === "desconhecido") {
               console.warn(`⚠️ Proteína sem tipo definido: ${pp2.nome}`);
             }
-            if (tipoPP2 === "carne_vermelha") {
+            if (tipoPP2 === "Carne Vermelha") {
               if (contadorCarnesVermelhas >= 2) {
                 console.log(`⚠️ Limite de carne vermelha atingido, buscando alternativa para PP2`);
                 const alternativa = receitasPool.find(r => 
                   r.categoria === "Proteína Principal 2" && 
-                  r.tipo_proteina !== "carne_vermelha" &&
+                  r.tipo_proteina !== "Carne Vermelha" &&
                   (!proteinGrams || r.nome.toUpperCase().includes(`${proteinGrams}G`))
                 );
                 if (alternativa) {
