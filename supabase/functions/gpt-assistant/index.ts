@@ -152,68 +152,30 @@ Deno.serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    // ========== FUNÇÕES DE CONTROLE DA NUTRICIONISTA ==========
+    // ========== FUNÇÕES DE CATEGORIA - NOVA ESTRUTURA ==========
     
-    // Identifica tipo da proteína baseado no nome (EXPANDIDO COM LOGGING)
-    function getProteinType(name: string): string | null {
-      const nomeLower = name.toLowerCase();
-      console.log(`🔍 Analisando proteína: "${name}" → "${nomeLower}"`);
-      
-      for (const [tipo, palavras] of Object.entries(PROTEIN_TYPES)) {
-        const match = palavras.find(p => nomeLower.includes(p));
-        if (match) {
-          console.log(`✅ Proteína "${name}" classificada como "${tipo}" (match: "${match}")`);
-          return tipo;
-        }
-      }
-      
-      console.log(`❌ "${name}" rejeitada para proteína (sem proteína detectada)`);
-      return null;
+    // Helpers específicos para cada categoria (seguindo padrão do escolherSucosDia)
+    function escolherSaladaDia(tipo: "verdura" | "legume", pool: any[]) {
+      const tipoMapeado = tipo === "verdura" ? "verduras" : "legumes_cozidos";
+      const candidatas = pool.filter(s => s.tipo === tipoMapeado);
+      if (candidatas.length === 0) return null;
+      const selecionada = candidatas[Math.floor(Math.random() * candidatas.length)];
+      return { id: selecionada.produto_base_id, nome: selecionada.nome };
     }
 
-    // Corrigir inferência PP1 vs PP2 e validação rigorosa
-    function inferirCategoria(nome: string): string {
-      const nomeUpper = nome.toUpperCase();
-      const lower = nome.toLowerCase();
-      
-      // 1. PROTEÍNA
-      if (getProteinType(nome)) {
-        if (/(filé|bife|cox|peito|assado|grelhado|costela|cupim|ensopado|almôndega|almondega|pernil|acém|strogonoff|estrogonofe|cozido|rabada|iscas)/.test(lower)) {
-          return 'Proteína Principal 1';
-        }
-        return 'Proteína Principal 2';
+    function escolherGuarnicaoDia(pool: any[]) {
+      if (!pool || pool.length === 0) return null;
+      const selecionada = pool[Math.floor(Math.random() * pool.length)];
+      return { id: selecionada.produto_base_id, nome: selecionada.nome };
+    }
+
+    function escolherSobremesaDia(pool: any[]) {
+      if (!pool || pool.length === 0) {
+        const idx = Math.floor(Math.random() * SOBREMESAS.length);
+        return { id: -5, nome: SOBREMESAS[idx] };
       }
-
-      // 2. ARROZ
-      if (lower.includes("arroz")) return "Arroz Branco";
-
-      // 3. FEIJÃO
-      if (lower.includes("feijão") || lower.includes("feijao")) return "Feijão";
-
-      // 4. SUCOS
-      if (/(suco|refresco|bebida)/.test(lower)) return "Suco 1";
-
-      // 5. SOBREMESAS
-      if (/(bolo|pudim|mousse|doce|fruta|gelatina|sobremesa|brigadeiro|torta)/.test(lower)) {
-        return "Sobremesa";
-      }
-
-      // 6. Salada 2 (Legumes e maionese)
-      if (/(abóbora|abobora|cenoura|beterraba|chuchu|macarronese|maionese|colorida|salada russa|salada mista)/.test(lower)) {
-        return "Salada 2 (Legumes)";
-      }
-
-      // 7. Salada 1 (Verduras frescas)
-      if (/(alface|rúcula|couve|espinafre|folha|verdura|agrião|acelga|almeirão)/.test(lower)) {
-        return "Salada 1 (Verduras)";
-      }
-
-      // 8. Guarnição (sem carne)
-      if (/(batata|mandioca|purê|polenta|farofa|macarrão|nhoque|refogado|escondidinho|quiche|lasanha)/.test(lower)) {
-        return "Guarnição";
-      }
-
-      return "Guarnição";
+      const selecionada = pool[Math.floor(Math.random() * pool.length)];
+      return { id: selecionada.produto_base_id, nome: selecionada.nome };
     }
 
     // Fallback para categorias vazias
@@ -285,92 +247,20 @@ Deno.serve(async (req) => {
       return await fallbackReceita(categoria);
     }
 
-    // Valida categoria para não cruzar (ex: sobremesa != frango) - FILTRO RIGOROSO
-    function validarCategoriaReceita(receita: any, categoria: string): boolean {
+    // ========== VALIDAÇÃO SIMPLIFICADA ==========
+    // Validação básica apenas para sobremesas (outras categorias usam tabelas específicas)
+    function validarSobremesa(receita: any): boolean {
       const nome = receita.nome?.toLowerCase() || receita.name?.toLowerCase() || '';
       
-      if (categoria === "Guarnição") {
-        // CORREÇÃO CRÍTICA: Verificar se é proteína usando tabela estruturada
-        if (getProteinType(nome)) {
-          console.log(`❌ ${receita.nome} rejeitada para guarnição (é proteína)`);
-          return false;
-        }
-        
-        // NOVO: Verificar se está na tabela de guarnições estruturada
-        if (guarnicoesDisponiveis) {
-          const isGuarnicao = guarnicoesDisponiveis.some(g => 
-            g.nome.toLowerCase().includes(nome) || nome.includes(g.nome.toLowerCase())
-          );
-          if (!isGuarnicao) {
-            console.log(`❌ ${receita.nome} rejeitada - não está na tabela de guarnições`);
-            return false;
-          }
-        }
-      }
-      
-      if (categoria.includes("sobremesa") || categoria.includes("Sobremesa")) {
-        // Sobremesa RIGOROSA: rejeita qualquer prato salgado/proteína/massa
-        if (/(carne|frango|peixe|ovo|arroz|feijão|massa|macarrão|nhoque|lasanha|strogonoff|hamburguer|proteína|sal)/.test(nome)) {
-          console.log(`❌ ${receita.nome} rejeitada para sobremesa`);
-          return false;
-        }
-      }
-      
-      if (categoria.includes("suco") || categoria.includes("Suco")) {
-        // Suco NÃO pode ter salada
-        if (["salada","alface","tomate","pepino"].some(w => nome.includes(w))) {
-          console.log(`❌ ${receita.nome} rejeitada para suco (contém salada)`);
-          return false;
-        }
-      }
-      
-      if (categoria.includes("salada") || categoria.includes("Salada")) {
-        // Salada NÃO pode ter suco
-        if (["suco","refresco","bebida"].some(w => nome.includes(w))) {
-          console.log(`❌ ${receita.nome} rejeitada para salada (contém suco)`);
-          return false;
-        }
-      }
-      
-      if (categoria.includes("Proteína")) {
-        // Proteína DEVE ter proteína
-        const tipoProteina = getProteinType(nome);
-        if (!tipoProteina) {
-          console.log(`❌ ${receita.nome} rejeitada para proteína (sem proteína detectada)`);
-          return false;
-        }
+      // Sobremesa RIGOROSA: rejeita qualquer prato salgado/proteína/massa
+      if (/(carne|frango|peixe|ovo|arroz|feijão|massa|macarrão|nhoque|lasanha|strogonoff|hamburguer|proteína|sal)/.test(nome)) {
+        console.log(`❌ ${receita.nome} rejeitada para sobremesa`);
+        return false;
       }
       
       return true;
     }
 
-    // Função de escolha com variedade
-    function escolherReceita(categoria: string, pool: any[], receitasUsadas: string[] = []) {
-      const lista = pool.filter(r => {
-        const validCategoria = r.categoria === categoria || r.category === categoria;
-        const naoUsada = !receitasUsadas.includes(r.nome || r.name);
-        const categoriaValida = validarCategoriaReceita(r, categoria);
-        return validCategoria && naoUsada && categoriaValida;
-      });
-      
-      if (!lista.length) {
-        // Fallback: ignora "já usado" mas mantém validação de categoria
-        const listaFallback = pool.filter(r => {
-          const validCategoria = r.categoria === categoria || r.category === categoria;
-          const categoriaValida = validarCategoriaReceita(r, categoria);
-          return validCategoria && categoriaValida;
-        });
-        
-        if (listaFallback.length > 0) {
-          const idx = Math.floor(Math.random() * listaFallback.length);
-          return { ...listaFallback[idx] };
-        }
-        return null;
-      }
-      
-      const idx = Math.floor(Math.random() * lista.length);
-      return { ...lista[idx] };
-    }
 
     // FUNÇÃO AUXILIAR PARA DETECTAR E CORRIGIR UNIDADES
     function detectarUnidadeProduto(descricao) {
@@ -1086,71 +976,97 @@ Deno.serve(async (req) => {
                 custo_total: (catConfig.categoria === 'Arroz Branco' ? 0.15 : 0.25) * mealQuantity
               };
             }
-            } else if (catConfig.codigo === 'SUCO1' || catConfig.codigo === 'SUCO2') {
-               // CORREÇÃO: Usar configuração correta carregada do cliente
-               console.log("🧃 Configuração de suco do cliente:", JSON.stringify(juiceConfig));
+          } else if (catConfig.codigo === 'SUCO1' || catConfig.codigo === 'SUCO2') {
+            // CORREÇÃO: Usar configuração correta carregada do cliente
+            console.log("🧃 Configuração de suco do cliente:", JSON.stringify(juiceConfig));
+          
+            try {
+              // CORREÇÃO: Usar configuração correta do cliente
+              const [suco1, suco2] = escolherSucosDia(juiceConfig);
+              const sucoEscolhido = catConfig.codigo === 'SUCO1' ? suco1 : suco2;
+              
+              console.log(`🧃 Suco escolhido para ${catConfig.codigo}:`, {
+                id: sucoEscolhido.id,
+                nome: sucoEscolhido.nome
+              });
+              
+              // Buscar custo real do produto (tentativa de encontrar por nome)
+              const { data: precoProduto } = await supabase
+                .from('co_solicitacao_produto_listagem')
+                .select('preco, produto_base_id')
+                .ilike('descricao', `%${sucoEscolhido.nome.split(' ').pop()}%`) // busca por parte do nome
+                .gt('preco', 0)
+                .limit(1)
+                .maybeSingle();
              
-              try {
-                // CORREÇÃO: Usar configuração correta do cliente
-                const [suco1, suco2] = escolherSucosDia(juiceConfig);
-                const sucoEscolhido = catConfig.codigo === 'SUCO1' ? suco1 : suco2;
-                
-                console.log(`🧃 Suco escolhido para ${catConfig.codigo}:`, {
-                  id: sucoEscolhido.id,
-                  nome: sucoEscolhido.nome
-                });
-                
-                // Buscar custo real do produto (tentativa de encontrar por nome)
-                const { data: precoProduto } = await supabase
-                  .from('co_solicitacao_produto_listagem')
-                  .select('preco, produto_base_id')
-                  .ilike('descricao', `%${sucoEscolhido.nome.split(' ').pop()}%`) // busca por parte do nome
-                  .gt('preco', 0)
-                  .limit(1)
-                  .maybeSingle();
-               
-                const custoSuco = precoProduto?.preco ? (precoProduto.preco * 0.1) : 0.40; // 10% do preço ou fallback
-                
-                receita = {
-                  id: sucoEscolhido.id,
-                  nome: sucoEscolhido.nome,
-                  custo_por_refeicao: custoSuco,
-                  custo_total: custoSuco * mealQuantity
-                };
-                
-                console.log(`✅ Suco configurado: ${sucoEscolhido.nome} - R$ ${custoSuco.toFixed(2)}`);
-                
-              } catch (error) {
-                console.warn(`Erro ao configurar suco: ${error.message}`);
-                // Fallback para suco padrão
-                receita = {
-                  id: catConfig.codigo === 'SUCO1' ? 3001 : 3002,
-                  nome: catConfig.codigo === 'SUCO1' ? 'Suco Natural Laranja' : 'Suco Natural Limão',
-                  custo_por_refeicao: 0.40,
-                  custo_total: 0.40 * mealQuantity
-                };
-              }
-          } else {
-            // Receitas variáveis com controle de variedade
-            if (catConfig.codigo === 'GUARNICAO') {
-              receita = escolherReceita(catConfig.categoria, receitasPool, guarnicoesUsadas);
-              if (receita) {
-                const resultado = await calculateSimpleCost(receita.id, mealQuantity);
-                if (resultado.custo_por_refeicao > 0) {
-                  receita.custo_por_refeicao = resultado.custo_por_refeicao;
-                  receita.nome = resultado.nome;
-                  guarnicoesUsadas.push(receita.nome);
-                }
-              }
-            } else {
-              receita = escolherReceita(catConfig.categoria, receitasPool);
-              if (receita) {
-                const resultado = await calculateSimpleCost(receita.id, mealQuantity);
-                if (resultado.custo_por_refeicao > 0) {
-                  receita.custo_por_refeicao = resultado.custo_por_refeicao;
-                  receita.nome = resultado.nome;
-                }
-              }
+              const custoSuco = precoProduto?.preco ? (precoProduto.preco * 0.1) : 0.40; // 10% do preço ou fallback
+              
+              receita = {
+                id: sucoEscolhido.id,
+                nome: sucoEscolhido.nome,
+                custo_por_refeicao: custoSuco,
+                custo_total: custoSuco * mealQuantity
+              };
+              
+              console.log(`✅ Suco configurado: ${sucoEscolhido.nome} - R$ ${custoSuco.toFixed(2)}`);
+              
+            } catch (error) {
+              console.warn(`Erro ao configurar suco: ${error.message}`);
+              // Fallback para suco padrão
+              receita = {
+                id: catConfig.codigo === 'SUCO1' ? 3001 : 3002,
+                nome: catConfig.codigo === 'SUCO1' ? 'Suco Natural Laranja' : 'Suco Natural Limão',
+                custo_por_refeicao: 0.40,
+                custo_total: 0.40 * mealQuantity
+              };
+            }
+          } else if (catConfig.codigo === 'GUARNICAO') {
+            // NOVO: Usar helper dedicado para guarnições
+            const guarnicaoEscolhida = escolherGuarnicaoDia(guarnicoesDisponiveis);
+            if (guarnicaoEscolhida) {
+              const resultado = await calculateSimpleCost(guarnicaoEscolhida.id, mealQuantity);
+              receita = {
+                id: guarnicaoEscolhida.id,
+                nome: guarnicaoEscolhida.nome,
+                custo_por_refeicao: resultado.custo_por_refeicao || 1.0,
+                custo_total: (resultado.custo_por_refeicao || 1.0) * mealQuantity
+              };
+              guarnicoesUsadas.push(guarnicaoEscolhida.nome);
+            }
+          } else if (catConfig.codigo === 'SALADA1') {
+            // NOVO: Usar helper dedicado para saladas de verdura
+            const saladaEscolhida = escolherSaladaDia("verdura", saladasDisponiveis);
+            if (saladaEscolhida) {
+              const resultado = await calculateSimpleCost(saladaEscolhida.id, mealQuantity);
+              receita = {
+                id: saladaEscolhida.id,
+                nome: saladaEscolhida.nome,
+                custo_por_refeicao: resultado.custo_por_refeicao || 0.5,
+                custo_total: (resultado.custo_por_refeicao || 0.5) * mealQuantity
+              };
+            }
+          } else if (catConfig.codigo === 'SALADA2') {
+            // NOVO: Usar helper dedicado para saladas de legume
+            const saladaEscolhida = escolherSaladaDia("legume", saladasDisponiveis);
+            if (saladaEscolhida) {
+              const resultado = await calculateSimpleCost(saladaEscolhida.id, mealQuantity);
+              receita = {
+                id: saladaEscolhida.id,
+                nome: saladaEscolhida.nome,
+                custo_por_refeicao: resultado.custo_por_refeicao || 0.6,
+                custo_total: (resultado.custo_por_refeicao || 0.6) * mealQuantity
+              };
+            }
+          } else if (catConfig.codigo === 'SOBREMESA') {
+            // NOVO: Usar helper dedicado para sobremesas
+            const sobremesaEscolhida = escolherSobremesaDia([]);
+            if (sobremesaEscolhida) {
+              receita = {
+                id: sobremesaEscolhida.id,
+                nome: sobremesaEscolhida.nome,
+                custo_por_refeicao: 0.5,
+                custo_total: 0.5 * mealQuantity
+              };
             }
           }
 
@@ -1189,8 +1105,7 @@ Deno.serve(async (req) => {
             
             // Buscar alternativa mais barata da mesma categoria
             const alternativas = receitasPool.filter(r => 
-              r.categoria === maisCaro.categoria && 
-              validarCategoriaReceita(r, maisCaro.categoria)
+              r.categoria === maisCaro.categoria
             );
             
             for (const alt of alternativas) {
