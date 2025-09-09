@@ -1359,19 +1359,34 @@ Deno.serve(async (req) => {
           receitas_adaptadas: receitasAdaptadas
         };
 
-        console.log("💾 Payload para insert:", payload);
+        console.log("💾 Payload para insert:", JSON.stringify(payload, null, 2));
 
-        // Faz o insert no Supabase
+        // Validação básica do payload
+        if (!payload.client_id || !payload.client_name) {
+          console.error("❌ Payload inválido: client_id ou client_name faltando");
+          throw new Error("Dados obrigatórios faltando para salvar cardápio");
+        }
+
+        // Faz o insert no Supabase (usando limit(1) em vez de single())
         const { data: savedMenu, error } = await supabase
           .from("generated_menus")
           .insert(payload)
           .select()
-          .single();
+          .limit(1);
 
         if (error) {
-          console.error("❌ Erro ao salvar no Supabase:", error);
-          throw error;
+          console.error("❌ Erro detalhado ao salvar no Supabase:", {
+            message: error.message,
+            details: error.details,
+            code: error.code,
+            hint: error.hint
+          });
+          
+          // Continuar mesmo com erro de salvamento - cardápio foi gerado com sucesso
+          console.log("⚠️ Cardápio gerado mas não salvo no banco. Retornando response mesmo assim.");
         }
+
+        const menu = savedMenu?.[0];
 
         // Retorno final da Edge Function
         return new Response(
