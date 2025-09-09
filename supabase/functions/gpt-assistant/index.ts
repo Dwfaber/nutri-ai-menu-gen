@@ -623,9 +623,14 @@ Deno.serve(async (req) => {
           
           console.log("CONTRATO:", contratoData, contratoError);
           
-          if (contratoData) {
-            return { custo_diario: 9.00, nome_filial: contratoData.nome_fantasia };
-          }
+        if (contratoData) {
+          return { 
+            custo_diario: 9.00, 
+            nome_filial: contratoData.nome_fantasia,
+            protein_grams_pp1: contratoData.protein_grams_pp1,
+            protein_grams_pp2: contratoData.protein_grams_pp2
+          };
+        }
           
           return { custo_diario: 9.00 };
         }
@@ -638,7 +643,9 @@ Deno.serve(async (req) => {
         
         return {
           custo_diario: custoMedio,
-          nome_filial: data.nome_fantasia || data.razao_social
+          nome_filial: data.nome_fantasia || data.razao_social,
+          protein_grams_pp1: 100, // Default from custos_filiais
+          protein_grams_pp2: 90   // Default from custos_filiais
         };
         
       } catch (error) {
@@ -759,9 +766,11 @@ Deno.serve(async (req) => {
       numDays: number,
       periodo: string,
       diasUteis: boolean,
-      supabase: any
+      supabase: any,
+      gramsPP1: number,
+      gramsPP2: number
     }, budget: number, origemOrcamento: string) {
-      const { mealQuantity, numDays, periodo, diasUteis, supabase } = config;
+      const { mealQuantity, numDays, periodo, diasUteis, supabase, gramsPP1, gramsPP2 } = config;
       
       // NOVO: Usar configurações do cliente carregadas anteriormente
       console.log('🔧 Gramagem configurada:', { proteinGramsPP1, proteinGramsPP2 });
@@ -838,7 +847,7 @@ Deno.serve(async (req) => {
           if (pp1Result.custo_por_refeicao > 0) {
             pp1.custo_por_refeicao = pp1Result.custo_por_refeicao;
             pp1.nome = pp1Result.nome;
-            pp1.grams = proteinGramsPP1;
+            pp1.grams = gramsPP1;
             
             // Controle de carne vermelha
             const tipoPP1 = getProteinType(pp1.nome);
@@ -855,7 +864,7 @@ Deno.serve(async (req) => {
                     pp1 = alternativa;
                     pp1.custo_por_refeicao = altResult.custo_por_refeicao;
                     pp1.nome = altResult.nome;
-                    pp1.grams = proteinGramsPP1;
+                    pp1.grams = gramsPP1;
                   }
                 }
               } else {
@@ -870,7 +879,7 @@ Deno.serve(async (req) => {
           if (pp2Result.custo_por_refeicao > 0) {
             pp2.custo_por_refeicao = pp2Result.custo_por_refeicao;
             pp2.nome = pp2Result.nome;
-            pp2.grams = proteinGramsPP2;
+            pp2.grams = gramsPP2;
             
             // Garantir tipos diferentes no mesmo dia
             if (pp1 && getProteinType(pp1.nome) === getProteinType(pp2.nome)) {
@@ -885,7 +894,7 @@ Deno.serve(async (req) => {
                   pp2 = alternativa;
                   pp2.custo_por_refeicao = altResult.custo_por_refeicao;
                   pp2.nome = altResult.nome;
-                  pp2.grams = proteinGramsPP2;
+                  pp2.grams = gramsPP2;
                 }
               }
             }
@@ -1165,26 +1174,32 @@ Deno.serve(async (req) => {
         if (filialId) {
           dadosFilial = await buscarOrcamentoFilial(filialId);
           budget = dadosFilial.custo_diario || 9.00;
-          console.log(`💰 Dados filial encontrados:`, { budget, dadosFilial: !!dadosFilial });
-        } else {
-          console.warn(`⚠️ Sem filialId - usando fallback`);
-        }
-        
-        console.log(`💰 Orçamento: R$ ${budget.toFixed(2)}/refeição`);
-        
-        // ========== NOVA LÓGICA COM REGRAS DA NUTRICIONISTA ==========
-        const periodo = requestData.periodo || 'semanal';
-        const diasUteis = requestData.diasUteis || false;
-        
-        const origemOrcamento = dadosFilial ? "custos_filiais" : "fallback";
-        
-        const cardapioPorDia = await gerarCardapioComRegras({
-          mealQuantity,
-          numDays,
-          periodo,
-          diasUteis,
-          supabase
-        }, budget, origemOrcamento);
+        console.log(`💰 Dados filial encontrados:`, { budget, dadosFilial: !!dadosFilial });
+      } else {
+        console.warn(`⚠️ Sem filialId - usando fallback`);
+      }
+      
+      console.log(`💰 Orçamento: R$ ${budget.toFixed(2)}/refeição`);
+      
+      // ✅ Extrair gramagens do contrato ou usar defaults
+      const gramsPP1 = dadosFilial?.protein_grams_pp1 ?? 100;
+      const gramsPP2 = dadosFilial?.protein_grams_pp2 ?? 90;
+      
+      // ========== NOVA LÓGICA COM REGRAS DA NUTRICIONISTA ==========
+      const periodo = requestData.periodo || 'semanal';
+      const diasUteis = requestData.diasUteis || false;
+      
+      const origemOrcamento = dadosFilial ? "custos_filiais" : "fallback";
+      
+      const cardapioPorDia = await gerarCardapioComRegras({
+        mealQuantity,
+        numDays,
+        periodo,
+        diasUteis,
+        supabase,
+        gramsPP1,
+        gramsPP2
+      }, budget, origemOrcamento);
 
         // A configuração de sucos já é processada dentro de gerarCardapioComRegras
         // através da função escolherSucosDia(), não precisamos do RPC redundante
