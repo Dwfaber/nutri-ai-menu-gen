@@ -50,11 +50,32 @@ const ESTRUTURA_CARDAPIO = {
   SOBREMESA: { categoria: 'Sobremesa', budget_percent: 2 }
 };
 
-// ========== LISTAS MESTRE DE SUCOS ==========
-const SUCOS_PRO_MIX = ["Pro Mix Laranja", "Pro Mix Goiaba", "Pro Mix Manga", "Pro Mix Uva", "Pro Mix Maracujá"];
-const SUCOS_DIET = ["Diet Uva", "Diet Maracujá", "Diet Laranja", "Diet Limão"];
-const SUCOS_NATURAIS = ["Suco Natural Laranja", "Suco Natural Limão", "Suco Natural Maracujá", "Suco Natural Goiaba"];
-const SUCOS_VITA = ["Vita Suco Caju", "Vita Suco Acerola", "Vita Suco Manga", "Vita Suco Uva"];
+// ========== LISTAS MESTRE DE SUCOS COM IDs FIXOS ==========
+const SUCOS_PRO_MIX = [
+  { id: 1001, nome: "Pro Mix Laranja" },
+  { id: 1002, nome: "Pro Mix Goiaba" },
+  { id: 1003, nome: "Pro Mix Manga" },
+  { id: 1004, nome: "Pro Mix Uva" },
+  { id: 1005, nome: "Pro Mix Maracujá" }
+];
+const SUCOS_DIET = [
+  { id: 2001, nome: "Diet Uva" },
+  { id: 2002, nome: "Diet Maracujá" },
+  { id: 2003, nome: "Diet Laranja" },
+  { id: 2004, nome: "Diet Limão" }
+];
+const SUCOS_NATURAIS = [
+  { id: 3001, nome: "Suco Natural Laranja" },
+  { id: 3002, nome: "Suco Natural Limão" },
+  { id: 3003, nome: "Suco Natural Maracujá" },
+  { id: 3004, nome: "Suco Natural Goiaba" }
+];
+const SUCOS_VITA = [
+  { id: 4001, nome: "Vita Suco Caju" },
+  { id: 4002, nome: "Vita Suco Acerola" },
+  { id: 4003, nome: "Vita Suco Manga" },
+  { id: 4004, nome: "Vita Suco Uva" }
+];
 
 const SOBREMESAS = [
   "Fruta da estação",
@@ -67,7 +88,7 @@ const SOBREMESAS = [
 // ========== FUNÇÕES HELPER PARA SUCOS ==========
 
 // Helper => escolhe 2 diferentes do pool
-function sampleTwoDistinct(pool: string[]): [string, string] {
+function sampleTwoDistinct(pool: {id: number, nome: string}[]): [{id: number, nome: string}, {id: number, nome: string}] {
   if (pool.length < 2) {
     return [pool[0], pool[0]]; // fallback se só existir 1 no grupo
   }
@@ -76,8 +97,11 @@ function sampleTwoDistinct(pool: string[]): [string, string] {
 }
 
 // Função para escolher os 2 sucos do dia
-function escolherSucosDia(juiceConfig: any): [string, string] {
-  if (!juiceConfig) return ["Suco Natural Laranja", "Suco Natural Maracujá"];
+function escolherSucosDia(juiceConfig: any): [{id: number, nome: string}, {id: number, nome: string}] {
+  if (!juiceConfig) return [
+    { id: 3001, nome: "Suco Natural Laranja" }, 
+    { id: 3003, nome: "Suco Natural Maracujá" }
+  ];
 
   const grupos = [];
   if (juiceConfig.use_pro_mix) grupos.push(SUCOS_PRO_MIX);
@@ -1021,40 +1045,43 @@ Deno.serve(async (req) => {
               try {
                 // CORREÇÃO: Usar configuração correta do cliente
                 const [suco1, suco2] = escolherSucosDia(juiceConfig);
-               const nomeEscolhido = catConfig.codigo === 'SUCO1' ? suco1 : suco2;
+                const sucoEscolhido = catConfig.codigo === 'SUCO1' ? suco1 : suco2;
+                
+                console.log(`🧃 Suco escolhido para ${catConfig.codigo}:`, {
+                  id: sucoEscolhido.id,
+                  nome: sucoEscolhido.nome
+                });
+                
+                // Buscar custo real do produto (tentativa de encontrar por nome)
+                const { data: precoProduto } = await supabase
+                  .from('co_solicitacao_produto_listagem')
+                  .select('preco, produto_base_id')
+                  .ilike('descricao', `%${sucoEscolhido.nome.split(' ').pop()}%`) // busca por parte do nome
+                  .gt('preco', 0)
+                  .limit(1)
+                  .maybeSingle();
                
-               console.log(`🧃 Suco escolhido para ${catConfig.codigo}: ${nomeEscolhido}`);
-               
-               // Buscar custo real do produto (tentativa de encontrar por nome)
-               const { data: precoProduto } = await supabase
-                 .from('co_solicitacao_produto_listagem')
-                 .select('preco, produto_base_id')
-                 .ilike('descricao', `%${nomeEscolhido.split(' ').pop()}%`) // busca por parte do nome
-                 .gt('preco', 0)
-                 .limit(1)
-                 .maybeSingle();
-               
-               const custoSuco = precoProduto?.preco ? (precoProduto.preco * 0.1) : 0.40; // 10% do preço ou fallback
-               
-               receita = {
-                 id: precoProduto?.produto_base_id || -999,
-                 nome: nomeEscolhido,
-                 custo_por_refeicao: custoSuco,
-                 custo_total: custoSuco * mealQuantity
-               };
-               
-               console.log(`✅ Suco configurado: ${nomeEscolhido} - R$ ${custoSuco.toFixed(2)}`);
-               
-             } catch (error) {
-               console.warn(`Erro ao configurar suco: ${error.message}`);
-               // Fallback para suco padrão
-               receita = {
-                 id: -999,
-                 nome: catConfig.codigo === 'SUCO1' ? 'Suco Natural Laranja' : 'Suco Natural Limão',
-                 custo_por_refeicao: 0.40,
-                 custo_total: 0.40 * mealQuantity
-               };
-             }
+                const custoSuco = precoProduto?.preco ? (precoProduto.preco * 0.1) : 0.40; // 10% do preço ou fallback
+                
+                receita = {
+                  id: sucoEscolhido.id,
+                  nome: sucoEscolhido.nome,
+                  custo_por_refeicao: custoSuco,
+                  custo_total: custoSuco * mealQuantity
+                };
+                
+                console.log(`✅ Suco configurado: ${sucoEscolhido.nome} - R$ ${custoSuco.toFixed(2)}`);
+                
+              } catch (error) {
+                console.warn(`Erro ao configurar suco: ${error.message}`);
+                // Fallback para suco padrão
+                receita = {
+                  id: catConfig.codigo === 'SUCO1' ? 3001 : 3002,
+                  nome: catConfig.codigo === 'SUCO1' ? 'Suco Natural Laranja' : 'Suco Natural Limão',
+                  custo_por_refeicao: 0.40,
+                  custo_total: 0.40 * mealQuantity
+                };
+              }
           } else {
             // Receitas variáveis com controle de variedade
             if (catConfig.codigo === 'GUARNICAO') {
