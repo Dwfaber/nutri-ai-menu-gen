@@ -231,62 +231,58 @@ Deno.serve(async (req) => {
     }
 
     // Escolha de proteína com validação rigorosa usando tabela estruturada
-    async function escolherProteina(categoria: string, receitasPool: any[], mealQuantity: number, gramagemSelecionada?: string) {
-      // NOVO: Primeiro tentar com tabela estruturada de proteínas
-      let proteinasFiltradasPorGramagem = proteinasDisponiveis;
+    async function escolherProteina(categoria: string, pool: any[], mealQuantity: number, proteinGrams?: string): Promise<any> {
+      console.log(`🥩 Buscando ${categoria}...`);
+      
+      // Filtrar apenas receitas que são realmente proteínas (têm tipo_proteina)
+      const proteinasDisponiveis = pool.filter(r => 
+        r.categoria === categoria && r.tipo_proteina
+      );
+      
+      if (proteinasDisponiveis.length === 0) {
+        console.log(`⚠️ Nenhuma proteína encontrada para ${categoria}`);
+        return await fallbackReceita(categoria);
+      }
       
       // Filtrar por gramagem se especificada
-      if (gramagemSelecionada && proteinasDisponiveis) {
+      let proteinasFiltradasPorGramagem = proteinasDisponiveis;
+      if (proteinGrams) {
         proteinasFiltradasPorGramagem = proteinasDisponiveis.filter(p => 
-          p.nome.toUpperCase().includes(`${gramagemSelecionada}G`)
+          p.nome.toUpperCase().includes(`${proteinGrams}G`)
         );
-        console.log(`🥩 Filtrando proteínas por ${gramagemSelecionada}g: ${proteinasFiltradasPorGramagem.length} encontradas`);
-      }
-      
-      if (proteinasFiltradasPorGramagem && proteinasFiltradasPorGramagem.length > 0) {
-        for (let tentativa = 0; tentativa < 10; tentativa++) {
-          const proteinaIndex = Math.floor(Math.random() * proteinasFiltradasPorGramagem.length);
-          const proteinaEstruturada = proteinasFiltradasPorGramagem[proteinaIndex];
-          
-          const tipo = getProteinType(proteinaEstruturada.nome);
-          if (tipo && contadorProteinas[tipo] < LIMITE_PROTEINAS_SEMANA[tipo]) {
-            console.log(`✅ Proteína estruturada selecionada: ${proteinaEstruturada.nome} (${tipo})`);
-            contadorProteinas[tipo]++;
-            
-            const custo = await calculateSimpleCost(proteinaEstruturada.receita_id_legado, mealQuantity);
-            return {
-              id: proteinaEstruturada.receita_id_legado,
-              nome: proteinaEstruturada.nome,
-              categoria: categoria,
-              custo_por_refeicao: custo.custo_por_refeicao || 2.5
-            };
-          }
-        }
-      }
-
-      // FALLBACK: Usar pool original com validação
-      for (let tentativa = 0; tentativa < 10; tentativa++) {
-        const receita = escolherReceita(categoria, receitasPool);
-        if (!receita) break;
         
-        const custo = await calculateSimpleCost(receita.id, mealQuantity);
-        const tipo = getProteinType(receita.nome);
-
-        if (tipo && contadorProteinas[tipo] < LIMITE_PROTEINAS_SEMANA[tipo]) {
-          console.log(`✅ Proteína pool selecionada: ${receita.nome} (${tipo})`);
-          contadorProteinas[tipo]++;
-          return { ...receita, custo_por_refeicao: custo.custo_por_refeicao, nome: custo.nome };
+        if (proteinasFiltradasPorGramagem.length === 0) {
+          console.log(`⚠️ Nenhuma proteína encontrada com ${proteinGrams}G, usando todas`);
+          proteinasFiltradasPorGramagem = proteinasDisponiveis;
         }
       }
       
-      // FALLBACK CRÍTICO: Sempre retornar pelo menos uma proteína
-      console.log('⚠️ FALLBACK CRÍTICO: Nenhuma proteína encontrada, usando fallback');
-      return {
-        id: '2000', // ID fixo para fallback
-        nome: 'FRANGO GRELHADO',
-        categoria: categoria,
-        custo_por_refeicao: 3.0
-      };
+      // Tentar encontrar proteína que respeite limites semanais
+      for (let tentativa = 0; tentativa < proteinasFiltradasPorGramagem.length; tentativa++) {
+        const proteinaIndex = Math.floor(Math.random() * proteinasFiltradasPorGramagem.length);
+        const proteinaEstruturada = proteinasFiltradasPorGramagem[proteinaIndex];
+        
+        const tipo = proteinaEstruturada.tipo_proteina;
+        if (tipo && contadorProteinas[tipo] < LIMITE_PROTEINAS_SEMANA[tipo]) {
+          console.log(`✅ Proteína estruturada selecionada: ${proteinaEstruturada.nome} (${tipo})`);
+          contadorProteinas[tipo]++;
+          
+          const custo = await calculateSimpleCost(proteinaEstruturada.id, mealQuantity);
+          return {
+            id: proteinaEstruturada.id,
+            nome: proteinaEstruturada.nome,
+            categoria: categoria,
+            tipo_proteina: tipo,
+            custo_por_refeicao: custo.custo_por_refeicao || 2.5,
+            grams: proteinGrams
+          };
+        } else {
+          console.log(`⚠️ ${proteinaEstruturada.nome} (${tipo}) excederia limite semanal`);
+        }
+      }
+      
+      console.log(`⚠️ Todas as proteínas ${categoria} excederiam limites, usando fallback`);
+      return await fallbackReceita(categoria);
     }
 
     // Valida categoria para não cruzar (ex: sobremesa != frango) - FILTRO RIGOROSO
@@ -838,22 +834,74 @@ Deno.serve(async (req) => {
         "Vegetariano": 0
       };
       
-      // Buscar todas as receitas disponíveis
-      console.log('🔍 Carregando pool de receitas...');
-      const { data: allRecipes } = await supabase
-        .from('receita_ingredientes')
-        .select('receita_id_legado, nome')
-        .limit(200);
+      // ========== CARREGAR RECEITAS POR CATEGORIA ESPECÍFICA ==========
+      console.log('🔍 Carregando receitas por categoria...');
       
-      if (allRecipes) {
-        receitasPool = allRecipes.map(r => ({
-          id: r.receita_id_legado,
-          nome: r.nome,
-          name: r.nome,
-          categoria: inferirCategoria(r.nome),
-          category: inferirCategoria(r.nome)
-        }));
+      // Carregar proteínas disponíveis
+      const { data: proteinasDisponiveis } = await supabase
+        .from('proteinas_disponiveis')
+        .select('receita_id_legado, nome, tipo, subcategoria')
+        .eq('ativo', true);
+      
+      // Carregar saladas disponíveis
+      const { data: saladasDisponiveis } = await supabase
+        .from('saladas_disponiveis')
+        .select('receita_id_legado, nome, tipo')
+        .eq('ativo', true);
+      
+      // Carregar guarnições disponíveis
+      const { data: guarnicoesDisponiveis } = await supabase
+        .from('guarnicoes_disponiveis')
+        .select('receita_id_legado, nome, tipo')
+        .eq('ativo', true);
+      
+      // Construir pool categorizado corretamente
+      receitasPool = [];
+      
+      // Adicionar proteínas com categorização correta
+      if (proteinasDisponiveis) {
+        proteinasDisponiveis.forEach(p => {
+          const categoria = p.subcategoria === 'Principal' ? 'Proteína Principal 1' : 'Proteína Principal 2';
+          receitasPool.push({
+            id: p.receita_id_legado,
+            nome: p.nome,
+            name: p.nome,
+            categoria: categoria,
+            category: categoria,
+            tipo_proteina: p.tipo
+          });
+        });
       }
+      
+      // Adicionar saladas
+      if (saladasDisponiveis) {
+        saladasDisponiveis.forEach(s => {
+          receitasPool.push({
+            id: s.receita_id_legado,
+            nome: s.nome,
+            name: s.nome,
+            categoria: 'Salada',
+            category: 'Salada',
+            tipo_salada: s.tipo
+          });
+        });
+      }
+      
+      // Adicionar guarnições
+      if (guarnicoesDisponiveis) {
+        guarnicoesDisponiveis.forEach(g => {
+          receitasPool.push({
+            id: g.receita_id_legado,
+            nome: g.nome,
+            name: g.nome,
+            categoria: 'Guarnição',
+            category: 'Guarnição',
+            tipo_guarnicao: g.tipo
+          });
+        });
+      }
+      
+      console.log(`✅ Pool carregado: ${proteinasDisponiveis?.length || 0} proteínas, ${saladasDisponiveis?.length || 0} saladas, ${guarnicoesDisponiveis?.length || 0} guarnições`);
       
       // Se diasUteis=true → só considera segunda a sexta
       const diasSemana = diasUteis 
@@ -890,7 +938,7 @@ Deno.serve(async (req) => {
             pp1.grams = proteinGrams;
             
             // Controle de carne vermelha
-            const tipoPP1 = getProteinType(pp1.nome);
+            const tipoPP1 = pp1.tipo_proteina || getProteinType(pp1.nome);
             if (tipoPP1 === "Carne Vermelha") {
               if (contadorCarnesVermelhas >= 2) {
                 console.log(`⚠️ Limite de carne vermelha atingido, buscando alternativa para PP1`);
@@ -923,7 +971,7 @@ Deno.serve(async (req) => {
             pp2.grams = proteinGrams;
             
             // Garantir tipos diferentes no mesmo dia
-            if (pp1 && getProteinType(pp1.nome) === getProteinType(pp2.nome)) {
+            if (pp1 && (pp1.tipo_proteina || getProteinType(pp1.nome)) === (pp2.tipo_proteina || getProteinType(pp2.nome))) {
               console.log(`⚠️ Mesmo tipo de proteína no dia, buscando alternativa para PP2`);
               const alternativa = receitasPool.find(r =>
                 r.categoria === "Proteína Principal 2" &&
@@ -942,7 +990,7 @@ Deno.serve(async (req) => {
             }
             
             // Controle de carne vermelha para PP2
-            const tipoPP2 = getProteinType(pp2.nome);
+            const tipoPP2 = pp2.tipo_proteina || getProteinType(pp2.nome);
             if (tipoPP2 === "Carne Vermelha") {
               if (contadorCarnesVermelhas >= 2) {
                 console.log(`⚠️ Limite de carne vermelha atingido, buscando alternativa para PP2`);
@@ -979,7 +1027,7 @@ Deno.serve(async (req) => {
             porcoes: mealQuantity,
             ingredientes: [],
             grams: pp1.grams,
-            protein_type: getProteinType(pp1.nome)
+            protein_type: pp1.tipo_proteina || getProteinType(pp1.nome)
           });
           custoDia += pp1.custo_por_refeicao;
         }
@@ -995,7 +1043,7 @@ Deno.serve(async (req) => {
             porcoes: mealQuantity,
             ingredientes: [],
             grams: pp2.grams,
-            protein_type: getProteinType(pp2.nome)
+            protein_type: pp2.tipo_proteina || getProteinType(pp2.nome)
           });
           custoDia += pp2.custo_por_refeicao;
         }
