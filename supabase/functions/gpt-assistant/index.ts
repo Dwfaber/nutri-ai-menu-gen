@@ -777,14 +777,12 @@ Deno.serve(async (req) => {
       periodo: string,
       diasUteis: boolean,
       supabase: any,
-      gramsPP1: number,
-      gramsPP2: number,
-      proteinGramsSelected?: string
+      proteinGrams: string
     }, budget: number, origemOrcamento: string) {
-      const { mealQuantity, numDays, periodo, diasUteis, supabase, gramsPP1, gramsPP2, proteinGramsSelected } = config;
+      const { mealQuantity, numDays, periodo, diasUteis, supabase, proteinGrams } = config;
       
       // NOVO: Usar configurações do cliente carregadas anteriormente
-      console.log('🔧 Gramagem configurada:', { proteinGramsPP1, proteinGramsPP2 });
+      console.log('📏 Gramagem configurada:', proteinGrams);
       console.log('🧃 Configuração de sucos:', juiceConfig);
       
     let totalDias = periodo === "quinzena" ? 14 : Math.min(numDays, 7);
@@ -850,15 +848,15 @@ Deno.serve(async (req) => {
         // ====== PROTEÍNAS COM CONTROLE DE VARIEDADE ======
         console.log('🥩 Selecionando proteínas...');
         
-        let pp1 = await escolherProteina("Proteína Principal 1", receitasPool, mealQuantity, proteinGramsSelected);
-        let pp2 = await escolherProteina("Proteína Principal 2", receitasPool, mealQuantity, proteinGramsSelected);
+        let pp1 = await escolherProteina("Proteína Principal 1", receitasPool, mealQuantity, proteinGrams);
+        let pp2 = await escolherProteina("Proteína Principal 2", receitasPool, mealQuantity, proteinGrams);
         
         if (pp1) {
           const pp1Result = await calculateSimpleCost(pp1.id, mealQuantity);
           if (pp1Result.custo_por_refeicao > 0) {
             pp1.custo_por_refeicao = pp1Result.custo_por_refeicao;
             pp1.nome = pp1Result.nome;
-            pp1.grams = gramsPP1;
+            pp1.grams = proteinGrams;
             
             // Controle de carne vermelha
             const tipoPP1 = getProteinType(pp1.nome);
@@ -868,7 +866,7 @@ Deno.serve(async (req) => {
                 const alternativa = receitasPool.find(r => 
                   r.categoria === "Proteína Principal 1" && 
                   getProteinType(r.nome) !== "Carne Vermelha" &&
-                  (!proteinGramsSelected || r.nome.toUpperCase().includes(`${proteinGramsSelected}G`))
+                  (!proteinGrams || r.nome.toUpperCase().includes(`${proteinGrams}G`))
                 );
                 if (alternativa) {
                   const altResult = await calculateSimpleCost(alternativa.id, mealQuantity);
@@ -876,7 +874,7 @@ Deno.serve(async (req) => {
                     pp1 = alternativa;
                     pp1.custo_por_refeicao = altResult.custo_por_refeicao;
                     pp1.nome = altResult.nome;
-                    pp1.grams = gramsPP1;
+                    pp1.grams = proteinGrams;
                   }
                 }
               } else {
@@ -891,7 +889,7 @@ Deno.serve(async (req) => {
           if (pp2Result.custo_por_refeicao > 0) {
             pp2.custo_por_refeicao = pp2Result.custo_por_refeicao;
             pp2.nome = pp2Result.nome;
-            pp2.grams = gramsPP2;
+            pp2.grams = proteinGrams;
             
             // Garantir tipos diferentes no mesmo dia
             if (pp1 && getProteinType(pp1.nome) === getProteinType(pp2.nome)) {
@@ -899,7 +897,7 @@ Deno.serve(async (req) => {
               const alternativa = receitasPool.find(r =>
                 r.categoria === "Proteína Principal 2" &&
                 getProteinType(r.nome) !== getProteinType(pp1.nome) &&
-                (!proteinGramsSelected || r.nome.toUpperCase().includes(`${proteinGramsSelected}G`))
+                (!proteinGrams || r.nome.toUpperCase().includes(`${proteinGrams}G`))
               );
               if (alternativa) {
                 const altResult = await calculateSimpleCost(alternativa.id, mealQuantity);
@@ -907,7 +905,7 @@ Deno.serve(async (req) => {
                   pp2 = alternativa;
                   pp2.custo_por_refeicao = altResult.custo_por_refeicao;
                   pp2.nome = altResult.nome;
-                  pp2.grams = gramsPP2;
+                  pp2.grams = proteinGrams;
                 }
               }
             }
@@ -920,7 +918,7 @@ Deno.serve(async (req) => {
                 const alternativa = receitasPool.find(r => 
                   r.categoria === "Proteína Principal 2" && 
                   getProteinType(r.nome) !== "Carne Vermelha" &&
-                  (!proteinGramsSelected || r.nome.toUpperCase().includes(`${proteinGramsSelected}G`))
+                  (!proteinGrams || r.nome.toUpperCase().includes(`${proteinGrams}G`))
                 );
                 if (alternativa) {
                   const altResult = await calculateSimpleCost(alternativa.id, mealQuantity);
@@ -928,7 +926,7 @@ Deno.serve(async (req) => {
                     pp2 = alternativa;
                     pp2.custo_por_refeicao = altResult.custo_por_refeicao;
                     pp2.nome = altResult.nome;
-                    pp2.grams = proteinGramsPP2;
+                    pp2.grams = proteinGrams;
                   }
                 }
               } else {
@@ -1212,9 +1210,7 @@ Deno.serve(async (req) => {
         periodo,
         diasUteis,
         supabase,
-        gramsPP1,
-        gramsPP2,
-        proteinGramsSelected
+        proteinGrams: proteinGramsSelected
       }, budget, origemOrcamento);
 
         // A configuração de sucos já é processada dentro de gerarCardapioComRegras
