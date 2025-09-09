@@ -751,7 +751,7 @@ Deno.serve(async (req) => {
       // Adicionar proteínas com categorização correta
       if (proteinasDisponiveis) {
         proteinasDisponiveis.forEach(p => {
-          const categoria = p.subcategoria === 'Principal' ? 'Proteína Principal 1' : 'Proteína Principal 2';
+          const categoria = p.subcategoria === 'principal_1' ? 'Proteína Principal 1' : 'Proteína Principal 2';
           receitasPool.push({
             id: p.receita_id_legado,
             nome: p.nome,
