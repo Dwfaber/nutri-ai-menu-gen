@@ -553,8 +553,7 @@ Deno.serve(async (req) => {
           return { 
             custo_diario: 9.00, 
             nome_filial: contratoData.nome_fantasia,
-            protein_grams_pp1: contratoData.protein_grams_pp1,
-            protein_grams_pp2: contratoData.protein_grams_pp2
+            protein_grams: contratoData.protein_grams || 100
           };
         }
           
@@ -570,8 +569,7 @@ Deno.serve(async (req) => {
         return {
           custo_diario: custoMedio,
           nome_filial: data.nome_fantasia || data.razao_social,
-          protein_grams_pp1: 100, // Default from custos_filiais
-          protein_grams_pp2: 90   // Default from custos_filiais
+          protein_grams: data.protein_grams || 100 // Default único
         };
         
       } catch (error) {
