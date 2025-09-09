@@ -81,7 +81,8 @@ function escolherSucosDia(juiceConfig: any): [string, string] {
 
   const grupos = [];
   if (juiceConfig.use_pro_mix) grupos.push(SUCOS_PRO_MIX);
-  if (juiceConfig.use_pro_vita) grupos.push(SUCOS_VITA);
+  // ✅ CORREÇÃO: Aceitar tanto use_vita_suco (payload) quanto use_pro_vita (legacy)
+  if (juiceConfig.use_vita_suco || juiceConfig.use_pro_vita) grupos.push(SUCOS_VITA);
   if (juiceConfig.use_suco_diet) grupos.push(SUCOS_DIET);
   if (juiceConfig.use_suco_natural) grupos.push(SUCOS_NATURAIS);
 
@@ -1179,7 +1180,9 @@ Deno.serve(async (req) => {
       const numDays = requestData.numDays || 7;
       // ✅ Configuração consolidada de gramagem (vem do formulário ou contrato, default 100g)
       const proteinGrams = requestData.proteinGrams || requestData.protein_grams || '100';
-      const juiceConfig = requestData.juiceConfig || {};
+      // ✅ Configuração consolidada de sucos com defaults para garantir funcionamento
+      const DEFAULT_JUICE_CONFIG = { use_pro_mix: true, use_vita_suco: false, use_suco_diet: false, use_suco_natural: true };
+      const juiceConfig = { ...DEFAULT_JUICE_CONFIG, ...(requestData.juiceConfig || {}) };
       
       console.log(`🍽️ Gerando cardápio: ${numDays} dias, ${mealQuantity} refeições/dia`);
       console.log(`🔍 FILIAL_ID DEBUG: filialId=${filialId}, origem:`, {
