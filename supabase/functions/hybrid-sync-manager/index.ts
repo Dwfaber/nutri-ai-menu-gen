@@ -401,8 +401,8 @@ async function upsertWithCleanup(supabaseClient: any, tableName: string, data: a
     
   } catch (error) {
     console.error(`Falling back to standard upsert for ${tableName}:`, error);
-    // Fallback para método padrão se a função falhar
-    return await upsertData(supabaseClient, tableName, data, strategy.batchSize);
+    // Fallback para método padrão com colunas únicas específicas da tabela
+    return await upsertData(supabaseClient, tableName, data, strategy.batchSize, strategy.uniqueColumns);
   }
 }
 
