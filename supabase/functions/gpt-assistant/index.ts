@@ -613,24 +613,29 @@ Deno.serve(async (req) => {
       console.log(`💰 Buscando orçamento para filial ${filialId}`);
       
       try {
-        const { data, error } = await supabase
+        // Usar limit(1) e ordenação para evitar PGRST116 quando há múltiplas linhas
+        const { data: custoDataArray, error } = await supabase
           .from('custos_filiais')
           .select('*')
           .eq('filial_id', filialId)
-          .single();
+          .order('created_at', { ascending: false })
+          .limit(1);
         
+        const data = custoDataArray?.[0] || null;
         console.log("CUSTOS FILIAL:", data, error);
         
         if (error || !data) {
           console.warn(`⚠️ Filial ${filialId} sem dados de custo, tentando buscar contrato...`);
           
-          // Buscar contrato como fallback
-          const { data: contratoData, error: contratoError } = await supabase
+          // Buscar contrato como fallback (também com limit(1) para evitar PGRST116)
+          const { data: contratoDataArray, error: contratoError } = await supabase
             .from('contratos_corporativos')
             .select('*')
             .eq('filial_id_legado', filialId)
-            .single();
+            .order('data_contrato', { ascending: false })
+            .limit(1);
           
+          const contratoData = contratoDataArray?.[0] || null;
           console.log("CONTRATO:", contratoData, contratoError);
           
         if (contratoData) {
