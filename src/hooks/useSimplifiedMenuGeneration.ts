@@ -82,7 +82,8 @@ export function useSimplifiedMenuGeneration() {
     mealQuantity: number,
     restrictions: string[],
     preferences: string[],
-    juiceConfig?: any
+    juiceConfig?: any,
+    proteinGrams?: string
   ): Promise<GeneratedMenu | null> => {
     setIsGenerating(true);
     setError(null);
@@ -114,7 +115,8 @@ export function useSimplifiedMenuGeneration() {
           action: 'calculate_recipes_cost',
           recipes: recipes,
           mealQuantity: mealQuantity,
-          juice_config: juiceConfig
+          juice_config: juiceConfig,
+          protein_grams: proteinGrams
         }
       });
 

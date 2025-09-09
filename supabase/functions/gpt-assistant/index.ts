@@ -206,12 +206,22 @@ Deno.serve(async (req) => {
     }
 
     // Escolha de proteína com validação rigorosa usando tabela estruturada
-    async function escolherProteina(categoria: string, receitasPool: any[], mealQuantity: number) {
+    async function escolherProteina(categoria: string, receitasPool: any[], mealQuantity: number, gramagemSelecionada?: string) {
       // NOVO: Primeiro tentar com tabela estruturada de proteínas
-      if (proteinasDisponiveis) {
+      let proteinasFiltradasPorGramagem = proteinasDisponiveis;
+      
+      // Filtrar por gramagem se especificada
+      if (gramagemSelecionada && proteinasDisponiveis) {
+        proteinasFiltradasPorGramagem = proteinasDisponiveis.filter(p => 
+          p.nome.toUpperCase().includes(`${gramagemSelecionada}G`)
+        );
+        console.log(`🥩 Filtrando proteínas por ${gramagemSelecionada}g: ${proteinasFiltradasPorGramagem.length} encontradas`);
+      }
+      
+      if (proteinasFiltradasPorGramagem && proteinasFiltradasPorGramagem.length > 0) {
         for (let tentativa = 0; tentativa < 10; tentativa++) {
-          const proteinaIndex = Math.floor(Math.random() * proteinasDisponiveis.length);
-          const proteinaEstruturada = proteinasDisponiveis[proteinaIndex];
+          const proteinaIndex = Math.floor(Math.random() * proteinasFiltradasPorGramagem.length);
+          const proteinaEstruturada = proteinasFiltradasPorGramagem[proteinaIndex];
           
           const tipo = getProteinType(proteinaEstruturada.nome);
           if (tipo && contadorProteinas[tipo] < LIMITE_PROTEINAS_SEMANA[tipo]) {
@@ -768,9 +778,10 @@ Deno.serve(async (req) => {
       diasUteis: boolean,
       supabase: any,
       gramsPP1: number,
-      gramsPP2: number
+      gramsPP2: number,
+      proteinGramsSelected?: string
     }, budget: number, origemOrcamento: string) {
-      const { mealQuantity, numDays, periodo, diasUteis, supabase, gramsPP1, gramsPP2 } = config;
+      const { mealQuantity, numDays, periodo, diasUteis, supabase, gramsPP1, gramsPP2, proteinGramsSelected } = config;
       
       // NOVO: Usar configurações do cliente carregadas anteriormente
       console.log('🔧 Gramagem configurada:', { proteinGramsPP1, proteinGramsPP2 });
@@ -839,8 +850,8 @@ Deno.serve(async (req) => {
         // ====== PROTEÍNAS COM CONTROLE DE VARIEDADE ======
         console.log('🥩 Selecionando proteínas...');
         
-        let pp1 = await escolherProteina("Proteína Principal 1", receitasPool, mealQuantity);
-        let pp2 = await escolherProteina("Proteína Principal 2", receitasPool, mealQuantity);
+        let pp1 = await escolherProteina("Proteína Principal 1", receitasPool, mealQuantity, proteinGramsSelected);
+        let pp2 = await escolherProteina("Proteína Principal 2", receitasPool, mealQuantity, proteinGramsSelected);
         
         if (pp1) {
           const pp1Result = await calculateSimpleCost(pp1.id, mealQuantity);
@@ -856,7 +867,8 @@ Deno.serve(async (req) => {
                 console.log(`⚠️ Limite de carne vermelha atingido, buscando alternativa para PP1`);
                 const alternativa = receitasPool.find(r => 
                   r.categoria === "Proteína Principal 1" && 
-                  getProteinType(r.nome) !== "Carne Vermelha"
+                  getProteinType(r.nome) !== "Carne Vermelha" &&
+                  (!proteinGramsSelected || r.nome.toUpperCase().includes(`${proteinGramsSelected}G`))
                 );
                 if (alternativa) {
                   const altResult = await calculateSimpleCost(alternativa.id, mealQuantity);
@@ -886,7 +898,8 @@ Deno.serve(async (req) => {
               console.log(`⚠️ Mesmo tipo de proteína no dia, buscando alternativa para PP2`);
               const alternativa = receitasPool.find(r =>
                 r.categoria === "Proteína Principal 2" &&
-                getProteinType(r.nome) !== getProteinType(pp1.nome)
+                getProteinType(r.nome) !== getProteinType(pp1.nome) &&
+                (!proteinGramsSelected || r.nome.toUpperCase().includes(`${proteinGramsSelected}G`))
               );
               if (alternativa) {
                 const altResult = await calculateSimpleCost(alternativa.id, mealQuantity);
@@ -906,7 +919,8 @@ Deno.serve(async (req) => {
                 console.log(`⚠️ Limite de carne vermelha atingido, buscando alternativa para PP2`);
                 const alternativa = receitasPool.find(r => 
                   r.categoria === "Proteína Principal 2" && 
-                  getProteinType(r.nome) !== "Carne Vermelha"
+                  getProteinType(r.nome) !== "Carne Vermelha" &&
+                  (!proteinGramsSelected || r.nome.toUpperCase().includes(`${proteinGramsSelected}G`))
                 );
                 if (alternativa) {
                   const altResult = await calculateSimpleCost(alternativa.id, mealQuantity);
@@ -1159,6 +1173,7 @@ Deno.serve(async (req) => {
       const filialId = requestData.filialIdLegado || requestData.filial_id || null;
       const clientName = requestData.cliente || 'Cliente';
       const numDays = requestData.numDays || 7;
+      const proteinGramsSelected = requestData.proteinGrams || requestData.protein_grams || '100';
       
       console.log(`🍽️ Gerando cardápio: ${numDays} dias, ${mealQuantity} refeições/dia`);
       console.log(`🔍 FILIAL_ID DEBUG: filialId=${filialId}, origem:`, {
@@ -1198,7 +1213,8 @@ Deno.serve(async (req) => {
         diasUteis,
         supabase,
         gramsPP1,
-        gramsPP2
+        gramsPP2,
+        proteinGramsSelected
       }, budget, origemOrcamento);
 
         // A configuração de sucos já é processada dentro de gerarCardapioComRegras

@@ -37,6 +37,9 @@ export const SimpleMenuForm: React.FC<SimpleMenuFormProps> = ({
     use_suco_natural: true // Padrão
   });
 
+  // Estado para gramagem de proteína
+  const [selectedProteinGrams, setSelectedProteinGrams] = useState('100');
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -57,7 +60,8 @@ export const SimpleMenuForm: React.FC<SimpleMenuFormProps> = ({
       budgetPerMeal: selectedClient?.custo_medio_diario || 0,
       totalBudget: (selectedClient?.custo_medio_diario || 0) * totalMeals,
       preferences: preferences.trim() || undefined,
-      juiceConfig: selectedJuices
+      juiceConfig: selectedJuices,
+      proteinGrams: selectedProteinGrams
     };
 
     onSubmit(formData);
@@ -234,6 +238,40 @@ export const SimpleMenuForm: React.FC<SimpleMenuFormProps> = ({
               </div>
               <p className="text-xs text-gray-500 mt-2">
                 {Object.values(selectedJuices).filter(Boolean).length} tipo{Object.values(selectedJuices).filter(Boolean).length !== 1 ? 's' : ''} selecionado{Object.values(selectedJuices).filter(Boolean).length !== 1 ? 's' : ''}
+              </p>
+            </div>
+
+            {/* Seleção de Gramagem de Proteína */}
+            <div className="mt-4">
+              <Label className="text-sm font-medium mb-3 block">Gramagem de Proteína por Porção</Label>
+              <div className="flex gap-4">
+                <div className="flex items-center space-x-2">
+                  <input
+                    type="radio"
+                    id="protein_90g"
+                    name="protein_grams"
+                    value="90"
+                    checked={selectedProteinGrams === '90'}
+                    onChange={(e) => setSelectedProteinGrams(e.target.value)}
+                    className="w-4 h-4 text-primary border-gray-300 focus:ring-primary focus:ring-2"
+                  />
+                  <Label htmlFor="protein_90g" className="text-sm cursor-pointer">90g por porção</Label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <input
+                    type="radio"
+                    id="protein_100g"
+                    name="protein_grams"
+                    value="100"
+                    checked={selectedProteinGrams === '100'}
+                    onChange={(e) => setSelectedProteinGrams(e.target.value)}
+                    className="w-4 h-4 text-primary border-gray-300 focus:ring-primary focus:ring-2"
+                  />
+                  <Label htmlFor="protein_100g" className="text-sm cursor-pointer">100g por porção</Label>
+                </div>
+              </div>
+              <p className="text-xs text-gray-500 mt-2">
+                Gramagem selecionada: {selectedProteinGrams}g - Serão selecionadas apenas receitas com proteínas de {selectedProteinGrams}g
               </p>
             </div>
           </div>
