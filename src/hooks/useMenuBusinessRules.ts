@@ -122,12 +122,12 @@ export const useMenuBusinessRules = () => {
       const tomorrow = days[i + 1];
       
       const todayProteins = (recipesByDay[today] || [])
-        .filter(r => r.category === 'PP1' || r.category === 'PP2')
-        .map(r => classifyProtein(r.name));
+        .filter(r => (r.categoria || r.category) === 'Prato Principal 1' || (r.categoria || r.category) === 'Prato Principal 2')
+        .map(r => classifyProtein(r.nome || r.name));
       
       const tomorrowProteins = (recipesByDay[tomorrow] || [])
-        .filter(r => r.category === 'PP1' || r.category === 'PP2')
-        .map(r => classifyProtein(r.name));
+        .filter(r => (r.categoria || r.category) === 'Prato Principal 1' || (r.categoria || r.category) === 'Prato Principal 2')
+        .map(r => classifyProtein(r.nome || r.name));
 
       // Check for consecutive same protein
       todayProteins.forEach(todayProtein => {
@@ -147,8 +147,8 @@ export const useMenuBusinessRules = () => {
     days.forEach(day => {
       const dayRecipes = recipesByDay[day] || [];
       const redMeatCount = dayRecipes
-        .filter(r => r.category === 'PP1' || r.category === 'PP2')
-        .map(r => classifyProtein(r.name))
+        .filter(r => (r.categoria || r.category) === 'Prato Principal 1' || (r.categoria || r.category) === 'Prato Principal 2')
+        .map(r => classifyProtein(r.nome || r.name))
         .filter(p => p.isRedMeat).length;
 
       if (redMeatCount > 1) {
@@ -157,8 +157,8 @@ export const useMenuBusinessRules = () => {
           message: `Mais de uma carne vermelha no mesmo dia: ${day}`,
           day,
           recipes: dayRecipes
-            .filter(r => (r.category === 'PP1' || r.category === 'PP2') && classifyProtein(r.name).isRedMeat)
-            .map(r => r.name)
+            .filter(r => ((r.categoria || r.category) === 'Prato Principal 1' || (r.categoria || r.category) === 'Prato Principal 2') && classifyProtein(r.nome || r.name).isRedMeat)
+            .map(r => r.nome || r.name)
         });
       }
     });
@@ -172,12 +172,12 @@ export const useMenuBusinessRules = () => {
     const mondayRecipes = recipes.filter(r => r.day === 'Segunda');
     
     mondayRecipes.forEach(recipe => {
-      if (requiresAdvancePreparation(recipe.name)) {
+      if (requiresAdvancePreparation(recipe.nome || recipe.name)) {
         violations.push({
           type: 'monday_processing',
-          message: `Receita com preparo antecipado na segunda-feira: ${recipe.name}`,
+          message: `Receita com preparo antecipado na segunda-feira: ${recipe.nome || recipe.name}`,
           day: 'Segunda',
-          recipes: [recipe.name]
+          recipes: [recipe.nome || recipe.name]
         });
       }
     });
@@ -189,19 +189,19 @@ export const useMenuBusinessRules = () => {
   const validateMenuStructure = (recipes: any[]): MenuViolation[] => {
     const violations: MenuViolation[] = [];
     const days = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta'];
-    const requiredCategories = ['PP1', 'PP2', 'Arroz Branco', 'Feijão', 'Salada 1', 'Salada 2', 'Suco 1', 'Suco 2'];
+    const requiredCategories = ['Prato Principal 1', 'Prato Principal 2', 'Arroz Branco', 'Feijão', 'Salada 1', 'Salada 2', 'Suco 1', 'Suco 2'];
     
     // Group recipes by day
     const recipesByDay: { [key: string]: any[] } = {};
     recipes.forEach(recipe => {
-      const day = recipe.day || '';
+      const day = recipe.day || recipe.dia || '';
       if (!recipesByDay[day]) recipesByDay[day] = [];
       recipesByDay[day].push(recipe);
     });
 
     days.forEach(day => {
       const dayRecipes = recipesByDay[day] || [];
-      const categoriesPresent = dayRecipes.map(r => r.category);
+      const categoriesPresent = dayRecipes.map(r => r.categoria || r.category);
       
       const missingCategories = requiredCategories.filter(cat => !categoriesPresent.includes(cat));
       
@@ -269,11 +269,11 @@ export const useMenuBusinessRules = () => {
     // Protein variety: avoid same protein as previous day
     if (previousDayRecipes.length > 0) {
       const previousProteins = previousDayRecipes
-        .filter(r => r.category === 'PP1' || r.category === 'PP2')
-        .map(r => classifyProtein(r.name));
+        .filter(r => (r.categoria || r.category) === 'Prato Principal 1' || (r.categoria || r.category) === 'Prato Principal 2')
+        .map(r => classifyProtein(r.nome || r.name));
 
       filtered = filtered.filter(recipe => {
-        const currentProtein = classifyProtein(recipe.nome_receita);
+        const currentProtein = classifyProtein(recipe.nome_receita || recipe.nome || recipe.name);
         return !previousProteins.some(prev => prev.type === currentProtein.type);
       });
     }
