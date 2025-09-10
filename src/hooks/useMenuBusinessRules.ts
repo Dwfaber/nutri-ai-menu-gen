@@ -189,7 +189,8 @@ export const useMenuBusinessRules = () => {
   const validateMenuStructure = (recipes: any[]): MenuViolation[] => {
     const violations: MenuViolation[] = [];
     const days = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta'];
-    const requiredCategories = ['Prato Principal 1', 'Prato Principal 2', 'Arroz Branco', 'Feijão', 'Salada 1', 'Salada 2', 'Suco 1', 'Suco 2'];
+    // Usar códigos fixos, iguais ao backend
+    const requiredCodes = ['PP1','PP2','ARROZ','FEIJAO','SALADA1','SALADA2','SUCO1','SUCO2'];
     
     // Group recipes by day
     const recipesByDay: { [key: string]: any[] } = {};
@@ -201,16 +202,17 @@ export const useMenuBusinessRules = () => {
 
     days.forEach(day => {
       const dayRecipes = recipesByDay[day] || [];
-      const categoriesPresent = dayRecipes.map(r => r.categoria || r.category);
+      // Priorizar código, fallback para categoria
+      const codesPresent = dayRecipes.map(r => r.codigo || r.categoria || r.category);
       
-      const missingCategories = requiredCategories.filter(cat => !categoriesPresent.includes(cat));
+      const missing = requiredCodes.filter(cod => !codesPresent.includes(cod));
       
-      if (missingCategories.length > 0) {
+      if (missing.length > 0) {
         violations.push({
           type: 'structure_incomplete',
-          message: `Estrutura incompleta em ${day}. Faltam: ${missingCategories.join(', ')}`,
+          message: `Estrutura incompleta em ${day}. Faltam: ${missing.join(', ')}`,
           day,
-          recipes: missingCategories
+          recipes: missing
         });
       }
     });
