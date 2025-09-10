@@ -367,6 +367,9 @@ export const useIntegratedMenuGeneration = () => {
         throw new Error("Cliente não encontrado");
       }
 
+      // Capturar valor correto de porções ANTES do backend
+      const expectedServings = formData.estimatedMeals || formData.mealsPerDay || 50;
+      
       // Criar payload para Edge Function
       const payload: MenuGenerationPayload = {
         ...formData,
@@ -374,7 +377,7 @@ export const useIntegratedMenuGeneration = () => {
         clientName: clientToUse.nome_fantasia,
         custoMedioDiario: clientToUse.custo_medio_diario,
         tipoRefeicao: clientToUse.tipo_refeicao || 'almoco',
-        quantidadeRefeicoes: formData.estimatedMeals || formData.mealsPerDay || 100,
+        quantidadeRefeicoes: expectedServings,
         periodo: formData.period,
         preferences: formData.preferences || [],
         proteinGrams: formData.proteinGrams || '100',
@@ -417,7 +420,7 @@ export const useIntegratedMenuGeneration = () => {
             category: r.categoria || 'Outros',
             day: dia.dia || 'Segunda-feira',
             cost: Number(r.custo_por_refeicao || 0),
-            servings: Number(r.porcoes || formData.mealsPerDay || 100),
+            servings: Number(r.porcoes || expectedServings),
             ingredients: r.ingredientes || [],
             nutritionalInfo: r.nutritional_info || {}
           }))
