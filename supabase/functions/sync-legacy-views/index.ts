@@ -332,12 +332,49 @@ async function processViewData(supabaseClient: any, viewName: string, data: any[
 
   // PROCESSAMENTO HÍBRIDO para vwCoSolicitacaoFilialCusto - usar strategy UPSERT_CLEANUP
   if (viewName === 'vwCoSolicitacaoFilialCusto') {
-    console.log(`Processamento híbrido de custos de filiais - ${data.length} registros`);
+    console.log(`🏢 Processamento híbrido de custos de filiais - ${data.length} registros`);
+    
+    // DEBUG: Verificar registros problemáticos ANTES do mapeamento
+    console.log(`🔍 ANÁLISE PRÉ-MAPEAMENTO: Verificando registros sem filial_id...`);
+    const registrosSemFilialId = data.filter(record => !record.filial_id || record.filial_id === 0 || record.filial_id === '0');
+    
+    if (registrosSemFilialId.length > 0) {
+      console.error(`❌ ENCONTRADOS ${registrosSemFilialId.length} registros SEM filial_id válido:`);
+      registrosSemFilialId.slice(0, 5).forEach((record, index) => {
+        console.error(`   Registro ${index + 1}:`, {
+          solicitacao_filial_custo_id: record.solicitacao_filial_custo_id,
+          filial_id: record.filial_id,
+          cliente_id_legado: record.cliente_id_legado,
+          nome_fantasia: record.nome_fantasia,
+          nome_filial: record.nome_filial,
+          tipo_filial_id: typeof record.filial_id,
+          dados_completos: Object.keys(record)
+        });
+      });
+      if (registrosSemFilialId.length > 5) {
+        console.error(`   ... e mais ${registrosSemFilialId.length - 5} registros`);
+      }
+    } else {
+      console.log(`✅ Todos os ${data.length} registros possuem filial_id válido`);
+    }
     
     // Mapear dados para formato correto
-    const mappedData = data.map(record => ({
+    const mappedData = data.map((record, index) => {
+      const filialIdValue = record.filial_id ? parseInt(record.filial_id.toString()) : null;
+      
+      // DEBUG: Log específico para registros com problema
+      if (!filialIdValue) {
+        console.error(`❌ MAPEAMENTO: Registro ${index + 1} resultará em filial_id NULL:`, {
+          original_filial_id: record.filial_id,
+          parsed_filial_id: filialIdValue,
+          solicitacao_filial_custo_id: record.solicitacao_filial_custo_id,
+          tipo_original: typeof record.filial_id
+        });
+      }
+      
+      return {
       cliente_id_legado: record.cliente_id_legado ? parseInt(record.cliente_id_legado.toString()) : record.filial_id ? parseInt(record.filial_id.toString()) : null,
-      filial_id: record.filial_id ? parseInt(record.filial_id.toString()) : null,
+      filial_id: filialIdValue,
       nome_filial: record.nome_filial || record.nome_empresa || null,
       custo_total: record.custo_total ? parseFloat(record.custo_total.toString()) : null,
       RefCustoSegunda: record.RefCustoSegunda ? parseFloat(record.RefCustoSegunda.toString()) : null,
@@ -360,6 +397,15 @@ async function processViewData(supabaseClient: any, viewName: string, data: any[
       solicitacao_compra_tipo_descricao: record.solicitacao_compra_tipo_descricao?.toString() || null,
       sync_at: new Date().toISOString()
     }));
+
+    // DEBUG: Verificar dados mapeados antes de enviar
+    const dadosMapeadosSemFilialId = mappedData.filter(record => !record.filial_id);
+    console.log(`🔍 PÓS-MAPEAMENTO: ${dadosMapeadosSemFilialId.length} registros ainda sem filial_id`);
+    
+    if (dadosMapeadosSemFilialId.length > 0) {
+      console.error(`⚠️ ATENÇÃO: Enviando ${dadosMapeadosSemFilialId.length} registros que FALHARÃO na validação do banco!`);
+      console.error(`Exemplo de registro problemático:`, dadosMapeadosSemFilialId[0]);
+    }
 
     // Usar hybrid sync manager para custos
     const hybridResponse = await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/hybrid-sync-manager`, {
