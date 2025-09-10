@@ -85,7 +85,7 @@ const Dashboard = () => {
         </Card>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
         <StatsCard
           title="Clientes Ativos"
           value={isLoading ? "--" : metrics.activeClients}
@@ -103,17 +103,25 @@ const Dashboard = () => {
         />
 
         <StatsCard
-          title="Economia Total"
-          value={isLoading ? "R$ --" : `R$ ${metrics.totalSavings.toFixed(2)}`}
-          change={isLoading ? "Carregando..." : `Orçamento: R$ ${metrics.monthlyBudget.toFixed(2)}`}
-          changeType="positive"
+          title="Custo Diário Médio (contratual)"
+          value={isLoading ? "R$ --" : `R$ ${metrics.averageDailyCost.toFixed(2)}`}
+          change={isLoading ? "Carregando..." : "Baseado em dados contratuais"}
+          changeType="neutral"
+          icon={DollarSign}
+        />
+
+        <StatsCard
+          title="Custo por Refeição (contratual)"
+          value={isLoading ? "R$ --" : `R$ ${metrics.averageContractMealCost.toFixed(2)}`}
+          change={isLoading ? "Carregando..." : "Equivalente contratual por refeição"}
+          changeType="neutral"
           icon={DollarSign}
         />
 
         <StatsCard
           title="Taxa de Aceitação"
           value={isLoading ? "--%"  : `${metrics.acceptanceRate}%`}
-          change={isLoading ? "Carregando..." : `R$ ${metrics.averageMealCost.toFixed(2)} por refeição`}
+          change={isLoading ? "Carregando..." : `Economia: R$ ${metrics.totalSavings.toFixed(2)}`}
           changeType="positive"
           icon={TrendingUp}
         />

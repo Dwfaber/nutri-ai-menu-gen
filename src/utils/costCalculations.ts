@@ -79,6 +79,14 @@ export const calculateCostMetrics = (costData: ClientCostDetails[]) => {
 };
 
 /**
+ * Calculate contractual cost per meal from daily cost
+ */
+export const calculateContractMealCost = (dailyCost: number, mealsPerDay: number = 1): number => {
+  if (!dailyCost || !mealsPerDay || mealsPerDay <= 0) return 0;
+  return dailyCost / mealsPerDay;
+};
+
+/**
  * Get top expensive clients based on weekly total from daily costs
  */
 export const getTopExpensiveClients = (

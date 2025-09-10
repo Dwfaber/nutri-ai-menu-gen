@@ -2,13 +2,14 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../integrations/supabase/client';
 import { useToast } from '@/components/ui/use-toast';
-import { calculateCostMetrics, getUniqueClientsCount } from '@/utils/costCalculations';
+import { calculateCostMetrics, getUniqueClientsCount, calculateContractMealCost } from '@/utils/costCalculations';
 
 export interface DashboardMetrics {
   activeClients: number;
   totalEmployees: number;
   monthlyMeals: number;
-  averageMealCost: number;
+  averageDailyCost: number; // Renamed from averageMealCost
+  averageContractMealCost: number; // New: contract meal cost
   monthlyBudget: number;
   generatedMenus: number;
   totalSavings: number;
@@ -20,7 +21,8 @@ export const useDashboardData = () => {
     activeClients: 0,
     totalEmployees: 0,
     monthlyMeals: 0,
-    averageMealCost: 0,
+    averageDailyCost: 0,
+    averageContractMealCost: 0,
     monthlyBudget: 0,
     generatedMenus: 0,
     totalSavings: 0,
@@ -86,11 +88,16 @@ export const useDashboardData = () => {
       const estimatedMealsPerWeek = averageDailyCost > 0 ? Math.round(weeklyTotal / averageDailyCost) : uniqueClients * 35; // fallback estimate
       const monthlyMeals = estimatedMealsPerWeek * 4;
 
+      // Calculate contract meal cost (assuming 1 meal per day as default)
+      const defaultMealsPerDay = 1;
+      const contractMealCost = calculateContractMealCost(averageDailyCost, defaultMealsPerDay);
+
       setMetrics({
         activeClients: uniqueClients,
         totalEmployees: uniqueClients, // Using unique clients as employee metric proxy
         monthlyMeals,
-        averageMealCost: averageDailyCost,
+        averageDailyCost, // Renamed from averageMealCost
+        averageContractMealCost: contractMealCost,
         monthlyBudget,
         generatedMenus,
         totalSavings,
