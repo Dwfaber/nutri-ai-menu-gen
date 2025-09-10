@@ -219,11 +219,37 @@ Deno.serve(async (req) => {
     // ========== FUNÇÕES DE CATEGORIA - NOVA ESTRUTURA ==========
     
     // Helpers específicos para cada categoria (seguindo padrão do escolherSucosDia)
-    function escolherSaladaDia(tipo: "verdura" | "legume", pool: any[]) {
-      const tipoMapeado = tipo === "verdura" ? "verduras" : "legumes_cozidos";
+    // Sistema de rotação para garantir variedade nas saladas
+    const saladasUsadas: Record<string, Set<string>> = {
+      verduras_folhas: new Set(),
+      legumes_cozidos: new Set()
+    };
+
+    function escolherSaladaDia(tipo: "verdura" | "legume", pool: any[], dia: string) {
+      const tipoMapeado = tipo === "verdura" ? "verduras_folhas" : "legumes_cozidos";
       const candidatas = pool.filter(s => s.tipo === tipoMapeado);
-      if (candidatas.length === 0) return null;
-      const selecionada = candidatas[Math.floor(Math.random() * candidatas.length)];
+      
+      console.log(`🥗 [${dia}] Buscando ${tipo} (${tipoMapeado}): ${candidatas.length} opções encontradas`);
+      
+      if (candidatas.length === 0) {
+        console.log(`⚠️ [${dia}] Nenhuma salada do tipo ${tipoMapeado} encontrada`);
+        return null;
+      }
+
+      // Filtrar saladas já usadas na semana para garantir variedade
+      const saladasDisponiveis = candidatas.filter(s => !saladasUsadas[tipoMapeado].has(s.nome));
+      
+      // Se todas foram usadas, resetar para permitir reutilização
+      if (saladasDisponiveis.length === 0) {
+        console.log(`🔄 [${dia}] Resetando pool de ${tipoMapeado} - todas foram usadas`);
+        saladasUsadas[tipoMapeado].clear();
+        saladasDisponiveis.push(...candidatas);
+      }
+
+      const selecionada = saladasDisponiveis[Math.floor(Math.random() * saladasDisponiveis.length)];
+      saladasUsadas[tipoMapeado].add(selecionada.nome);
+      
+      console.log(`✅ [${dia}] Selecionada: ${selecionada.nome} (${tipoMapeado})`);
       return { id: selecionada.produto_base_id, nome: selecionada.nome };
     }
 
@@ -1131,7 +1157,7 @@ Deno.serve(async (req) => {
             }
           } else if (catConfig.codigo === 'SALADA1') {
             // NOVO: Usar helper dedicado para saladas de verdura
-            const saladaEscolhida = escolherSaladaDia("verdura", saladasDisponiveis);
+            const saladaEscolhida = escolherSaladaDia("verdura", saladasDisponiveis, nomeDia);
             if (saladaEscolhida) {
               const resultado = await calculateSimpleCost(saladaEscolhida.id, mealQuantity);
               const custoFinal = resultado.custo_por_refeicao > 0 ? resultado.custo_por_refeicao : 0.4;
@@ -1147,7 +1173,7 @@ Deno.serve(async (req) => {
             }
           } else if (catConfig.codigo === 'SALADA2') {
             // NOVO: Usar helper dedicado para saladas de legume
-            const saladaEscolhida = escolherSaladaDia("legume", saladasDisponiveis);
+            const saladaEscolhida = escolherSaladaDia("legume", saladasDisponiveis, nomeDia);
             if (saladaEscolhida) {
               const resultado = await calculateSimpleCost(saladaEscolhida.id, mealQuantity);
               const custoFinal = resultado.custo_por_refeicao > 0 ? resultado.custo_por_refeicao : 0.5;
