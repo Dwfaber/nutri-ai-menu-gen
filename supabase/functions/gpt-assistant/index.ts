@@ -1036,7 +1036,7 @@ Deno.serve(async (req) => {
           const pp1Result = await calculateSimpleCost(pp1.id, mealQuantity);
           receitasDia.push({
             id: pp1.id,
-            nome: pp1.nome,
+            nome: pp1Result.nome,
             categoria: 'Prato Principal 1',
             codigo: 'PP1',
             custo_por_refeicao: pp1Result.custo_por_refeicao,
@@ -1053,7 +1053,7 @@ Deno.serve(async (req) => {
           const pp2Result = await calculateSimpleCost(pp2.id, mealQuantity);
           receitasDia.push({
             id: pp2.id,
-            nome: pp2.nome,
+            nome: pp2Result.nome,
             categoria: 'Prato Principal 2',
             codigo: 'PP2',
             custo_por_refeicao: pp2Result.custo_por_refeicao,
@@ -1201,7 +1201,8 @@ Deno.serve(async (req) => {
                 id: sobremesaEscolhida.id,
                 nome: sobremesaEscolhida.nome,
                 custo_por_refeicao: 0.5,
-                custo_total: 0.5 * mealQuantity
+                custo_total: 0.5 * mealQuantity,
+                ingredientes: []
               };
             }
           }
