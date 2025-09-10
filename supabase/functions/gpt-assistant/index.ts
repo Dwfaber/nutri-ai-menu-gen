@@ -346,9 +346,9 @@ Deno.serve(async (req) => {
     async function escolherProteina(categoria: string, pool: any[], mealQuantity: number, proteinGrams?: string, jaTemCarneVermelha: boolean = false): Promise<any> {
       console.log(`🥩 Buscando ${categoria}... (Carne vermelha já no dia: ${jaTemCarneVermelha})`);
       
-      // Filtrar apenas receitas que são realmente proteínas
+      // Filtrar apenas receitas que são realmente proteínas usando categoria_descricao
       const proteinasDisponiveis = pool.filter(r => 
-        r.categoria === categoria && r.tipo_proteina
+        r.categoria_descricao === categoria && r.tipo_proteina
       );
       
       if (proteinasDisponiveis.length === 0) {
@@ -872,74 +872,102 @@ Deno.serve(async (req) => {
         "Vegetariano": 0
       };
       
-      // ========== CARREGAR RECEITAS POR CATEGORIA ESPECÍFICA ==========
+      // ========== CARREGAR RECEITAS COM CATEGORIA_DESCRICAO DO BANCO ==========
       console.log('🔍 Carregando receitas por categoria...');
       
-      // Carregar proteínas disponíveis
-      const { data: proteinasDisponiveis } = await supabase
+      // Buscar todas as receitas diretamente com categoria_descricao correta
+      const { data: receitasComCategoria } = await supabase
+        .from('receita_ingredientes')
+        .select(`
+          receita_id_legado, 
+          nome, 
+          categoria_descricao,
+          produto_base_descricao
+        `)
+        .in('categoria_descricao', [
+          'Prato Principal 1', 
+          'Prato Principal 2', 
+          'Salada 1', 
+          'Salada 2', 
+          'Guarnição'
+        ])
+        .not('receita_id_legado', 'is', null);
+
+      // Buscar dados adicionais das tabelas específicas para tipos/subcategorias
+      const { data: proteinasInfo } = await supabase
         .from('proteinas_disponiveis')
-        .select('receita_id_legado, nome, tipo, subcategoria')
+        .select('receita_id_legado, tipo, subcategoria')
         .eq('ativo', true);
-      
-      // Carregar saladas disponíveis
-      const { data: saladasDisponiveis } = await supabase
+
+      const { data: saladasInfo } = await supabase
         .from('saladas_disponiveis')
-        .select('receita_id_legado, nome, tipo')
+        .select('receita_id_legado, tipo')
         .eq('ativo', true);
-      
-      // Carregar guarnições disponíveis
-      const { data: guarnicoesDisponiveis } = await supabase
+
+      const { data: guarnicoesInfo } = await supabase
         .from('guarnicoes_disponiveis')
-        .select('receita_id_legado, nome, tipo')
+        .select('receita_id_legado, tipo')
         .eq('ativo', true);
-      
-      // Construir pool categorizado corretamente
+
+      // Criar maps para lookup rápido
+      const proteinasMap = new Map(proteinasInfo?.map(p => [p.receita_id_legado, p]) || []);
+      const saladasMap = new Map(saladasInfo?.map(s => [s.receita_id_legado, s]) || []);
+      const guarnicoesMap = new Map(guarnicoesInfo?.map(g => [g.receita_id_legado, g]) || []);
+
+      // Construir pool usando categoria_descricao como fonte da verdade
       receitasPool = [];
       
-      // Adicionar proteínas com categorização correta
-      if (proteinasDisponiveis) {
-        proteinasDisponiveis.forEach(p => {
-          const categoria = p.subcategoria === 'principal_1' ? 'Proteína Principal 1' : 'Proteína Principal 2';
-          receitasPool.push({
-            id: p.receita_id_legado,
-            nome: p.nome,
-            name: p.nome,
-            categoria: categoria,
-            category: categoria,
-            tipo_proteina: normalizarTipoProteina(p.tipo || "desconhecido")
-          });
+      if (receitasComCategoria) {
+        receitasComCategoria.forEach(r => {
+          const receitaBase = {
+            id: r.receita_id_legado,
+            nome: r.nome,
+            name: r.nome,
+            categoria_descricao: r.categoria_descricao,
+            categoria: r.categoria_descricao, // manter compatibilidade
+            category: r.categoria_descricao
+          };
+
+          // Para proteínas: verificar se tem tipo_proteina válido
+          if (r.categoria_descricao === 'Prato Principal 1' || r.categoria_descricao === 'Prato Principal 2') {
+            const proteinaInfo = proteinasMap.get(r.receita_id_legado);
+            if (proteinaInfo && proteinaInfo.tipo) {
+              receitasPool.push({
+                ...receitaBase,
+                tipo_proteina: normalizarTipoProteina(proteinaInfo.tipo)
+              });
+            }
+          }
+          // Para saladas
+          else if (r.categoria_descricao === 'Salada 1' || r.categoria_descricao === 'Salada 2') {
+            const saladaInfo = saladasMap.get(r.receita_id_legado);
+            receitasPool.push({
+              ...receitaBase,
+              tipo_salada: saladaInfo?.tipo || 'desconhecido'
+            });
+          }
+          // Para guarnições
+          else if (r.categoria_descricao === 'Guarnição') {
+            const guarnicaoInfo = guarnicoesMap.get(r.receita_id_legado);
+            receitasPool.push({
+              ...receitaBase,
+              tipo_guarnicao: guarnicaoInfo?.tipo || 'desconhecido'
+            });
+          }
         });
       }
-      
-      // Adicionar saladas
-      if (saladasDisponiveis) {
-        saladasDisponiveis.forEach(s => {
-          receitasPool.push({
-            id: s.receita_id_legado,
-            nome: s.nome,
-            name: s.nome,
-            categoria: 'Salada',
-            category: 'Salada',
-            tipo_salada: s.tipo
-          });
-        });
-      }
-      
-      // Adicionar guarnições
-      if (guarnicoesDisponiveis) {
-        guarnicoesDisponiveis.forEach(g => {
-          receitasPool.push({
-            id: g.receita_id_legado,
-            nome: g.nome,
-            name: g.nome,
-            categoria: 'Guarnição',
-            category: 'Guarnição',
-            tipo_guarnicao: g.tipo
-          });
-        });
-      }
-      
-      console.log(`✅ Pool carregado: ${proteinasDisponiveis?.length || 0} proteínas, ${saladasDisponiveis?.length || 0} saladas, ${guarnicoesDisponiveis?.length || 0} guarnições`);
+
+      const proteinasCount = receitasPool.filter(r => 
+        r.categoria_descricao === 'Prato Principal 1' || r.categoria_descricao === 'Prato Principal 2'
+      ).length;
+      const saladasCount = receitasPool.filter(r => 
+        r.categoria_descricao === 'Salada 1' || r.categoria_descricao === 'Salada 2'
+      ).length;
+      const guarnicoesCount = receitasPool.filter(r => 
+        r.categoria_descricao === 'Guarnição'
+      ).length;
+
+      console.log(`✅ Pool carregado: ${proteinasCount} proteínas, ${saladasCount} saladas, ${guarnicoesCount} guarnições`);
       
       // Se diasUteis=true → só considera segunda a sexta
       const diasSemana = diasUteis 
@@ -1134,8 +1162,9 @@ Deno.serve(async (req) => {
               };
             }
           } else if (catConfig.codigo === 'GUARNICAO') {
-            // CORREÇÃO: Usar helper com rotação semanal
-            const guarnicaoEscolhida = escolherGuarnicaoDia(guarnicoesDisponiveis, nomeDia);
+            // CORREÇÃO: Usar helper com rotação semanal - pool filtrado por categoria_descricao
+            const guarnicoesPool = receitasPool.filter(r => r.categoria_descricao === 'Guarnição');
+            const guarnicaoEscolhida = escolherGuarnicaoDia(guarnicoesPool, nomeDia);
             if (guarnicaoEscolhida) {
               const resultado = await calculateSimpleCost(guarnicaoEscolhida.id, mealQuantity);
               const custoFinal = resultado.custo_por_refeicao > 0 ? resultado.custo_por_refeicao : 0.8;
@@ -1151,8 +1180,9 @@ Deno.serve(async (req) => {
               };
             }
           } else if (catConfig.codigo === 'SALADA1') {
-            // NOVO: Usar helper dedicado para saladas de verdura
-            const saladaEscolhida = escolherSaladaDia("verdura", saladasDisponiveis, nomeDia);
+            // NOVO: Usar helper dedicado para saladas de verdura - pool filtrado por categoria_descricao
+            const saladasPool = receitasPool.filter(r => r.categoria_descricao === 'Salada 1' || r.categoria_descricao === 'Salada 2');
+            const saladaEscolhida = escolherSaladaDia("verdura", saladasPool, nomeDia);
             if (saladaEscolhida) {
               const resultado = await calculateSimpleCost(saladaEscolhida.id, mealQuantity);
               const custoFinal = resultado.custo_por_refeicao > 0 ? resultado.custo_por_refeicao : 0.4;
@@ -1168,8 +1198,9 @@ Deno.serve(async (req) => {
               };
             }
           } else if (catConfig.codigo === 'SALADA2') {
-            // NOVO: Usar helper dedicado para saladas de legume
-            const saladaEscolhida = escolherSaladaDia("legume", saladasDisponiveis, nomeDia);
+            // NOVO: Usar helper dedicado para saladas de legume - pool filtrado por categoria_descricao
+            const saladasPool = receitasPool.filter(r => r.categoria_descricao === 'Salada 1' || r.categoria_descricao === 'Salada 2');
+            const saladaEscolhida = escolherSaladaDia("legume", saladasPool, nomeDia);
             if (saladaEscolhida) {
               const resultado = await calculateSimpleCost(saladaEscolhida.id, mealQuantity);
               const custoFinal = resultado.custo_por_refeicao > 0 ? resultado.custo_por_refeicao : 0.5;
