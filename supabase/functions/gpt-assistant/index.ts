@@ -1271,7 +1271,7 @@ Deno.serve(async (req) => {
           dentro_orcamento: custoDia <= budget,
           substituicoes_orcamento: substituicoesPorOrcamento,
           contadores: {
-            carnes_vermelhas_semana: contadorCarnesVermelhas,
+            carnes_vermelhas_semana: contadorProteinas["Carne Vermelha"],
             guarnicoes_usadas: guarnicoesUsadas.length
           }
         });
