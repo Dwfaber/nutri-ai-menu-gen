@@ -201,9 +201,9 @@ Deno.serve(async (req) => {
         case "Guarnição":
           return { id: -3, nome: "BATATA COZIDA", custo_por_refeicao: 0.8 };
         case "Suco 1": 
-          return { id: -4, nome: "Suco de laranja natural", custo_por_refeicao: 0.4 };
+          return { id: -4, nome: "Suco de laranja natural", custo_por_refeicao: 1.20 };
         case "Suco 2": 
-          return { id: -5, nome: "Suco de uva", custo_por_refeicao: 0.4 };
+          return { id: -5, nome: "Suco de uva", custo_por_refeicao: 1.20 };
         case "Sobremesa": 
           const idx = Math.floor(Math.random() * SOBREMESAS.length);
           return { id: -6, nome: SOBREMESAS[idx], custo_por_refeicao: 0.5 };
@@ -1036,7 +1036,7 @@ Deno.serve(async (req) => {
                 .limit(1)
                 .maybeSingle();
              
-              const custoSuco = precoProduto?.preco ? (precoProduto.preco * 0.1) : 0.40; // 10% do preço ou fallback
+              const custoSuco = precoProduto?.preco ? Math.max(precoProduto.preco * 0.3, 1.20) : 1.20; // 30% do preço, mínimo R$ 1.20
               
               receita = {
                 id: sucoEscolhido.id,
@@ -1053,8 +1053,8 @@ Deno.serve(async (req) => {
               receita = {
                 id: catConfig.codigo === 'SUCO1' ? 3001 : 3002,
                 nome: catConfig.codigo === 'SUCO1' ? 'Suco Natural Laranja' : 'Suco Natural Limão',
-                custo_por_refeicao: 0.40,
-                custo_total: 0.40 * mealQuantity
+                custo_por_refeicao: 1.20,
+                custo_total: 1.20 * mealQuantity
               };
             }
           } else if (catConfig.codigo === 'GUARNICAO') {
