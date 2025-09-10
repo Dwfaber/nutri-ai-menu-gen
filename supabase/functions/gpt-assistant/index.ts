@@ -1033,6 +1033,7 @@ Deno.serve(async (req) => {
 
         // Adicionar proteínas ao dia
         if (pp1) {
+          const pp1Result = await calculateSimpleCost(pp1.id, mealQuantity);
           receitasDia.push({
             id: pp1.id,
             nome: pp1.nome,
@@ -1041,7 +1042,7 @@ Deno.serve(async (req) => {
             custo_por_refeicao: pp1.custo_por_refeicao,
             custo_total: pp1.custo_por_refeicao * mealQuantity,
             porcoes: mealQuantity,
-            ingredientes: pp1.ingredientes || [],
+            ingredientes: pp1Result.ingredientes || [],
             grams: pp1.grams,
             protein_type: pp1.tipo_proteina
           });
@@ -1049,6 +1050,7 @@ Deno.serve(async (req) => {
         }
         
         if (pp2) {
+          const pp2Result = await calculateSimpleCost(pp2.id, mealQuantity);
           receitasDia.push({
             id: pp2.id,
             nome: pp2.nome,
@@ -1057,7 +1059,7 @@ Deno.serve(async (req) => {
             custo_por_refeicao: pp2.custo_por_refeicao,
             custo_total: pp2.custo_por_refeicao * mealQuantity,
             porcoes: mealQuantity,
-            ingredientes: pp2.ingredientes || [],
+            ingredientes: pp2Result.ingredientes || [],
             grams: pp2.grams,
             protein_type: pp2.tipo_proteina
           });
@@ -1089,7 +1091,8 @@ Deno.serve(async (req) => {
                 id: resultado.id,
                 nome: resultado.nome,
                 custo_por_refeicao: resultado.custo_por_refeicao,
-                custo_total: resultado.custo || 0
+                custo_total: resultado.custo || 0,
+                ingredientes: resultado.ingredientes || []
               };
               console.log(`✅ ${catConfig.categoria}: R$${resultado.custo_por_refeicao.toFixed(2)}/refeição`);
             } else {
@@ -1151,7 +1154,8 @@ Deno.serve(async (req) => {
                 id: guarnicaoEscolhida.id,
                 nome: guarnicaoEscolhida.nome,
                 custo_por_refeicao: custoFinal,
-                custo_total: custoFinal * mealQuantity
+                custo_total: custoFinal * mealQuantity,
+                ingredientes: resultado.ingredientes || []
               };
               guarnicoesUsadas.push(guarnicaoEscolhida.nome);
             }
@@ -1168,7 +1172,8 @@ Deno.serve(async (req) => {
                 id: saladaEscolhida.id,
                 nome: saladaEscolhida.nome,
                 custo_por_refeicao: custoFinal,
-                custo_total: custoFinal * mealQuantity
+                custo_total: custoFinal * mealQuantity,
+                ingredientes: resultado.ingredientes || []
               };
             }
           } else if (catConfig.codigo === 'SALADA2') {
@@ -1184,7 +1189,8 @@ Deno.serve(async (req) => {
                 id: saladaEscolhida.id,
                 nome: saladaEscolhida.nome,
                 custo_por_refeicao: custoFinal,
-                custo_total: custoFinal * mealQuantity
+                custo_total: custoFinal * mealQuantity,
+                ingredientes: resultado.ingredientes || []
               };
             }
           } else if (catConfig.codigo === 'SOBREMESA') {
