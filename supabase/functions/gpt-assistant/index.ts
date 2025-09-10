@@ -1294,7 +1294,8 @@ Deno.serve(async (req) => {
 
     // HANDLER PRINCIPAL
     if (requestData.action === 'generate_menu') {
-      const mealQuantity = requestData.refeicoesPorDia || requestData.meal_quantity || 100;
+      const mealQuantity = requestData.quantidadeRefeicoes || requestData.refeicoesPorDia || requestData.meal_quantity || 100;
+      console.log(`🍽️ Porções/dia recebidas do frontend: ${mealQuantity} (quantidadeRefeicoes: ${requestData.quantidadeRefeicoes})`);
       const filialId = requestData.filialIdLegado || requestData.filial_id || null;
       const clientName = requestData.cliente || 'Cliente';
       const numDays = requestData.numDays || 7;
