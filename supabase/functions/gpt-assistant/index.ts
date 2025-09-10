@@ -246,6 +246,10 @@ Deno.serve(async (req) => {
     
     // CORREÇÃO: Contador semanal de carnes vermelhas (não diário)
     const carnesVermelhasSemana: string[] = [];
+    
+    // ETAPA 2: Controle de repetição consecutiva
+    let ultimaSaladaUsada = '';
+    let ultimaGuarnicaoUsada = '';
 
     // REFATORADO: Selecionar salada usando pool pré-filtrado por categoria_descricao
     function escolherSaladaDoPool(saladaPool: any[], poolName: string, dia: string) {
@@ -256,18 +260,26 @@ Deno.serve(async (req) => {
         return null;
       }
 
-      // Filtrar saladas já usadas na semana para garantir variedade
-      const saladasDisponiveis = saladaPool.filter(s => !saladasUsadas[poolName].has(s.nome));
+      // ETAPA 2: Filtrar saladas já usadas na semana + evitar repetir a última usada
+      let saladasDisponiveis = saladaPool.filter(s => 
+        !saladasUsadas[poolName].has(s.nome) && s.nome !== ultimaSaladaUsada
+      );
       
-      // Se todas foram usadas, resetar para permitir reutilização
+      // Se filtro muito restritivo, relaxar apenas para não repetir a última
       if (saladasDisponiveis.length === 0) {
-        console.log(`🔄 [${dia}] Resetando pool de ${poolName} - todas foram usadas`);
-        saladasUsadas[poolName].clear();
-        saladasDisponiveis.push(...saladaPool);
+        saladasDisponiveis = saladaPool.filter(s => s.nome !== ultimaSaladaUsada);
+        
+        // Se ainda assim vazio, resetar tudo e permitir qualquer uma
+        if (saladasDisponiveis.length === 0) {
+          console.log(`🔄 [${dia}] Resetando pool de ${poolName} - todas foram usadas`);
+          saladasUsadas[poolName].clear();
+          saladasDisponiveis = saladaPool;
+        }
       }
 
       const selecionada = saladasDisponiveis[Math.floor(Math.random() * saladasDisponiveis.length)];
       saladasUsadas[poolName].add(selecionada.nome);
+      ultimaSaladaUsada = selecionada.nome; // ETAPA 2: Memorizar última usada
       
       console.log(`✅ [${dia}] Selecionada: ${selecionada.nome} (${poolName})`);
       return { id: selecionada.produto_base_id, nome: selecionada.nome };
@@ -279,18 +291,26 @@ Deno.serve(async (req) => {
       
       console.log(`🥔 [${dia}] Buscando guarnição: ${guarnicaoPool.length} opções encontradas`);
       
-      // Filtrar guarnições já usadas na semana
-      const guarnicoesDisponiveis = guarnicaoPool.filter(g => !guarnicoesUsadas.has(g.nome));
+      // ETAPA 2: Filtrar guarnições já usadas na semana + evitar repetir a última usada
+      let guarnicoesDisponiveis = guarnicaoPool.filter(g => 
+        !guarnicoesUsadas.has(g.nome) && g.nome !== ultimaGuarnicaoUsada
+      );
       
-      // Se todas foram usadas, resetar pool
+      // Se filtro muito restritivo, relaxar apenas para não repetir a última
       if (guarnicoesDisponiveis.length === 0) {
-        console.log(`🔄 [${dia}] Resetando pool de guarnições - todas foram usadas`);
-        guarnicoesUsadas.clear();
-        guarnicoesDisponiveis.push(...guarnicaoPool);
+        guarnicoesDisponiveis = guarnicaoPool.filter(g => g.nome !== ultimaGuarnicaoUsada);
+        
+        // Se ainda assim vazio, resetar tudo e permitir qualquer uma
+        if (guarnicoesDisponiveis.length === 0) {
+          console.log(`🔄 [${dia}] Resetando pool de guarnições - todas foram usadas`);
+          guarnicoesUsadas.clear();
+          guarnicoesDisponiveis = guarnicaoPool;
+        }
       }
       
       const selecionada = guarnicoesDisponiveis[Math.floor(Math.random() * guarnicoesDisponiveis.length)];
       guarnicoesUsadas.add(selecionada.nome);
+      ultimaGuarnicaoUsada = selecionada.nome; // ETAPA 2: Memorizar última usada
       
       console.log(`✅ [${dia}] Guarnição selecionada: ${selecionada.nome}`);
       return { id: selecionada.produto_base_id, nome: selecionada.nome };
@@ -341,8 +361,8 @@ Deno.serve(async (req) => {
     }
 
     // REFATORADO: Proteína usando pool pré-filtrado por categoria_descricao
-    async function escolherProteina(proteinPool: any[], mealQuantity: number, proteinGrams?: string, jaTemCarneVermelha: boolean = false, poolName: string = 'proteína'): Promise<any> {
-      console.log(`🥩 Buscando ${poolName}... (Carne vermelha já no dia: ${jaTemCarneVermelha})`);
+    async function escolherProteina(proteinPool: any[], mealQuantity: number, proteinGrams?: string, tipoProteinaJaUsado: string | null = null, poolName: string = 'proteína'): Promise<any> {
+      console.log(`🥩 Buscando ${poolName}... (Tipo proteína já no dia: ${tipoProteinaJaUsado || 'nenhum'})`);
       
       // Pool já vem pré-filtrado por categoria_descricao - apenas validar tipo_proteina
       const proteinasDisponiveis = proteinPool.filter(r => r.tipo_proteina);
@@ -352,7 +372,7 @@ Deno.serve(async (req) => {
       
       if (proteinasDisponiveis.length === 0) {
         console.log(`⚠️ Nenhuma proteína encontrada para ${poolName}`);
-        return fallbackReceita(poolName);
+        return fallbackReceita(poolName, tipoProteinaJaUsado);
       }
       
       // CORREÇÃO: Filtrar proteínas já usadas na semana
@@ -375,15 +395,15 @@ Deno.serve(async (req) => {
         if (comGramagem.length > 0) proteinasParaEscolha = comGramagem;
       }
       
-      // CORREÇÃO CRÍTICA: Se já tem carne vermelha no dia, NUNCA escolher outra
-      if (jaTemCarneVermelha) {
+      // ETAPA 1: EXPANDIR BLOQUEIO - Se já tem QUALQUER tipo de proteína no dia, NUNCA escolher o mesmo tipo
+      if (tipoProteinaJaUsado) {
         const proteinasAntes = proteinasParaEscolha.length;
         proteinasParaEscolha = proteinasParaEscolha.filter(p => 
-          p.tipo_proteina !== 'Carne Vermelha'
+          p.tipo_proteina !== tipoProteinaJaUsado
         );
-        console.log(`🚫 Filtrando carnes vermelhas (já tem no dia). Antes: ${proteinasAntes}, Após: ${proteinasParaEscolha.length} opções`);
+        console.log(`🚫 Filtrando ${tipoProteinaJaUsado} (já tem no dia). Antes: ${proteinasAntes}, Após: ${proteinasParaEscolha.length} opções`);
         if (proteinasParaEscolha.length === 0) {
-          console.error(`❌ ERRO: Nenhuma proteína não-vermelha disponível para ${poolName}!`);
+          console.error(`❌ ERRO: Nenhuma proteína de tipo diferente disponível para ${poolName}!`);
           return null;
         }
       }
@@ -1026,12 +1046,12 @@ Deno.serve(async (req) => {
         console.log('🥩 Selecionando proteínas com pools específicos...');
         
         // PP1 - Usar pool específico de Prato Principal 1
-        let pp1 = await escolherProteina(pp1Pool, mealQuantity, proteinGrams, false, "Prato Principal 1");
-        let jaTemCarneVermelha = pp1?.tipo_proteina === 'Carne Vermelha';
+        let pp1 = await escolherProteina(pp1Pool, mealQuantity, proteinGrams, null, "Prato Principal 1");
+        let tipoProteinaJaUsado = pp1?.tipo_proteina || null;
         
-        // PP2 - Usar pool específico de Prato Principal 2, evitando carne vermelha se necessário
+        // PP2 - Usar pool específico de Prato Principal 2, evitando QUALQUER tipo já usado
         console.log(`🔍 PP1 selecionado: ${pp1?.nome} (${pp1?.tipo_proteina})`);
-        let pp2 = await escolherProteina(pp2Pool, mealQuantity, proteinGrams, jaTemCarneVermelha, "Prato Principal 2");
+        let pp2 = await escolherProteina(pp2Pool, mealQuantity, proteinGrams, tipoProteinaJaUsado, "Prato Principal 2");
         
         // VALIDAÇÃO: Verificar se respeitou regra de carne vermelha
         console.log(`🔍 VALIDAÇÃO FINAL:`);
