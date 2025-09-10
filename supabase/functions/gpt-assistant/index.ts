@@ -1367,7 +1367,8 @@ Deno.serve(async (req) => {
           cost_per_meal: Number(response.resumo_financeiro.custo_medio_por_refeicao) || 0,
           total_recipes: totalReceitas,
           status: "pending_approval",
-          receitas_adaptadas: receitasAdaptadas
+          receitas_adaptadas: receitasAdaptadas,
+          meals_per_day: mealQuantity // Salva a quantidade de refeições por dia configurada pelo usuário
         };
 
         console.log("💾 Payload para insert:", JSON.stringify(payload, null, 2));

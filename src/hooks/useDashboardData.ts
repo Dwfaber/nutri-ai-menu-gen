@@ -88,9 +88,28 @@ export const useDashboardData = () => {
       const estimatedMealsPerWeek = averageDailyCost > 0 ? Math.round(weeklyTotal / averageDailyCost) : uniqueClients * 35; // fallback estimate
       const monthlyMeals = estimatedMealsPerWeek * 4;
 
-      // Calculate contract meal cost (assuming 1 meal per day as default)
-      const defaultMealsPerDay = 1;
-      const contractMealCost = calculateContractMealCost(averageDailyCost, defaultMealsPerDay);
+      // Buscar últimos menus aprovados com meals_per_day
+      const { data: menus } = await supabase
+        .from('generated_menus')
+        .select('client_id, meals_per_day, created_at')
+        .eq('status', 'approved')
+        .order('created_at', { ascending: false });
+
+      // Criar mapa client_id -> meals_per_day (pega o mais recente)
+      const mealsMap = new Map();
+      menus?.forEach(menu => {
+        if (!mealsMap.has(menu.client_id)) {
+          mealsMap.set(menu.client_id, menu.meals_per_day || 1);
+        }
+      });
+
+      // Calcular média real
+      const avgMealsPerDay = mealsMap.size > 0
+        ? Array.from(mealsMap.values()).reduce((sum, val) => sum + val, 0) / mealsMap.size
+        : 1;
+
+      // Calculate contract meal cost using real data
+      const contractMealCost = calculateContractMealCost(averageDailyCost, avgMealsPerDay);
 
       setMetrics({
         activeClients: uniqueClients,

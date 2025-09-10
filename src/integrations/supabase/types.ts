@@ -341,6 +341,7 @@ export type Database = {
           cost_per_meal: number
           created_at: string
           id: string
+          meals_per_day: number
           nutritionist_suggestions: Json | null
           receitas_adaptadas: Json | null
           receitas_ids: string[] | null
@@ -360,6 +361,7 @@ export type Database = {
           cost_per_meal?: number
           created_at?: string
           id?: string
+          meals_per_day?: number
           nutritionist_suggestions?: Json | null
           receitas_adaptadas?: Json | null
           receitas_ids?: string[] | null
@@ -379,6 +381,7 @@ export type Database = {
           cost_per_meal?: number
           created_at?: string
           id?: string
+          meals_per_day?: number
           nutritionist_suggestions?: Json | null
           receitas_adaptadas?: Json | null
           receitas_ids?: string[] | null
