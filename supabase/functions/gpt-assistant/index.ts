@@ -229,10 +229,10 @@ Deno.serve(async (req) => {
     // ========== FUNÇÕES DE CATEGORIA - NOVA ESTRUTURA ==========
     
     // Helpers específicos para cada categoria (seguindo padrão do escolherSucosDia)
-    // SISTEMA DE ROTAÇÃO EXPANDIDO - Correção da Nutricionista
+    // REFATORADO: Sistema de rotação usando pools separados por categoria_descricao
     const saladasUsadas: Record<string, Set<string>> = {
-      verduras_folhas: new Set(),
-      legumes_cozidos: new Set()
+      "Salada 1": new Set(),
+      "Salada 2": new Set()
     };
     
     // NOVO: Sistema de rotação para proteínas (similar às saladas)
@@ -247,48 +247,46 @@ Deno.serve(async (req) => {
     // CORREÇÃO: Contador semanal de carnes vermelhas (não diário)
     const carnesVermelhasSemana: string[] = [];
 
-    function escolherSaladaDia(tipo: "verdura" | "legume", pool: any[], dia: string) {
-      const tipoMapeado = tipo === "verdura" ? "verduras_folhas" : "legumes_cozidos";
-      const candidatas = pool.filter(s => s.tipo === tipoMapeado);
+    // REFATORADO: Selecionar salada usando pool pré-filtrado por categoria_descricao
+    function escolherSaladaDoPool(saladaPool: any[], poolName: string, dia: string) {
+      console.log(`🥗 [${dia}] Buscando ${poolName}: ${saladaPool.length} opções encontradas`);
       
-      console.log(`🥗 [${dia}] Buscando ${tipo} (${tipoMapeado}): ${candidatas.length} opções encontradas`);
-      
-      if (candidatas.length === 0) {
-        console.log(`⚠️ [${dia}] Nenhuma salada do tipo ${tipoMapeado} encontrada`);
+      if (saladaPool.length === 0) {
+        console.log(`⚠️ [${dia}] Nenhuma salada encontrada no pool ${poolName}`);
         return null;
       }
 
       // Filtrar saladas já usadas na semana para garantir variedade
-      const saladasDisponiveis = candidatas.filter(s => !saladasUsadas[tipoMapeado].has(s.nome));
+      const saladasDisponiveis = saladaPool.filter(s => !saladasUsadas[poolName].has(s.nome));
       
       // Se todas foram usadas, resetar para permitir reutilização
       if (saladasDisponiveis.length === 0) {
-        console.log(`🔄 [${dia}] Resetando pool de ${tipoMapeado} - todas foram usadas`);
-        saladasUsadas[tipoMapeado].clear();
-        saladasDisponiveis.push(...candidatas);
+        console.log(`🔄 [${dia}] Resetando pool de ${poolName} - todas foram usadas`);
+        saladasUsadas[poolName].clear();
+        saladasDisponiveis.push(...saladaPool);
       }
 
       const selecionada = saladasDisponiveis[Math.floor(Math.random() * saladasDisponiveis.length)];
-      saladasUsadas[tipoMapeado].add(selecionada.nome);
+      saladasUsadas[poolName].add(selecionada.nome);
       
-      console.log(`✅ [${dia}] Selecionada: ${selecionada.nome} (${tipoMapeado})`);
+      console.log(`✅ [${dia}] Selecionada: ${selecionada.nome} (${poolName})`);
       return { id: selecionada.produto_base_id, nome: selecionada.nome };
     }
 
-    // CORREÇÃO: Guarnições com rotação semanal (como saladas)
-    function escolherGuarnicaoDia(pool: any[], dia: string) {
-      if (!pool || pool.length === 0) return null;
+    // REFATORADO: Guarnições usando pool pré-filtrado por categoria_descricao
+    function escolherGuarnicaoDoPool(guarnicaoPool: any[], dia: string) {
+      if (!guarnicaoPool || guarnicaoPool.length === 0) return null;
       
-      console.log(`🥔 [${dia}] Buscando guarnição: ${pool.length} opções encontradas`);
+      console.log(`🥔 [${dia}] Buscando guarnição: ${guarnicaoPool.length} opções encontradas`);
       
       // Filtrar guarnições já usadas na semana
-      const guarnicoesDisponiveis = pool.filter(g => !guarnicoesUsadas.has(g.nome));
+      const guarnicoesDisponiveis = guarnicaoPool.filter(g => !guarnicoesUsadas.has(g.nome));
       
       // Se todas foram usadas, resetar pool
       if (guarnicoesDisponiveis.length === 0) {
         console.log(`🔄 [${dia}] Resetando pool de guarnições - todas foram usadas`);
         guarnicoesUsadas.clear();
-        guarnicoesDisponiveis.push(...pool);
+        guarnicoesDisponiveis.push(...guarnicaoPool);
       }
       
       const selecionada = guarnicoesDisponiveis[Math.floor(Math.random() * guarnicoesDisponiveis.length)];
@@ -342,33 +340,31 @@ Deno.serve(async (req) => {
       }
     }
 
-    // CORREÇÃO: Proteína com rotação e controle de carne vermelha
-    async function escolherProteina(categoria: string, pool: any[], mealQuantity: number, proteinGrams?: string, jaTemCarneVermelha: boolean = false): Promise<any> {
-      console.log(`🥩 Buscando ${categoria}... (Carne vermelha já no dia: ${jaTemCarneVermelha})`);
+    // REFATORADO: Proteína usando pool pré-filtrado por categoria_descricao
+    async function escolherProteina(proteinPool: any[], mealQuantity: number, proteinGrams?: string, jaTemCarneVermelha: boolean = false, poolName: string = 'proteína'): Promise<any> {
+      console.log(`🥩 Buscando ${poolName}... (Carne vermelha já no dia: ${jaTemCarneVermelha})`);
       
-      // Filtrar apenas receitas que são realmente proteínas usando categoria_descricao
-      const proteinasDisponiveis = pool.filter(r => 
-        r.categoria_descricao === categoria && r.tipo_proteina
-      );
+      // Pool já vem pré-filtrado por categoria_descricao - apenas validar tipo_proteina
+      const proteinasDisponiveis = proteinPool.filter(r => r.tipo_proteina);
       
-      console.log(`📊 Pool inicial ${categoria}: ${proteinasDisponiveis.length} proteínas`);
+      console.log(`📊 Pool inicial ${poolName}: ${proteinasDisponiveis.length} proteínas`);
       console.log(`📋 Tipos disponíveis:`, proteinasDisponiveis.map(p => `${p.nome.substring(0, 20)}... (${p.tipo_proteina})`).slice(0, 5));
       
       if (proteinasDisponiveis.length === 0) {
-        console.log(`⚠️ Nenhuma proteína encontrada para ${categoria}`);
-        return fallbackReceita(categoria);
+        console.log(`⚠️ Nenhuma proteína encontrada para ${poolName}`);
+        return fallbackReceita(poolName);
       }
       
       // CORREÇÃO: Filtrar proteínas já usadas na semana
       const proteinasNaoUsadas = proteinasDisponiveis.filter(p => 
-        !proteinasUsadas[categoria].has(p.nome)
+        !proteinasUsadas[poolName].has(p.nome)
       );
       
       // Se todas foram usadas, resetar pool
       let proteinasParaEscolha = proteinasNaoUsadas.length > 0 ? proteinasNaoUsadas : proteinasDisponiveis;
       if (proteinasNaoUsadas.length === 0) {
-        console.log(`🔄 Resetando pool de proteínas ${categoria} - todas foram usadas`);
-        proteinasUsadas[categoria].clear();
+        console.log(`🔄 Resetando pool de proteínas ${poolName} - todas foram usadas`);
+        proteinasUsadas[poolName].clear();
       }
       
       // Filtrar por gramagem se especificada
@@ -387,7 +383,7 @@ Deno.serve(async (req) => {
         );
         console.log(`🚫 Filtrando carnes vermelhas (já tem no dia). Antes: ${proteinasAntes}, Após: ${proteinasParaEscolha.length} opções`);
         if (proteinasParaEscolha.length === 0) {
-          console.error(`❌ ERRO: Nenhuma proteína não-vermelha disponível para ${categoria}!`);
+          console.error(`❌ ERRO: Nenhuma proteína não-vermelha disponível para ${poolName}!`);
           return null;
         }
       }
@@ -408,7 +404,7 @@ Deno.serve(async (req) => {
         if (tipo && contadorProteinas[tipo] < LIMITE_PROTEINAS_SEMANA[tipo]) {
           console.log(`✅ Proteína selecionada: ${proteinaEstruturada.nome} (${tipo})`);
           contadorProteinas[tipo]++;
-          proteinasUsadas[categoria].add(proteinaEstruturada.nome);
+          proteinasUsadas[poolName].add(proteinaEstruturada.nome);
           
           // CORREÇÃO: Adicionar à lista semanal de carnes vermelhas
           if (tipo === 'Carne Vermelha') {
@@ -965,9 +961,23 @@ Deno.serve(async (req) => {
         });
       }
 
-      const proteinasCount = receitasPool.filter(r => 
-        r.categoria_descricao === 'Prato Principal 1' || r.categoria_descricao === 'Prato Principal 2'
-      ).length;
+      // ========== CRIAR POOLS ESPECÍFICOS POR CATEGORIA ==========
+      console.log('🏗️ Criando pools específicos por categoria_descricao...');
+      
+      const pp1Pool = receitasPool.filter(r => r.categoria_descricao === 'Prato Principal 1');
+      const pp2Pool = receitasPool.filter(r => r.categoria_descricao === 'Prato Principal 2');
+      const guarnicoesPool = receitasPool.filter(r => r.categoria_descricao === 'Guarnição');
+      const salada1Pool = receitasPool.filter(r => r.categoria_descricao === 'Salada 1');
+      const salada2Pool = receitasPool.filter(r => r.categoria_descricao === 'Salada 2');
+      
+      console.log(`📊 Pools criados:`);
+      console.log(`   PP1: ${pp1Pool.length} receitas`);
+      console.log(`   PP2: ${pp2Pool.length} receitas`);
+      console.log(`   Guarnições: ${guarnicoesPool.length} receitas`);
+      console.log(`   Salada 1: ${salada1Pool.length} receitas`);
+      console.log(`   Salada 2: ${salada2Pool.length} receitas`);
+      
+      const proteinasCount = pp1Pool.length + pp2Pool.length;
       const saladasCount = receitasPool.filter(r => 
         r.categoria_descricao === 'Salada 1' || r.categoria_descricao === 'Salada 2'
       ).length;
@@ -1012,37 +1022,16 @@ Deno.serve(async (req) => {
         let custoDia = 0;
         let substituicoesPorOrcamento: string[] = [];
         
-        // CORREÇÃO: PROTEÍNAS COM CONTROLE RIGOROSO
-        console.log('🥩 Selecionando proteínas com regras da nutricionista...');
+        // REFATORADO: PROTEÍNAS USANDO POOLS SEPARADOS
+        console.log('🥩 Selecionando proteínas com pools específicos...');
         
-        // PP1 - Sempre escolher primeiro
-        let pp1 = await escolherProteina("Prato Principal 1", receitasPool, mealQuantity, proteinGrams, false);
+        // PP1 - Usar pool específico de Prato Principal 1
+        let pp1 = await escolherProteina(pp1Pool, mealQuantity, proteinGrams, false, "Prato Principal 1");
         let jaTemCarneVermelha = pp1?.tipo_proteina === 'Carne Vermelha';
         
-        // PP2 - Verificar se PP1 já é carne vermelha e FORÇAR proteína diferente
+        // PP2 - Usar pool específico de Prato Principal 2, evitando carne vermelha se necessário
         console.log(`🔍 PP1 selecionado: ${pp1?.nome} (${pp1?.tipo_proteina})`);
-        let pp2 = await escolherProteina("Prato Principal 2", receitasPool, mealQuantity, proteinGrams, jaTemCarneVermelha);
-        
-        // SEGURANÇA EXTRA: Tentar novamente se ainda escolheu carne vermelha
-        if (jaTemCarneVermelha && pp2?.tipo_proteina === 'Carne Vermelha') {
-          console.error(`🚨 PP2 ainda é carne vermelha! Tentando forçar outra proteína...`);
-          const proteinasNaoVermelhas = receitasPool.filter(r => 
-            r.categoria_descricao === "Prato Principal 2" && 
-            r.tipo_proteina && 
-            r.tipo_proteina !== 'Carne Vermelha'
-          );
-          if (proteinasNaoVermelhas.length > 0) {
-            const forcedP2 = proteinasNaoVermelhas[Math.floor(Math.random() * proteinasNaoVermelhas.length)];
-            pp2 = {
-              id: forcedP2.receita_id_legado,
-              nome: forcedP2.nome,
-              categoria_descricao: forcedP2.categoria_descricao,
-              tipo_proteina: forcedP2.tipo_proteina,
-              grams: proteinGrams || 90
-            };
-            console.log(`🔧 PP2 forçado: ${pp2.nome} (${pp2.tipo_proteina})`);
-          }
-        }
+        let pp2 = await escolherProteina(pp2Pool, mealQuantity, proteinGrams, jaTemCarneVermelha, "Prato Principal 2");
         
         // VALIDAÇÃO: Verificar se respeitou regra de carne vermelha
         console.log(`🔍 VALIDAÇÃO FINAL:`);
@@ -1199,9 +1188,8 @@ Deno.serve(async (req) => {
               };
             }
           } else if (catConfig.codigo === 'GUARNICAO') {
-            // CORREÇÃO: Usar helper com rotação semanal - pool filtrado por categoria_descricao
-            const guarnicoesPool = receitasPool.filter(r => r.categoria_descricao === 'Guarnição');
-            const guarnicaoEscolhida = escolherGuarnicaoDia(guarnicoesPool, nomeDia);
+            // REFATORADO: Usar pool pré-filtrado por categoria_descricao
+            const guarnicaoEscolhida = escolherGuarnicaoDoPool(guarnicoesPool, nomeDia);
             if (guarnicaoEscolhida) {
               const resultado = await calculateSimpleCost(guarnicaoEscolhida.id, mealQuantity);
               const custoFinal = resultado.custo_por_refeicao > 0 ? resultado.custo_por_refeicao : 0.8;
@@ -1217,9 +1205,8 @@ Deno.serve(async (req) => {
               };
             }
           } else if (catConfig.codigo === 'SALADA1') {
-            // NOVO: Usar helper dedicado para saladas de verdura - pool filtrado por categoria_descricao
-            const saladasPool = receitasPool.filter(r => r.categoria_descricao === 'Salada 1' || r.categoria_descricao === 'Salada 2');
-            const saladaEscolhida = escolherSaladaDia("verdura", saladasPool, nomeDia);
+            // REFATORADO: Usar pool pré-filtrado para Salada 1
+            const saladaEscolhida = escolherSaladaDoPool(salada1Pool, "Salada 1", nomeDia);
             if (saladaEscolhida) {
               const resultado = await calculateSimpleCost(saladaEscolhida.id, mealQuantity);
               const custoFinal = resultado.custo_por_refeicao > 0 ? resultado.custo_por_refeicao : 0.4;
@@ -1235,9 +1222,8 @@ Deno.serve(async (req) => {
               };
             }
           } else if (catConfig.codigo === 'SALADA2') {
-            // NOVO: Usar helper dedicado para saladas de legume - pool filtrado por categoria_descricao
-            const saladasPool = receitasPool.filter(r => r.categoria_descricao === 'Salada 1' || r.categoria_descricao === 'Salada 2');
-            const saladaEscolhida = escolherSaladaDia("legume", saladasPool, nomeDia);
+            // REFATORADO: Usar pool pré-filtrado para Salada 2
+            const saladaEscolhida = escolherSaladaDoPool(salada2Pool, "Salada 2", nomeDia);
             if (saladaEscolhida) {
               const resultado = await calculateSimpleCost(saladaEscolhida.id, mealQuantity);
               const custoFinal = resultado.custo_por_refeicao > 0 ? resultado.custo_por_refeicao : 0.5;
