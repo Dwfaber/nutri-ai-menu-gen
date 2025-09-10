@@ -84,6 +84,7 @@ export const useIntegratedMenuGeneration = () => {
   const [generatedMenu, setGeneratedMenu] = useState<GeneratedMenu | null>(null);
   const [savedMenus, setSavedMenus] = useState<GeneratedMenu[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [isProcessing, setIsProcessing] = useState(false);
   const { toast } = useToast();
   const { selectedClient } = useSelectedClient();
   const { getClientWithCosts } = useClientContractsContext();
@@ -272,6 +273,24 @@ export const useIntegratedMenuGeneration = () => {
   // Salvar cardápio no banco
   const saveMenuToDatabase = async (menu: GeneratedMenu): Promise<string | null> => {
     try {
+      // Verificar se já existe cardápio com mesmo cliente e período nos últimos 30 segundos
+      const now = new Date();
+      const thirtySecondsAgo = new Date(now.getTime() - 30000);
+      
+      const { data: existingMenus, error: checkError } = await supabase
+        .from('generated_menus')
+        .select('id, client_id, week_period, created_at')
+        .eq('client_id', menu.clientId)
+        .eq('week_period', menu.weekPeriod)
+        .gte('created_at', thirtySecondsAgo.toISOString());
+
+      if (checkError) {
+        console.error('❌ Erro ao verificar duplicatas:', checkError);
+      } else if (existingMenus && existingMenus.length > 0) {
+        console.log('⚠️ Cardápio duplicado detectado, usando existente:', existingMenus[0].id);
+        return existingMenus[0].id;
+      }
+
       // Preparar receitas adaptadas para salvar
       const receitasAdaptadas = menu.recipes.map(recipe => ({
         receita_id_legado: recipe.id,
@@ -353,12 +372,21 @@ export const useIntegratedMenuGeneration = () => {
   const generateMenuWithFormData = async (
     formData: SimpleMenuFormData
   ): Promise<GeneratedMenu | null> => {
+    // Proteção contra chamadas simultâneas
+    if (isProcessing) {
+      console.log('⚠️ Geração já em andamento, ignorando nova solicitação');
+      return null;
+    }
+    
+    setIsProcessing(true);
+
     if (!formData.clientId || !formData.period.start || !formData.period.end) {
       toast({
         title: "Dados incompletos",
         description: "Por favor, preencha todos os campos obrigatórios",
         variant: "destructive"
       });
+      setIsProcessing(false);
       return null;
     }
 

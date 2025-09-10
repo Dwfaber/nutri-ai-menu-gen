@@ -64,12 +64,17 @@ export const SimpleMenuForm: React.FC<SimpleMenuFormProps> = ({
   // Estado para controle de fins de semana
   const [incluirFimDeSemana, setIncluirFimDeSemana] = useState(false);
 
+  // Estado para prevenir duplo clique
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!periodStart || !periodEnd) {
+    if (!periodStart || !periodEnd || isSubmitting) {
       return;
     }
+
+    setIsSubmitting(true);
 
     const formData: SimpleMenuFormData = {
       clientId: selectedClient?.id || '',
@@ -87,7 +92,12 @@ export const SimpleMenuForm: React.FC<SimpleMenuFormProps> = ({
       diasUteis: !incluirFimDeSemana // Enviar true se excluir fins de semana
     };
 
-    onSubmit(formData);
+    try {
+      onSubmit(formData);
+    } finally {
+      // Reset submission state after a delay
+      setTimeout(() => setIsSubmitting(false), 2000);
+    }
   };
 
   // Função para calcular total de dias e refeições
@@ -382,7 +392,7 @@ export const SimpleMenuForm: React.FC<SimpleMenuFormProps> = ({
             </Button>
             <Button
               type="submit"
-              disabled={isGenerating || !periodStart || !periodEnd || mealsPerDay <= 0}
+              disabled={isGenerating || isSubmitting || !periodStart || !periodEnd || mealsPerDay <= 0}
               className="flex-1"
             >
               {isGenerating ? (
