@@ -913,14 +913,13 @@ export const useIntegratedMenuGeneration = () => {
           for (const ing of ingredientsData as any[]) {
             const recId = String(ing.receita_id_legado);
             if (!byRecipe[recId]) byRecipe[recId] = [];
-            if (byRecipe[recId].length < 3) {
-              byRecipe[recId].push({
-                produto_base_id: Number(ing.produto_base_id),
-                name: ing.produto_base_descricao || '',
-                quantity: Number(ing.quantidade ?? 0),
-                unit: ing.unidade || ''
-              });
-            }
+            // Removida limitação de 3 ingredientes - agora carrega TODOS os ingredientes
+            byRecipe[recId].push({
+              produto_base_id: Number(ing.produto_base_id),
+              name: ing.produto_base_descricao || '',
+              quantity: Number(ing.quantidade ?? 0),
+              unit: ing.unidade || ''
+            });
           }
           for (const r of receitasCardapio) r.ingredients = byRecipe[r.id] || [];
         }
