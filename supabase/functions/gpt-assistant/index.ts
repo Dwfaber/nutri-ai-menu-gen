@@ -351,6 +351,9 @@ Deno.serve(async (req) => {
         r.categoria_descricao === categoria && r.tipo_proteina
       );
       
+      console.log(`📊 Pool inicial ${categoria}: ${proteinasDisponiveis.length} proteínas`);
+      console.log(`📋 Tipos disponíveis:`, proteinasDisponiveis.map(p => `${p.nome.substring(0, 20)}... (${p.tipo_proteina})`).slice(0, 5));
+      
       if (proteinasDisponiveis.length === 0) {
         console.log(`⚠️ Nenhuma proteína encontrada para ${categoria}`);
         return fallbackReceita(categoria);
@@ -378,10 +381,15 @@ Deno.serve(async (req) => {
       
       // CORREÇÃO CRÍTICA: Se já tem carne vermelha no dia, NUNCA escolher outra
       if (jaTemCarneVermelha) {
+        const proteinasAntes = proteinasParaEscolha.length;
         proteinasParaEscolha = proteinasParaEscolha.filter(p => 
           p.tipo_proteina !== 'Carne Vermelha'
         );
-        console.log(`🚫 Filtrando carnes vermelhas (já tem no dia). Restam: ${proteinasParaEscolha.length} opções`);
+        console.log(`🚫 Filtrando carnes vermelhas (já tem no dia). Antes: ${proteinasAntes}, Após: ${proteinasParaEscolha.length} opções`);
+        if (proteinasParaEscolha.length === 0) {
+          console.error(`❌ ERRO: Nenhuma proteína não-vermelha disponível para ${categoria}!`);
+          return null;
+        }
       }
       
       // Tentar encontrar proteína válida
@@ -986,7 +994,7 @@ Deno.serve(async (req) => {
         
         console.log(`\n📅 === ${nomeDia} (Dia ${i + 1}) ===`);
         
-        // Reset semanal inteligente dos contadores de proteína
+        // Reset semanal inteligente dos contadores de proteína E pools de rotação
         if (i % 7 === 0 && i > 0) {
           contadorProteinas = {
             "Carne Vermelha": 0,
@@ -995,7 +1003,9 @@ Deno.serve(async (req) => {
             "Ovo": 0,
             "Vegetariano": 0
           };
-          console.log("♻️ Resetando limites de proteína para nova semana");
+          saladasUsadas.clear();
+          guarnicoesUsadas.clear();
+          console.log("♻️ Resetando limites de proteína, saladas e guarnições para nova semana");
         }
         
         let receitasDia: any[] = [];
@@ -1009,16 +1019,43 @@ Deno.serve(async (req) => {
         let pp1 = await escolherProteina("Prato Principal 1", receitasPool, mealQuantity, proteinGrams, false);
         let jaTemCarneVermelha = pp1?.tipo_proteina === 'Carne Vermelha';
         
-        // PP2 - Verificar se PP1 já é carne vermelha
+        // PP2 - Verificar se PP1 já é carne vermelha e FORÇAR proteína diferente
+        console.log(`🔍 PP1 selecionado: ${pp1?.nome} (${pp1?.tipo_proteina})`);
         let pp2 = await escolherProteina("Prato Principal 2", receitasPool, mealQuantity, proteinGrams, jaTemCarneVermelha);
         
+        // SEGURANÇA EXTRA: Tentar novamente se ainda escolheu carne vermelha
+        if (jaTemCarneVermelha && pp2?.tipo_proteina === 'Carne Vermelha') {
+          console.error(`🚨 PP2 ainda é carne vermelha! Tentando forçar outra proteína...`);
+          const proteinasNaoVermelhas = receitasPool.filter(r => 
+            r.categoria_descricao === "Prato Principal 2" && 
+            r.tipo_proteina && 
+            r.tipo_proteina !== 'Carne Vermelha'
+          );
+          if (proteinasNaoVermelhas.length > 0) {
+            const forcedP2 = proteinasNaoVermelhas[Math.floor(Math.random() * proteinasNaoVermelhas.length)];
+            pp2 = {
+              id: forcedP2.receita_id_legado,
+              nome: forcedP2.nome,
+              categoria_descricao: forcedP2.categoria_descricao,
+              tipo_proteina: forcedP2.tipo_proteina,
+              grams: proteinGrams || 90
+            };
+            console.log(`🔧 PP2 forçado: ${pp2.nome} (${pp2.tipo_proteina})`);
+          }
+        }
+        
         // VALIDAÇÃO: Verificar se respeitou regra de carne vermelha
+        console.log(`🔍 VALIDAÇÃO FINAL:`);
+        console.log(`   PP1: ${pp1?.nome} (${pp1?.tipo_proteina})`);
+        console.log(`   PP2: ${pp2?.nome} (${pp2?.tipo_proteina})`);
+        
         if (pp1?.tipo_proteina === 'Carne Vermelha' && pp2?.tipo_proteina === 'Carne Vermelha') {
           console.error(`🚫 ERRO CRÍTICO: Duas carnes vermelhas no mesmo dia!`);
-          console.error(`PP1: ${pp1.nome} (${pp1.tipo_proteina})`);
-          console.error(`PP2: ${pp2.nome} (${pp2.tipo_proteina})`);
+          console.error(`❌ Quebra de regra nutricional detectada!`);
         } else if (jaTemCarneVermelha) {
-          console.log(`✅ Regra respeitada: PP1=${pp1?.tipo_proteina}, PP2=${pp2?.tipo_proteina}`);
+          console.log(`✅ Regra respeitada: máximo 1 carne vermelha por dia`);
+        } else {
+          console.log(`✅ Nenhuma carne vermelha no dia ou apenas 1 proteína vermelha`);
         }
         
         // Garantir que PP1 sempre exista (com fallback se necessário)
