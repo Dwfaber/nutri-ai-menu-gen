@@ -26,6 +26,24 @@ export interface MenuViolation {
 export const useMenuBusinessRules = () => {
   const [violations, setViolations] = useState<MenuViolation[]>([]);
 
+  // Função utilitária para normalizar os dias
+  const normalizarDia = (dia: string): string => {
+    const mapeamento: Record<string, string> = {
+      'Segunda': 'Segunda-feira',
+      'Terça': 'Terça-feira',
+      'Quarta': 'Quarta-feira',
+      'Quinta': 'Quinta-feira',
+      'Sexta': 'Sexta-feira',
+      // Mapeamento reverso caso seja necessário
+      'Segunda-feira': 'Segunda-feira',
+      'Terça-feira': 'Terça-feira',
+      'Quarta-feira': 'Quarta-feira',
+      'Quinta-feira': 'Quinta-feira',
+      'Sexta-feira': 'Sexta-feira'
+    };
+    return mapeamento[dia] || dia;
+  };
+
   // Classify protein type from recipe name
   const classifyProtein = (recipeName: string): ProteinClassification => {
     const name = recipeName.toLowerCase();
@@ -106,12 +124,12 @@ export const useMenuBusinessRules = () => {
   // Validate protein variety rules
   const validateProteinVariety = (recipes: any[]): MenuViolation[] => {
     const violations: MenuViolation[] = [];
-    const days = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta'];
+    const days = ['Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira'];
     
     // Group recipes by day
     const recipesByDay: { [key: string]: any[] } = {};
     recipes.forEach(recipe => {
-      const day = recipe.day || '';
+      const day = normalizarDia(recipe.day || recipe.dia || '');
       if (!recipesByDay[day]) recipesByDay[day] = [];
       recipesByDay[day].push(recipe);
     });
@@ -169,14 +187,14 @@ export const useMenuBusinessRules = () => {
   // Validate Monday processing rules
   const validateMondayProcessing = (recipes: any[]): MenuViolation[] => {
     const violations: MenuViolation[] = [];
-    const mondayRecipes = recipes.filter(r => r.day === 'Segunda');
+    const mondayRecipes = recipes.filter(r => normalizarDia(r.day || r.dia || '') === 'Segunda-feira');
     
     mondayRecipes.forEach(recipe => {
       if (requiresAdvancePreparation(recipe.nome || recipe.name)) {
         violations.push({
           type: 'monday_processing',
           message: `Receita com preparo antecipado na segunda-feira: ${recipe.nome || recipe.name}`,
-          day: 'Segunda',
+          day: 'Segunda-feira',
           recipes: [recipe.nome || recipe.name]
         });
       }
@@ -188,14 +206,14 @@ export const useMenuBusinessRules = () => {
   // Validate menu structure
   const validateMenuStructure = (recipes: any[]): MenuViolation[] => {
     const violations: MenuViolation[] = [];
-    const days = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta'];
+    const days = ['Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira'];
     // Usar códigos fixos, iguais ao backend
     const requiredCodes = ['PP1','PP2','ARROZ','FEIJAO','SALADA1','SALADA2','SUCO1','SUCO2'];
     
     // Group recipes by day
     const recipesByDay: { [key: string]: any[] } = {};
     recipes.forEach(recipe => {
-      const day = recipe.day || recipe.dia || '';
+      const day = normalizarDia(recipe.day || recipe.dia || '');
       if (!recipesByDay[day]) recipesByDay[day] = [];
       recipesByDay[day].push(recipe);
     });
@@ -264,7 +282,7 @@ export const useMenuBusinessRules = () => {
     let filtered = [...availableRecipes];
 
     // Monday: filter out advance preparation recipes
-    if (day === 'Segunda') {
+    if (normalizarDia(day) === 'Segunda-feira') {
       filtered = filtered.filter(recipe => !requiresAdvancePreparation(recipe.nome_receita));
     }
 
