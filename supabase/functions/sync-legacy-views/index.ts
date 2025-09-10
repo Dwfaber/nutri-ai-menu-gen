@@ -86,14 +86,35 @@ serve(async (req) => {
       
       console.log(`Configuração de sincronização:`, syncConfig);
       
-      // Converter dados do N8N para formato array
+      // Converter dados do N8N para formato array (suporte híbrido string/object)
       if (requestBody.data) {
-        if (Array.isArray(requestBody.data)) {
-          dataToProcess = requestBody.data;
-        } else if (typeof requestBody.data === 'object') {
+        let parsedData = requestBody.data;
+        
+        // Se data é string JSON, fazer parse
+        if (typeof requestBody.data === 'string') {
+          try {
+            parsedData = JSON.parse(requestBody.data);
+            console.log(`✅ Dados recebidos como string JSON, convertidos para objeto - tipo: ${typeof parsedData}, array: ${Array.isArray(parsedData)}`);
+          } catch (error) {
+            console.error(`❌ Erro ao fazer parse da string JSON:`, error);
+            console.log(`String original:`, requestBody.data?.substring(0, 200) + '...');
+            // Continuar com string original se parse falhar
+            parsedData = requestBody.data;
+          }
+        } else {
+          console.log(`📦 Dados recebidos como objeto - tipo: ${typeof parsedData}, array: ${Array.isArray(parsedData)}`);
+        }
+        
+        if (Array.isArray(parsedData)) {
+          dataToProcess = parsedData;
+          console.log(`📋 Array processado com ${parsedData.length} registros`);
+        } else if (typeof parsedData === 'object' && parsedData !== null) {
           // N8N envia objeto único, converter para array
-          console.log(`Convertendo objeto único para array para ${requestBody.viewName}`);
-          dataToProcess = [requestBody.data];
+          console.log(`🔄 Convertendo objeto único para array para ${requestBody.viewName}`);
+          dataToProcess = [parsedData];
+        } else {
+          console.log(`⚠️ Formato de dados não suportado: ${typeof parsedData}`, parsedData);
+          dataToProcess = [];
         }
       }
       
