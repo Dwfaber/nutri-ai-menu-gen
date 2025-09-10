@@ -39,6 +39,9 @@ export const SimpleMenuForm: React.FC<SimpleMenuFormProps> = ({
 
   // Estado para gramagem de proteína
   const [selectedProteinGrams, setSelectedProteinGrams] = useState('100');
+  
+  // Estado para controle de fins de semana
+  const [incluirFimDeSemana, setIncluirFimDeSemana] = useState(false);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -61,7 +64,8 @@ export const SimpleMenuForm: React.FC<SimpleMenuFormProps> = ({
       totalBudget: (selectedClient?.custo_medio_diario || 0) * totalMeals,
       preferences: preferences.trim() || undefined,
       juiceConfig: selectedJuices,
-      proteinGrams: selectedProteinGrams
+      proteinGrams: selectedProteinGrams,
+      diasUteis: !incluirFimDeSemana // Enviar true se excluir fins de semana
     };
 
     onSubmit(formData);
@@ -72,7 +76,23 @@ export const SimpleMenuForm: React.FC<SimpleMenuFormProps> = ({
     if (start && end) {
       const startDate = new Date(start);
       const endDate = new Date(end);
-      const daysDifference = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+      let daysDifference = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+      
+      // Se não incluir fins de semana, calcular apenas dias úteis
+      if (!incluirFimDeSemana && daysDifference > 0) {
+        let diasUteis = 0;
+        let currentDate = new Date(startDate);
+        
+        while (currentDate <= endDate) {
+          const dayOfWeek = currentDate.getDay(); // 0 = Domingo, 6 = Sábado
+          if (dayOfWeek !== 0 && dayOfWeek !== 6) { // Segunda a Sexta
+            diasUteis++;
+          }
+          currentDate.setDate(currentDate.getDate() + 1);
+        }
+        
+        daysDifference = diasUteis;
+      }
       
       if (daysDifference > 0) {
         setTotalDays(daysDifference);
@@ -153,8 +173,26 @@ export const SimpleMenuForm: React.FC<SimpleMenuFormProps> = ({
                 />
               </div>
             </div>
+            
+            {/* Opção para incluir fins de semana */}
+            <div className="flex items-center space-x-2 mt-3">
+              <Checkbox
+                id="incluirFimDeSemana"
+                checked={incluirFimDeSemana}
+                onCheckedChange={(checked) => {
+                  setIncluirFimDeSemana(checked as boolean);
+                  // Recalcular quando a opção mudar
+                  calculatePeriodData(periodStart, periodEnd);
+                }}
+              />
+              <Label htmlFor="incluirFimDeSemana" className="text-sm">
+                Incluir fins de semana no cardápio
+              </Label>
+            </div>
+            
             <p className="text-xs text-gray-500">
-              O cardápio será gerado para {totalDays} dia{totalDays !== 1 ? 's' : ''}
+              O cardápio será gerado para {totalDays} dia{totalDays !== 1 ? 's' : ''} 
+              {incluirFimDeSemana ? ' (incluindo fins de semana)' : ' (apenas dias úteis)'}
             </p>
           </div>
 
