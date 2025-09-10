@@ -209,7 +209,7 @@ const IntegratedMenuGenerator = () => {
         </CardContent>
       </Card>
 
-      {/* Generate Menu Button */}
+      {/* Generate Menu Button - Now shows when menu is persisted */}
       {!generatedMenu && (
         <Card>
           <CardHeader>
@@ -233,7 +233,7 @@ const IntegratedMenuGenerator = () => {
                 size="lg"
               >
                 <Plus className="w-4 h-4 mr-2" />
-                Gerar Cardápio
+                Gerar Novo Cardápio
               </Button>
               <Button 
                 onClick={handleTestConnectivity}
@@ -266,20 +266,38 @@ const IntegratedMenuGenerator = () => {
               <CardTitle className="flex items-center gap-2">
                 <Calendar className="w-5 h-5" />
                 Cardápio: {generatedMenu.weekPeriod}
+                {localStorage.getItem('current-generated-menu') && (
+                  <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
+                    Em Andamento
+                  </Badge>
+                )}
               </CardTitle>
-              <Badge 
-                variant={generatedMenu.status === 'approved' ? 'default' : 'outline'}
-                className={
-                  generatedMenu.status === 'approved' ? 'bg-green-100 text-green-800' :
-                  generatedMenu.status === 'rejected' ? 'bg-red-100 text-red-800' :
-                  'bg-amber-100 text-amber-800'
-                }
-              >
-                {generatedMenu.status === 'pending_approval' && 'Aguardando Aprovação'}
-                {generatedMenu.status === 'approved' && 'Aprovado'}
-                {generatedMenu.status === 'rejected' && 'Rejeitado'}
-                {generatedMenu.status === 'draft' && 'Rascunho'}
-              </Badge>
+              <div className="flex gap-2">
+                <Badge 
+                  variant={generatedMenu.status === 'approved' ? 'default' : 'outline'}
+                  className={
+                    generatedMenu.status === 'approved' ? 'bg-green-100 text-green-800' :
+                    generatedMenu.status === 'rejected' ? 'bg-red-100 text-red-800' :
+                    'bg-amber-100 text-amber-800'
+                  }
+                >
+                  {generatedMenu.status === 'pending_approval' && 'Aguardando Aprovação'}
+                  {generatedMenu.status === 'approved' && 'Aprovado'}
+                  {generatedMenu.status === 'rejected' && 'Rejeitado'}
+                  {generatedMenu.status === 'draft' && 'Rascunho'}
+                </Badge>
+                {generatedMenu.status === 'pending_approval' && (
+                  <Button
+                    onClick={() => clearMenuExplicitly()}
+                    variant="outline"
+                    size="sm"
+                    className="text-red-600 border-red-200 hover:bg-red-50"
+                  >
+                    <XCircle className="w-3 h-3 mr-1" />
+                    Limpar
+                  </Button>
+                )}
+              </div>
             </div>
           </CardHeader>
           <CardContent className="space-y-6">

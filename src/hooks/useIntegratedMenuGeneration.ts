@@ -91,6 +91,42 @@ export const useIntegratedMenuGeneration = () => {
   const { viableRecipes, marketIngredients, fetchMarketIngredients, checkRecipeViability, calculateRecipeRealCost } = useMarketAvailability();
   const { validateMenu, validateMenuAndSetViolations, filterRecipesForDay, violations } = useMenuBusinessRules();
 
+  // Load persisted menu on mount
+  useEffect(() => {
+    const persistedMenu = localStorage.getItem('current-generated-menu');
+    if (persistedMenu) {
+      try {
+        const menu = JSON.parse(persistedMenu);
+        // Validate that the menu belongs to the current client
+        const currentClientId = selectedClient?.id || selectedClient?.filial_id;
+        if (menu.clientId === currentClientId) {
+          setGeneratedMenu(menu);
+        } else {
+          // Clear persisted menu if it's for a different client
+          localStorage.removeItem('current-generated-menu');
+        }
+      } catch (error) {
+        console.error('Error loading persisted menu:', error);
+        localStorage.removeItem('current-generated-menu');
+      }
+    }
+  }, [selectedClient?.id]);
+
+  // Persist menu to localStorage whenever it changes
+  useEffect(() => {
+    if (generatedMenu) {
+      localStorage.setItem('current-generated-menu', JSON.stringify(generatedMenu));
+    } else {
+      localStorage.removeItem('current-generated-menu');
+    }
+  }, [generatedMenu]);
+
+  // Clear persisted menu when client changes
+  useEffect(() => {
+    localStorage.removeItem('current-generated-menu');
+    setGeneratedMenu(null);
+  }, [selectedClient?.id]);
+
 
 
   // Helper function to categorize salads by ingredient type
@@ -393,6 +429,9 @@ export const useIntegratedMenuGeneration = () => {
     try {
       setIsGenerating(true);
       setError(null);
+      
+      // Clear any existing persisted menu when generating a new one
+      localStorage.removeItem('current-generated-menu');
 
       const weekPeriod = `${formData.period.start} a ${formData.period.end}`;
       
@@ -1226,6 +1265,7 @@ export const useIntegratedMenuGeneration = () => {
   const clearMenuExplicitly = () => {
     setGeneratedMenu(null);
     setError(null);
+    localStorage.removeItem('current-generated-menu');
   };
 
   const mapRecipesToMarketProducts = async (recipes: MenuRecipe[]): Promise<any[]> => {
