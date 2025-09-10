@@ -1041,7 +1041,7 @@ Deno.serve(async (req) => {
             custo_por_refeicao: pp1.custo_por_refeicao,
             custo_total: pp1.custo_por_refeicao * mealQuantity,
             porcoes: mealQuantity,
-            ingredientes: [],
+            ingredientes: pp1.ingredientes || [],
             grams: pp1.grams,
             protein_type: pp1.tipo_proteina
           });
@@ -1057,7 +1057,7 @@ Deno.serve(async (req) => {
             custo_por_refeicao: pp2.custo_por_refeicao,
             custo_total: pp2.custo_por_refeicao * mealQuantity,
             porcoes: mealQuantity,
-            ingredientes: [],
+            ingredientes: pp2.ingredientes || [],
             grams: pp2.grams,
             protein_type: pp2.tipo_proteina
           });
@@ -1218,7 +1218,7 @@ Deno.serve(async (req) => {
               custo_por_refeicao: receita.custo_por_refeicao,
               custo_total: receita.custo_por_refeicao * mealQuantity,
               porcoes: mealQuantity,
-              ingredientes: []
+              ingredientes: receita.ingredientes || []
             });
             custoDia += receita.custo_por_refeicao;
           }
