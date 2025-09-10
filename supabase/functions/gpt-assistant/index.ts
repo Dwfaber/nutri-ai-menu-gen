@@ -120,6 +120,69 @@ function escolherSucosDia(juiceConfig: any): [{id: number, nome: string}, {id: n
   return sampleTwoDistinct(pool);
 }
 
+// Função para calcular custo realista de sucos baseado em volume
+async function calcularCustoSucoRealista(sucoEscolhido: any, supabase: any): Promise<number> {
+  const custoDefault = 0.06; // R$ 0,06 baseado na experiência nutricional
+  
+  try {
+    // Buscar produto por ID primeiro (mais preciso)
+    let { data: produto } = await supabase
+      .from('co_solicitacao_produto_listagem')
+      .select('preco, descricao, unidade')
+      .eq('produto_base_id', sucoEscolhido.id)
+      .gt('preco', 0)
+      .limit(1)
+      .maybeSingle();
+
+    // Se não encontrar por ID, buscar por nome
+    if (!produto) {
+      const { data: produtoNome } = await supabase
+        .from('co_solicitacao_produto_listagem')
+        .select('preco, descricao, unidade')
+        .ilike('descricao', `%${sucoEscolhido.nome}%`)
+        .in('unidade', ['UND', 'L', 'ML'])
+        .gt('preco', 0)
+        .limit(1)
+        .maybeSingle();
+      produto = produtoNome;
+    }
+
+    if (!produto) {
+      console.log(`🔍 Produto não encontrado para suco ${sucoEscolhido.nome}, usando custo padrão R$ ${custoDefault}`);
+      return custoDefault;
+    }
+
+    console.log(`📦 Produto encontrado: ${produto.descricao} - R$ ${produto.preco}`);
+
+    // Extrair volume da descrição
+    const descricao = produto.descricao.toUpperCase();
+    const match = descricao.match(/(\d+(?:[.,]\d+)?)\s*(ML|L|LITRO)/);
+    
+    let litros = 0.2; // default 200ml se não conseguir extrair
+    if (match) {
+      let quantidade = parseFloat(match[1].replace(",", "."));
+      litros = match[2] === "ML" ? quantidade / 1000 : quantidade;
+    }
+
+    const custoPorLitro = produto.preco / litros;
+    const custoPorPorcao = custoPorLitro * 0.2; // 200ml por refeição
+
+    console.log(`💧 Volume: ${litros}L, Custo por litro: R$ ${custoPorLitro.toFixed(2)}, Custo por porção: R$ ${custoPorPorcao.toFixed(3)}`);
+
+    // Validar faixa aceitável (R$ 0,03 a R$ 0,10)
+    if (custoPorPorcao >= 0.03 && custoPorPorcao <= 0.10) {
+      return parseFloat(custoPorPorcao.toFixed(3));
+    } else {
+      console.warn(`⚠️ Custo suco fora do range (R$ ${custoPorPorcao.toFixed(3)}), usando padrão R$ ${custoDefault}`);
+      return custoDefault;
+    }
+    
+  } catch (error) {
+    console.error(`❌ Erro ao calcular custo suco: ${error.message}`);
+    return custoDefault;
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -1027,16 +1090,8 @@ Deno.serve(async (req) => {
                 nome: sucoEscolhido.nome
               });
               
-              // Buscar custo real do produto (tentativa de encontrar por nome)
-              const { data: precoProduto } = await supabase
-                .from('co_solicitacao_produto_listagem')
-                .select('preco, produto_base_id')
-                .ilike('descricao', `%${sucoEscolhido.nome.split(' ').pop()}%`) // busca por parte do nome
-                .gt('preco', 0)
-                .limit(1)
-                .maybeSingle();
-             
-              const custoSuco = precoProduto?.preco ? Math.max(precoProduto.preco * 0.3, 1.20) : 1.20; // 30% do preço, mínimo R$ 1.20
+              // Calcular custo realista baseado em volume
+              const custoSuco = await calcularCustoSucoRealista(sucoEscolhido, supabase);
               
               receita = {
                 id: sucoEscolhido.id,
