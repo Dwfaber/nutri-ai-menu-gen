@@ -8,8 +8,29 @@ import { CalendarDays, ChefHat, X, Loader2 } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useSelectedClient } from '@/contexts/SelectedClientContext';
 
+export interface SimpleMenuFormData {
+  clientId: string;
+  period: {
+    start: string;
+    end: string;
+  };
+  mealsPerDay: number;
+  estimatedMeals?: number;
+  budgetPerMeal?: number;
+  totalBudget?: number;
+  preferences?: string[];
+  juiceConfig?: {
+    use_pro_mix?: boolean;
+    use_vita_suco?: boolean;
+    use_suco_diet?: boolean;
+    use_suco_natural?: boolean;
+  };
+  proteinGrams?: string;
+  diasUteis: boolean;
+}
+
 interface SimpleMenuFormProps {
-  onSubmit: (formData: any) => void;
+  onSubmit: (formData: SimpleMenuFormData) => void;
   onCancel: () => void;
   isGenerating: boolean;
   error?: string | null;
@@ -50,19 +71,17 @@ export const SimpleMenuForm: React.FC<SimpleMenuFormProps> = ({
       return;
     }
 
-    const formData = {
-      clientId: selectedClient?.id,
-      contractData: selectedClient,
+    const formData: SimpleMenuFormData = {
+      clientId: selectedClient?.id || '',
       period: {
         start: periodStart,
         end: periodEnd
       },
       mealsPerDay,
-      totalMeals,
       estimatedMeals: totalMeals,
       budgetPerMeal: selectedClient?.custo_medio_diario || 0,
       totalBudget: (selectedClient?.custo_medio_diario || 0) * totalMeals,
-      preferences: preferences.trim() || undefined,
+      preferences: preferences.trim() ? [preferences.trim()] : undefined,
       juiceConfig: selectedJuices,
       proteinGrams: selectedProteinGrams,
       diasUteis: !incluirFimDeSemana // Enviar true se excluir fins de semana

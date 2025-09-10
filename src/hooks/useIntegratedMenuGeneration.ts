@@ -7,6 +7,17 @@ import { useClientContractsContext } from '@/contexts/ClientContractsContext';
 import { MarketProduct } from './useMarketProducts';
 import { useMarketAvailability } from './useMarketAvailability';
 import { useMenuBusinessRules } from './useMenuBusinessRules';
+import { SimpleMenuFormData } from '@/components/MenuGeneration/SimpleMenuForm';
+
+export interface MenuGenerationPayload extends SimpleMenuFormData {
+  action: 'generate_menu';
+  clientName?: string;
+  custoMedioDiario?: number;
+  tipoRefeicao?: string;
+  quantidadeRefeicoes?: number;
+  periodo?: any;
+  baseRecipes?: any;
+}
 
 export interface MenuGenerationRequest {
   clientId: string;
@@ -332,7 +343,7 @@ export const useIntegratedMenuGeneration = () => {
   }, [selectedClient?.id]); // Recarrega quando o cliente muda
 
   const generateMenuWithFormData = async (
-    formData: any
+    formData: SimpleMenuFormData
   ): Promise<GeneratedMenu | null> => {
     if (!formData.clientId || !formData.period.start || !formData.period.end) {
       toast({
@@ -349,22 +360,23 @@ export const useIntegratedMenuGeneration = () => {
 
       const weekPeriod = `${formData.period.start} a ${formData.period.end}`;
       
-      // Use the selected client from context or override with form data
-      const clientToUse = selectedClient?.id === formData.clientId ? selectedClient : formData.contractData;
+      // Use the selected client from context
+      const clientToUse = selectedClient;
       
       if (!clientToUse) {
         throw new Error("Cliente não encontrado");
       }
 
       // Criar payload para Edge Function
-      const payload = {
+      const payload: MenuGenerationPayload = {
+        ...formData,
         action: 'generate_menu',
-        client_id: formData.clientId,
-        filial_id: clientToUse.filial_id || clientToUse.filial_id_legado,
-        period: weekPeriod,
-        numDays: 7,
-        refeicoesPorDia: formData.mealsPerDay || clientToUse.total_funcionarios || 100,
-        preferences: formData.preferences ? [formData.preferences] : [],
+        clientName: clientToUse.nome_fantasia,
+        custoMedioDiario: clientToUse.custo_medio_diario,
+        tipoRefeicao: clientToUse.tipo_refeicao || 'almoco',
+        quantidadeRefeicoes: formData.estimatedMeals || formData.mealsPerDay || 100,
+        periodo: formData.period,
+        preferences: formData.preferences || [],
         proteinGrams: formData.proteinGrams || '100',
         juiceConfig: formData.juiceConfig || {},
         diasUteis: formData.diasUteis !== undefined ? formData.diasUteis : true, // Padrão apenas dias úteis
@@ -391,7 +403,7 @@ export const useIntegratedMenuGeneration = () => {
       const menu: GeneratedMenu = {
         id: `temp-${Date.now()}`, // ID temporário até salvar no banco
         clientId: formData.clientId,
-        clientName: clientToUse.nome_fantasia || clientToUse.nome_empresa || 'Cliente',
+        clientName: clientToUse.nome_fantasia || 'Cliente',
         weekPeriod: weekPeriod,
         status: 'pending_approval',
         totalCost: Number(data.resumo_financeiro?.custo_total_periodo || 0),

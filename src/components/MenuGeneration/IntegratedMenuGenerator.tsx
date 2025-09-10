@@ -10,7 +10,7 @@ import { ChefHat, Calendar, CheckCircle, XCircle, ShoppingCart, DollarSign, User
 import { useIntegratedMenuGeneration } from '@/hooks/useIntegratedMenuGeneration';
 import { useSelectedClient } from '@/contexts/SelectedClientContext';
 import { WeeklyMenuView } from '@/components/MenuGeneration/WeeklyMenuView';
-import { SimpleMenuForm } from '@/components/MenuGeneration/SimpleMenuForm';
+import { SimpleMenuForm, SimpleMenuFormData } from '@/components/MenuGeneration/SimpleMenuForm';
 import { ContractFormData } from '@/hooks/useClientContracts';
 import MenuValidationPanel from '@/components/MenuGeneration/MenuValidationPanel';
 import { MenuCostBreakdown } from '@/components/MenuGeneration/MenuCostBreakdown';
@@ -59,7 +59,7 @@ const IntegratedMenuGenerator = () => {
   }, [generatedMenu?.recipes]); // CORREÇÃO: Remover dependência que causa loop
 
 
-  const handleGenerateMenu = async (formData: ContractFormData) => {
+  const handleGenerateMenu = async (formData: SimpleMenuFormData) => {
     await generateMenuWithFormData(formData);
     setShowForm(false);
   };

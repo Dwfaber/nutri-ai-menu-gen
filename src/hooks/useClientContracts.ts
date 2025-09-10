@@ -14,6 +14,7 @@ export interface ContractFormData {
   restrictions: string[];
   preferences: string;
   contractData: ContractClient | null;
+  diasUteis?: boolean;
 }
 
 export const useClientContracts = () => {
