@@ -45,6 +45,9 @@ export const WeeklyMenuView: React.FC<WeeklyMenuViewProps> = ({ menu }) => {
   }
 
   // 🔎 Agrupar receitas por dia com mapeamento de categorias
+  console.log('🍽️ Total de receitas:', menu.recipes.length);
+  console.log('🍽️ Primeira receita:', menu.recipes[0]);
+  
   const receitasPorDia = menu.recipes.reduce((acc: any, r) => {
     if (!acc[r.day]) acc[r.day] = {};
     
@@ -87,6 +90,11 @@ export const WeeklyMenuView: React.FC<WeeklyMenuViewProps> = ({ menu }) => {
 
   const totalSemanas = Object.keys(semanas).length;
   const [semanaAtual, setSemanaAtual] = useState(1);
+
+  // Debug logs
+  console.log('🗓️ Dias disponíveis:', diasDisponiveis);
+  console.log('📊 Semanas agrupadas:', semanas);
+  console.log('📈 Total de semanas:', totalSemanas);
 
   // Obter dias da semana atual
   const diasSemanaAtual = semanas[semanaAtual] || [];
