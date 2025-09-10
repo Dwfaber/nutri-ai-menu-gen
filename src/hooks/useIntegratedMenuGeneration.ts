@@ -186,28 +186,36 @@ export const useIntegratedMenuGeneration = () => {
   // Carregar cardápios salvos
   const loadSavedMenus = async () => {
     try {
-      // Get the current client ID from selected client
+      // Debug: verificar cliente selecionado
+      console.log('🔍 Cliente selecionado:', selectedClient);
       const currentClientId = selectedClient?.id || selectedClient?.filial_id;
+      console.log('🔍 ID do cliente para filtro:', currentClientId);
       
       let query = supabase
         .from('generated_menus')
         .select('*')
         .order('created_at', { ascending: false });
       
-      // Filter by client if we have one selected
-      if (currentClientId) {
-        query = query.eq('client_id', String(currentClientId));
-        console.log('🔍 Filtro aplicado client_id:', currentClientId);
-      } else {
-        console.log('⚠️ Nenhum cliente selecionado - mostrando todos os cardápios');
-      }
+      // TEMPORARIAMENTE desabilitar filtro para ver todos os cardápios
+      // TODO: Corrigir filtro por cliente após confirmar que cardápios aparecem
+      
+      console.log('⚠️ DEBUG: Mostrando TODOS os cardápios (filtro temporariamente desabilitado)');
 
       const { data: menus, error: menusError } = await query;
 
       if (menusError) {
         console.error('❌ Erro Supabase:', menusError);
       } else {
-        console.log('📊 Cardápios encontrados:', menus?.length || 0);
+        console.log('📊 Total de cardápios no banco:', menus?.length || 0);
+        if (menus?.length) {
+          console.log('🔍 Client IDs salvos:', menus.map(m => `${m.client_id} (${m.client_name})`));
+          console.log('🔍 Primeiro cardápio exemplo:', {
+            id: menus[0].id,
+            client_id: menus[0].client_id, 
+            client_name: menus[0].client_name,
+            total_recipes: menus[0].total_recipes
+          });
+        }
         if (menus?.length) {
           console.log('📑 IDs dos cardápios:', menus.map(m => m.id));
           console.log('💰 Primeiro cardápio - receitas:', menus[0]?.total_recipes, 'custo:', menus[0]?.cost_per_meal);
