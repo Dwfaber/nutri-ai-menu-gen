@@ -272,30 +272,30 @@ Deno.serve(async (req) => {
     function fallbackReceita(categoria: string) {
       switch (categoria) {
         case "Prato Principal 1":
-          return { id: -10, nome: "FRANGO GRELHADO SIMPLES", custo_por_refeicao: 2.5 };
+          return { id: -10, nome: "FRANGO GRELHADO SIMPLES", custo_por_refeicao: 2.5, ingredientes: [] };
         case "Prato Principal 2":
-          return { id: -11, nome: "OVO REFOGADO", custo_por_refeicao: 2.0 };
+          return { id: -11, nome: "OVO REFOGADO", custo_por_refeicao: 2.0, ingredientes: [] };
         case "Proteína Principal 1": // compatibilidade com código antigo
-          return { id: -10, nome: "FRANGO GRELHADO SIMPLES", custo_por_refeicao: 2.5 };
+          return { id: -10, nome: "FRANGO GRELHADO SIMPLES", custo_por_refeicao: 2.5, ingredientes: [] };
         case "Proteína Principal 2": // compatibilidade com código antigo
-          return { id: -11, nome: "OVO REFOGADO", custo_por_refeicao: 2.0 };
+          return { id: -11, nome: "OVO REFOGADO", custo_por_refeicao: 2.0, ingredientes: [] };
         case "Salada 1":
-          return { id: -1, nome: "SALADA MISTA", custo_por_refeicao: 0.5 };
+          return { id: -1, nome: "SALADA MISTA", custo_por_refeicao: 0.5, ingredientes: [] };
         case "Salada 2": 
-          return { id: -2, nome: "LEGUMES COZIDOS SIMPLES", custo_por_refeicao: 0.6 };
+          return { id: -2, nome: "LEGUMES COZIDOS SIMPLES", custo_por_refeicao: 0.6, ingredientes: [] };
         case "Salada 1 (Verduras)": // compatibilidade com código antigo
-          return { id: -1, nome: "SALADA MISTA", custo_por_refeicao: 0.5 };
+          return { id: -1, nome: "SALADA MISTA", custo_por_refeicao: 0.5, ingredientes: [] };
         case "Salada 2 (Legumes)": // compatibilidade com código antigo
-          return { id: -2, nome: "LEGUMES COZIDOS SIMPLES", custo_por_refeicao: 0.6 };
+          return { id: -2, nome: "LEGUMES COZIDOS SIMPLES", custo_por_refeicao: 0.6, ingredientes: [] };
         case "Guarnição":
-          return { id: -3, nome: "BATATA COZIDA", custo_por_refeicao: 0.8 };
+          return { id: -3, nome: "BATATA COZIDA", custo_por_refeicao: 0.8, ingredientes: [] };
         case "Suco 1": 
-          return { id: -4, nome: "Suco de laranja natural", custo_por_refeicao: 1.20 };
+          return { id: -4, nome: "Suco de laranja natural", custo_por_refeicao: 1.20, ingredientes: [] };
         case "Suco 2": 
-          return { id: -5, nome: "Suco de uva", custo_por_refeicao: 1.20 };
+          return { id: -5, nome: "Suco de uva", custo_por_refeicao: 1.20, ingredientes: [] };
         case "Sobremesa": 
           const idx = Math.floor(Math.random() * SOBREMESAS.length);
-          return { id: -6, nome: SOBREMESAS[idx], custo_por_refeicao: 0.5 };
+          return { id: -6, nome: SOBREMESAS[idx], custo_por_refeicao: 0.5, ingredientes: [] };
         default: return null;
       }
     }
@@ -1039,14 +1039,14 @@ Deno.serve(async (req) => {
             nome: pp1.nome,
             categoria: 'Prato Principal 1',
             codigo: 'PP1',
-            custo_por_refeicao: pp1.custo_por_refeicao,
-            custo_total: pp1.custo_por_refeicao * mealQuantity,
+            custo_por_refeicao: pp1Result.custo_por_refeicao,
+            custo_total: pp1Result.custo_por_refeicao * mealQuantity,
             porcoes: mealQuantity,
             ingredientes: pp1Result.ingredientes || [],
             grams: pp1.grams,
             protein_type: pp1.tipo_proteina
           });
-          custoDia += pp1.custo_por_refeicao;
+          custoDia += pp1Result.custo_por_refeicao;
         }
         
         if (pp2) {
@@ -1056,14 +1056,14 @@ Deno.serve(async (req) => {
             nome: pp2.nome,
             categoria: 'Prato Principal 2',
             codigo: 'PP2',
-            custo_por_refeicao: pp2.custo_por_refeicao,
-            custo_total: pp2.custo_por_refeicao * mealQuantity,
+            custo_por_refeicao: pp2Result.custo_por_refeicao,
+            custo_total: pp2Result.custo_por_refeicao * mealQuantity,
             porcoes: mealQuantity,
             ingredientes: pp2Result.ingredientes || [],
             grams: pp2.grams,
             protein_type: pp2.tipo_proteina
           });
-          custoDia += pp2.custo_por_refeicao;
+          custoDia += pp2Result.custo_por_refeicao;
         }
         
         // ====== OUTRAS CATEGORIAS ======
