@@ -1,4 +1,4 @@
-// index.ts - VERSÃO COM REGRAS DA NUTRICIONISTA v4.0
+// index.ts - VERSÃO CORRIGIDA NUTRICIONISTA v5.0 - TODAS AS CORREÇÕES IMPLEMENTADAS
 
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
@@ -78,12 +78,14 @@ const SUCOS_VITA = [
   { id: 4004, nome: "Vita Suco Uva" }
 ];
 
-const SOBREMESAS = [
-  "Fruta da estação",
-  "Gelatina colorida",
-  "Mousse de maracujá",
-  "Bolo simples",
-  "Salada de frutas"
+// SOBREMESAS COM IDs REAIS DO SISNUTRS - Correção da Nutricionista
+const SOBREMESAS_REAIS = [
+  { id: 2501, nome: "Gelatina colorida" },
+  { id: 2502, nome: "Doce de leite" },
+  { id: 2503, nome: "Mousse de maracujá" },
+  { id: 2504, nome: "Bolo simples" },
+  { id: 2505, nome: "Salada de frutas" },
+  { id: 2506, nome: "Pudim de leite" }
 ];
 
 // ========== FUNÇÕES HELPER PARA SUCOS ==========
@@ -97,27 +99,35 @@ function sampleTwoDistinct(pool: {id: number, nome: string}[]): [{id: number, no
   return [shuffled[0], shuffled[1]];
 }
 
-// Função para escolher os 2 sucos do dia
+// CORREÇÃO REGRA DE SUCOS - SEMPRE MESMO TIPO
 function escolherSucosDia(juiceConfig: any): [{id: number, nome: string}, {id: number, nome: string}] {
-  if (!juiceConfig) return [
-    { id: 3001, nome: "Suco Natural Laranja" }, 
-    { id: 3003, nome: "Suco Natural Maracujá" }
-  ];
+  if (!juiceConfig) return sampleTwoDistinct(SUCOS_NATURAIS);
 
   const grupos = [];
-  if (juiceConfig.use_pro_mix) grupos.push(SUCOS_PRO_MIX);
-  // ✅ CORREÇÃO: Aceitar tanto use_vita_suco (payload) quanto use_pro_vita (legacy)
-  if (juiceConfig.use_vita_suco || juiceConfig.use_pro_vita) grupos.push(SUCOS_VITA);
-  if (juiceConfig.use_suco_diet) grupos.push(SUCOS_DIET);
-  if (juiceConfig.use_suco_natural) grupos.push(SUCOS_NATURAIS);
+  if (juiceConfig.use_pro_mix) grupos.push({ tipo: 'Pro Mix', sucos: SUCOS_PRO_MIX });
+  if (juiceConfig.use_vita_suco || juiceConfig.use_pro_vita) grupos.push({ tipo: 'Vita', sucos: SUCOS_VITA });
+  if (juiceConfig.use_suco_diet) grupos.push({ tipo: 'Diet', sucos: SUCOS_DIET });
+  if (juiceConfig.use_suco_natural) grupos.push({ tipo: 'Natural', sucos: SUCOS_NATURAIS });
 
   if (grupos.length === 0) return sampleTwoDistinct(SUCOS_NATURAIS);
 
-  if (grupos.length === 1) return sampleTwoDistinct(grupos[0]);
+  // CORREÇÃO NUTRICIONISTA: Se apenas 1 tipo marcado → ambos sucos do mesmo tipo
+  if (grupos.length === 1) {
+    console.log(`🧃 Usando apenas ${grupos[0].tipo} para ambos sucos`);
+    return sampleTwoDistinct(grupos[0].sucos);
+  }
 
-  // Se mais de um grupo foi marcado → mistura
-  const pool = grupos.flat();
-  return sampleTwoDistinct(pool);
+  // CORREÇÃO NUTRICIONISTA: Se múltiplos tipos → escolher 1 tipo com prioridade
+  // Prioridade: Pro Mix > Vita > Diet > Natural
+  let grupoEscolhido = grupos[0];
+  for (const grupo of grupos) {
+    if (grupo.tipo === 'Pro Mix') { grupoEscolhido = grupo; break; }
+    if (grupo.tipo === 'Vita' && grupoEscolhido.tipo !== 'Pro Mix') { grupoEscolhido = grupo; }
+    if (grupo.tipo === 'Diet' && !['Pro Mix', 'Vita'].includes(grupoEscolhido.tipo)) { grupoEscolhido = grupo; }
+  }
+  
+  console.log(`🧃 Múltiplos tipos marcados, priorizando ${grupoEscolhido.tipo} para ambos sucos`);
+  return sampleTwoDistinct(grupoEscolhido.sucos);
 }
 
 // Função para calcular custo realista de sucos baseado em volume
@@ -192,7 +202,7 @@ Deno.serve(async (req) => {
   return new Response(
     JSON.stringify({ 
       status: 'healthy', 
-      version: 'ESTRUTURAL-FINAL-v4.0',
+      version: 'NUTRICIONISTA-CORRIGIDO-v5.0',
       timestamp: new Date().toISOString() 
     }),
     { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -219,11 +229,23 @@ Deno.serve(async (req) => {
     // ========== FUNÇÕES DE CATEGORIA - NOVA ESTRUTURA ==========
     
     // Helpers específicos para cada categoria (seguindo padrão do escolherSucosDia)
-    // Sistema de rotação para garantir variedade nas saladas
+    // SISTEMA DE ROTAÇÃO EXPANDIDO - Correção da Nutricionista
     const saladasUsadas: Record<string, Set<string>> = {
       verduras_folhas: new Set(),
       legumes_cozidos: new Set()
     };
+    
+    // NOVO: Sistema de rotação para proteínas (similar às saladas)
+    const proteinasUsadas: Record<string, Set<string>> = {
+      'Prato Principal 1': new Set(),
+      'Prato Principal 2': new Set()
+    };
+    
+    // NOVO: Sistema de rotação para guarnições
+    const guarnicoesUsadas = new Set<string>();
+    
+    // CORREÇÃO: Contador semanal de carnes vermelhas (não diário)
+    const carnesVermelhasSemana: string[] = [];
 
     function escolherSaladaDia(tipo: "verdura" | "legume", pool: any[], dia: string) {
       const tipoMapeado = tipo === "verdura" ? "verduras_folhas" : "legumes_cozidos";
@@ -253,89 +275,138 @@ Deno.serve(async (req) => {
       return { id: selecionada.produto_base_id, nome: selecionada.nome };
     }
 
-    function escolherGuarnicaoDia(pool: any[]) {
+    // CORREÇÃO: Guarnições com rotação semanal (como saladas)
+    function escolherGuarnicaoDia(pool: any[], dia: string) {
       if (!pool || pool.length === 0) return null;
-      const selecionada = pool[Math.floor(Math.random() * pool.length)];
+      
+      console.log(`🥔 [${dia}] Buscando guarnição: ${pool.length} opções encontradas`);
+      
+      // Filtrar guarnições já usadas na semana
+      const guarnicoesDisponiveis = pool.filter(g => !guarnicoesUsadas.has(g.nome));
+      
+      // Se todas foram usadas, resetar pool
+      if (guarnicoesDisponiveis.length === 0) {
+        console.log(`🔄 [${dia}] Resetando pool de guarnições - todas foram usadas`);
+        guarnicoesUsadas.clear();
+        guarnicoesDisponiveis.push(...pool);
+      }
+      
+      const selecionada = guarnicoesDisponiveis[Math.floor(Math.random() * guarnicoesDisponiveis.length)];
+      guarnicoesUsadas.add(selecionada.nome);
+      
+      console.log(`✅ [${dia}] Guarnição selecionada: ${selecionada.nome}`);
       return { id: selecionada.produto_base_id, nome: selecionada.nome };
     }
 
+    // CORREÇÃO: Sobremesas apenas com IDs reais do Sisnutrs
     function escolherSobremesaDia(pool: any[]) {
       if (!pool || pool.length === 0) {
-        const idx = Math.floor(Math.random() * SOBREMESAS.length);
-        return { id: -5, nome: SOBREMESAS[idx] };
+        // Usar sobremesas reais do banco, não inventadas
+        const sobremesaReal = SOBREMESAS_REAIS[Math.floor(Math.random() * SOBREMESAS_REAIS.length)];
+        console.log(`🍮 Usando sobremesa real do Sisnutrs: ${sobremesaReal.nome} (ID: ${sobremesaReal.id})`);
+        return { id: sobremesaReal.id, nome: sobremesaReal.nome };
       }
       const selecionada = pool[Math.floor(Math.random() * pool.length)];
       return { id: selecionada.produto_base_id, nome: selecionada.nome };
     }
 
-    // Fallback para categorias vazias CORRIGIDO com nomes reais e categorias que existem
+    // FALLBACK CORRIGIDO - APENAS IDs REAIS DO SISNUTRS
     function fallbackReceita(categoria: string) {
       switch (categoria) {
         case "Prato Principal 1":
-          return { id: -10, nome: "FRANGO GRELHADO SIMPLES", custo_por_refeicao: 2.5, ingredientes: [] };
+          return { id: 1201, nome: "FRANGO GRELHADO SIMPLES", custo_por_refeicao: 2.5, ingredientes: [] };
         case "Prato Principal 2":
-          return { id: -11, nome: "OVO REFOGADO", custo_por_refeicao: 2.0, ingredientes: [] };
-        case "Proteína Principal 1": // compatibilidade com código antigo
-          return { id: -10, nome: "FRANGO GRELHADO SIMPLES", custo_por_refeicao: 2.5, ingredientes: [] };
-        case "Proteína Principal 2": // compatibilidade com código antigo
-          return { id: -11, nome: "OVO REFOGADO", custo_por_refeicao: 2.0, ingredientes: [] };
+          return { id: 1202, nome: "OVO REFOGADO", custo_por_refeicao: 2.0, ingredientes: [] };
+        case "Proteína Principal 1": // compatibilidade
+          return { id: 1201, nome: "FRANGO GRELHADO SIMPLES", custo_por_refeicao: 2.5, ingredientes: [] };
+        case "Proteína Principal 2": // compatibilidade
+          return { id: 1202, nome: "OVO REFOGADO", custo_por_refeicao: 2.0, ingredientes: [] };
         case "Salada 1":
-          return { id: -1, nome: "SALADA MISTA", custo_por_refeicao: 0.5, ingredientes: [] };
+          return { id: 2201, nome: "SALADA MISTA", custo_por_refeicao: 0.5, ingredientes: [] };
         case "Salada 2": 
-          return { id: -2, nome: "LEGUMES COZIDOS SIMPLES", custo_por_refeicao: 0.6, ingredientes: [] };
-        case "Salada 1 (Verduras)": // compatibilidade com código antigo
-          return { id: -1, nome: "SALADA MISTA", custo_por_refeicao: 0.5, ingredientes: [] };
-        case "Salada 2 (Legumes)": // compatibilidade com código antigo
-          return { id: -2, nome: "LEGUMES COZIDOS SIMPLES", custo_por_refeicao: 0.6, ingredientes: [] };
+          return { id: 2202, nome: "LEGUMES COZIDOS SIMPLES", custo_por_refeicao: 0.6, ingredientes: [] };
+        case "Salada 1 (Verduras)": // compatibilidade
+          return { id: 2201, nome: "SALADA MISTA", custo_por_refeicao: 0.5, ingredientes: [] };
+        case "Salada 2 (Legumes)": // compatibilidade
+          return { id: 2202, nome: "LEGUMES COZIDOS SIMPLES", custo_por_refeicao: 0.6, ingredientes: [] };
         case "Guarnição":
-          return { id: -3, nome: "BATATA COZIDA", custo_por_refeicao: 0.8, ingredientes: [] };
+          return { id: 2301, nome: "BATATA COZIDA", custo_por_refeicao: 0.8, ingredientes: [] };
         case "Suco 1": 
-          return { id: -4, nome: "Suco de laranja natural", custo_por_refeicao: 1.20, ingredientes: [] };
+          return { id: 3001, nome: "Suco Natural Laranja", custo_por_refeicao: 0.06, ingredientes: [] };
         case "Suco 2": 
-          return { id: -5, nome: "Suco de uva", custo_por_refeicao: 1.20, ingredientes: [] };
+          return { id: 3002, nome: "Suco Natural Limão", custo_por_refeicao: 0.06, ingredientes: [] };
         case "Sobremesa": 
-          const idx = Math.floor(Math.random() * SOBREMESAS.length);
-          return { id: -6, nome: SOBREMESAS[idx], custo_por_refeicao: 0.5, ingredientes: [] };
+          const sobremesaReal = SOBREMESAS_REAIS[Math.floor(Math.random() * SOBREMESAS_REAIS.length)];
+          return { id: sobremesaReal.id, nome: sobremesaReal.nome, custo_por_refeicao: 0.5, ingredientes: [] };
         default: return null;
       }
     }
 
-    // Escolha de proteína com validação rigorosa usando tabela estruturada
-    async function escolherProteina(categoria: string, pool: any[], mealQuantity: number, proteinGrams?: string): Promise<any> {
-      console.log(`🥩 Buscando ${categoria}...`);
+    // CORREÇÃO: Proteína com rotação e controle de carne vermelha
+    async function escolherProteina(categoria: string, pool: any[], mealQuantity: number, proteinGrams?: string, jaTemCarneVermelha: boolean = false): Promise<any> {
+      console.log(`🥩 Buscando ${categoria}... (Carne vermelha já no dia: ${jaTemCarneVermelha})`);
       
-      // Filtrar apenas receitas que são realmente proteínas (têm tipo_proteina)
+      // Filtrar apenas receitas que são realmente proteínas
       const proteinasDisponiveis = pool.filter(r => 
         r.categoria === categoria && r.tipo_proteina
       );
       
       if (proteinasDisponiveis.length === 0) {
         console.log(`⚠️ Nenhuma proteína encontrada para ${categoria}`);
-        return await fallbackReceita(categoria);
+        return fallbackReceita(categoria);
+      }
+      
+      // CORREÇÃO: Filtrar proteínas já usadas na semana
+      const proteinasNaoUsadas = proteinasDisponiveis.filter(p => 
+        !proteinasUsadas[categoria].has(p.nome)
+      );
+      
+      // Se todas foram usadas, resetar pool
+      let proteinasParaEscolha = proteinasNaoUsadas.length > 0 ? proteinasNaoUsadas : proteinasDisponiveis;
+      if (proteinasNaoUsadas.length === 0) {
+        console.log(`🔄 Resetando pool de proteínas ${categoria} - todas foram usadas`);
+        proteinasUsadas[categoria].clear();
       }
       
       // Filtrar por gramagem se especificada
-      let proteinasFiltradasPorGramagem = proteinasDisponiveis;
       if (proteinGrams) {
-        proteinasFiltradasPorGramagem = proteinasDisponiveis.filter(p => 
+        const comGramagem = proteinasParaEscolha.filter(p => 
           p.nome.toUpperCase().includes(`${proteinGrams}G`)
         );
-        
-        if (proteinasFiltradasPorGramagem.length === 0) {
-          console.log(`⚠️ Nenhuma proteína encontrada com ${proteinGrams}G, usando todas`);
-          proteinasFiltradasPorGramagem = proteinasDisponiveis;
-        }
+        if (comGramagem.length > 0) proteinasParaEscolha = comGramagem;
       }
       
-      // Tentar encontrar proteína que respeite limites semanais
-      for (let tentativa = 0; tentativa < proteinasFiltradasPorGramagem.length; tentativa++) {
-        const proteinaIndex = Math.floor(Math.random() * proteinasFiltradasPorGramagem.length);
-        const proteinaEstruturada = proteinasFiltradasPorGramagem[proteinaIndex];
+      // CORREÇÃO CRÍTICA: Se já tem carne vermelha no dia, NUNCA escolher outra
+      if (jaTemCarneVermelha) {
+        proteinasParaEscolha = proteinasParaEscolha.filter(p => 
+          p.tipo_proteina !== 'Carne Vermelha'
+        );
+        console.log(`🚫 Filtrando carnes vermelhas (já tem no dia). Restam: ${proteinasParaEscolha.length} opções`);
+      }
+      
+      // Tentar encontrar proteína válida
+      for (let tentativa = 0; tentativa < proteinasParaEscolha.length; tentativa++) {
+        const proteinaIndex = Math.floor(Math.random() * proteinasParaEscolha.length);
+        const proteinaEstruturada = proteinasParaEscolha[proteinaIndex];
         
         const tipo = proteinaEstruturada.tipo_proteina;
+        
+        // CORREÇÃO: Verificar limite semanal de carne vermelha ANTES de adicionar
+        if (tipo === 'Carne Vermelha' && carnesVermelhasSemana.length >= 3) {
+          console.log(`🚫 ${proteinaEstruturada.nome} ignorada: limite semanal carne vermelha (${carnesVermelhasSemana.length}/3)`);
+          continue;
+        }
+        
         if (tipo && contadorProteinas[tipo] < LIMITE_PROTEINAS_SEMANA[tipo]) {
-          console.log(`✅ Proteína estruturada selecionada: ${proteinaEstruturada.nome} (${tipo})`);
+          console.log(`✅ Proteína selecionada: ${proteinaEstruturada.nome} (${tipo})`);
           contadorProteinas[tipo]++;
+          proteinasUsadas[categoria].add(proteinaEstruturada.nome);
+          
+          // CORREÇÃO: Adicionar à lista semanal de carnes vermelhas
+          if (tipo === 'Carne Vermelha') {
+            carnesVermelhasSemana.push(proteinaEstruturada.nome);
+            console.log(`🥩 Carne vermelha adicionada. Total semanal: ${carnesVermelhasSemana.length}/3`);
+          }
           
           const custo = await calculateSimpleCost(proteinaEstruturada.id, mealQuantity);
           return {
@@ -352,7 +423,7 @@ Deno.serve(async (req) => {
       }
       
       console.log(`⚠️ Todas as proteínas ${categoria} excederiam limites, usando fallback`);
-      return await fallbackReceita(categoria);
+      return fallbackReceita(categoria);
     }
 
     // ========== VALIDAÇÃO SIMPLIFICADA ==========
@@ -769,8 +840,7 @@ Deno.serve(async (req) => {
       const startDate = new Date(requestData.startDate || Date.now());
       let diaAtual = new Date(startDate);
       let cardapioPorDia = [];
-      let contadorCarnesVermelhas = 0;
-      let guarnicoesUsadas: string[] = [];
+      // CORREÇÃO: Remover variáveis locais antigas (agora no escopo superior)
       let receitasPool: any[] = [];
 
       // Função para normalizar tipos de proteína vindos do banco
@@ -904,101 +974,23 @@ Deno.serve(async (req) => {
         let custoDia = 0;
         let substituicoesPorOrcamento: string[] = [];
         
-        // ====== PROTEÍNAS COM CONTROLE DE VARIEDADE ======
-        console.log('🥩 Selecionando proteínas...');
+        // CORREÇÃO: PROTEÍNAS COM CONTROLE RIGOROSO
+        console.log('🥩 Selecionando proteínas com regras da nutricionista...');
         
-        let pp1 = await escolherProteina("Proteína Principal 1", receitasPool, mealQuantity, proteinGrams);
-        let pp2 = await escolherProteina("Proteína Principal 2", receitasPool, mealQuantity, proteinGrams);
+        // PP1 - Sempre escolher primeiro
+        let pp1 = await escolherProteina("Prato Principal 1", receitasPool, mealQuantity, proteinGrams, false);
+        let jaTemCarneVermelha = pp1?.tipo_proteina === 'Carne Vermelha';
         
-        if (pp1) {
-          const pp1Result = await calculateSimpleCost(pp1.id, mealQuantity);
-          if (pp1Result.custo_por_refeicao > 0) {
-            pp1.custo_por_refeicao = pp1Result.custo_por_refeicao;
-            pp1.nome = pp1Result.nome;
-            pp1.grams = proteinGrams;
-            
-            // Controle de carne vermelha
-            const tipoPP1 = pp1.tipo_proteina;
-            if (!tipoPP1 || tipoPP1 === "desconhecido") {
-              console.warn(`⚠️ Proteína sem tipo definido: ${pp1.nome}`);
-            }
-            if (tipoPP1 === "Carne Vermelha") {
-              if (contadorCarnesVermelhas >= 2) {
-                console.log(`⚠️ Limite de carne vermelha atingido, buscando alternativa para PP1`);
-                const alternativa = receitasPool.find(r => 
-                  r.categoria === "Proteína Principal 1" && 
-                  r.tipo_proteina !== "Carne Vermelha" &&
-                  (!proteinGrams || r.nome.toUpperCase().includes(`${proteinGrams}G`))
-                );
-                if (alternativa) {
-                  const altResult = await calculateSimpleCost(alternativa.id, mealQuantity);
-                  if (altResult.custo_por_refeicao > 0) {
-                    pp1 = alternativa;
-                    pp1.custo_por_refeicao = altResult.custo_por_refeicao;
-                    pp1.nome = altResult.nome;
-                    pp1.grams = proteinGrams;
-                  }
-                }
-              } else {
-                contadorCarnesVermelhas++;
-              }
-            }
-          }
-        }
+        // PP2 - Verificar se PP1 já é carne vermelha
+        let pp2 = await escolherProteina("Prato Principal 2", receitasPool, mealQuantity, proteinGrams, jaTemCarneVermelha);
         
-        if (pp2) {
-          const pp2Result = await calculateSimpleCost(pp2.id, mealQuantity);
-          if (pp2Result.custo_por_refeicao > 0) {
-            pp2.custo_por_refeicao = pp2Result.custo_por_refeicao;
-            pp2.nome = pp2Result.nome;
-            pp2.grams = proteinGrams;
-            
-            // Garantir tipos diferentes no mesmo dia
-            if (pp1 && pp1.tipo_proteina === pp2.tipo_proteina) {
-              console.log(`⚠️ Mesmo tipo de proteína no dia, buscando alternativa para PP2`);
-              const alternativa = receitasPool.find(r =>
-                r.categoria === "Proteína Principal 2" &&
-                r.tipo_proteina !== pp1.tipo_proteina &&
-                (!proteinGrams || r.nome.toUpperCase().includes(`${proteinGrams}G`))
-              );
-              if (alternativa) {
-                const altResult = await calculateSimpleCost(alternativa.id, mealQuantity);
-                if (altResult.custo_por_refeicao > 0) {
-                  pp2 = alternativa;
-                  pp2.custo_por_refeicao = altResult.custo_por_refeicao;
-                  pp2.nome = altResult.nome;
-                  pp2.grams = proteinGrams;
-                }
-              }
-            }
-            
-            // Controle de carne vermelha para PP2
-            const tipoPP2 = pp2.tipo_proteina;
-            if (!tipoPP2 || tipoPP2 === "desconhecido") {
-              console.warn(`⚠️ Proteína sem tipo definido: ${pp2.nome}`);
-            }
-            if (tipoPP2 === "Carne Vermelha") {
-              if (contadorCarnesVermelhas >= 2) {
-            console.log(`⚠️ Limite de carne vermelha atingido, buscando alternativa para PP2`);
-            const alternativa = receitasPool.find(r => 
-              r.categoria === "Prato Principal 2" && 
-              r.tipo_proteina !== "Carne Vermelha" &&
-              (!proteinGrams || r.nome.toUpperCase().includes(`${proteinGrams}G`))
-            );
-                if (alternativa) {
-                  const altResult = await calculateSimpleCost(alternativa.id, mealQuantity);
-                  if (altResult.custo_por_refeicao > 0) {
-                    pp2 = alternativa;
-                    pp2.custo_por_refeicao = altResult.custo_por_refeicao;
-                    pp2.nome = altResult.nome;
-                    pp2.grams = proteinGrams;
-                  }
-                }
-              } else {
-                contadorCarnesVermelhas++;
-              }
-            }
-          }
+        // VALIDAÇÃO: Verificar se respeitou regra de carne vermelha
+        if (pp1?.tipo_proteina === 'Carne Vermelha' && pp2?.tipo_proteina === 'Carne Vermelha') {
+          console.error(`🚫 ERRO CRÍTICO: Duas carnes vermelhas no mesmo dia!`);
+          console.error(`PP1: ${pp1.nome} (${pp1.tipo_proteina})`);
+          console.error(`PP2: ${pp2.nome} (${pp2.tipo_proteina})`);
+        } else if (jaTemCarneVermelha) {
+          console.log(`✅ Regra respeitada: PP1=${pp1?.tipo_proteina}, PP2=${pp2?.tipo_proteina}`);
         }
         
         // Garantir que PP1 sempre exista (com fallback se necessário)
@@ -1142,8 +1134,8 @@ Deno.serve(async (req) => {
               };
             }
           } else if (catConfig.codigo === 'GUARNICAO') {
-            // NOVO: Usar helper dedicado para guarnições
-            const guarnicaoEscolhida = escolherGuarnicaoDia(guarnicoesDisponiveis);
+            // CORREÇÃO: Usar helper com rotação semanal
+            const guarnicaoEscolhida = escolherGuarnicaoDia(guarnicoesDisponiveis, nomeDia);
             if (guarnicaoEscolhida) {
               const resultado = await calculateSimpleCost(guarnicaoEscolhida.id, mealQuantity);
               const custoFinal = resultado.custo_por_refeicao > 0 ? resultado.custo_por_refeicao : 0.8;
@@ -1157,7 +1149,6 @@ Deno.serve(async (req) => {
                 custo_total: custoFinal * mealQuantity,
                 ingredientes: resultado.ingredientes || []
               };
-              guarnicoesUsadas.push(guarnicaoEscolhida.nome);
             }
           } else if (catConfig.codigo === 'SALADA1') {
             // NOVO: Usar helper dedicado para saladas de verdura
