@@ -450,6 +450,7 @@ serve(async (req) => {
 
     console.log('🛒 Gerando lista corrigida para cardápio:', menuId);
     console.log('👤 Cliente:', clientName, '💰 Orçamento:', budgetPredicted, '🍽️ Porções/dia:', servingsPerDay);
+    console.log('✅ Parâmetro servingsPerDay recebido corretamente:', typeof servingsPerDay, 'valor:', servingsPerDay);
 
     // USAR A NOVA CLASSE CORRIGIDA
     const generator = new ShoppingListGeneratorFixed(supabase);

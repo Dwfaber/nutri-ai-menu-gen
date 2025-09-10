@@ -212,7 +212,8 @@ export const useShoppingList = () => {
   const generateShoppingList = async (
     menuId: string,
     clientName: string = 'Cliente',
-    budgetPredicted: number = 1000
+    budgetPredicted: number = 1000,
+    servingsPerDay: number = 50
   ): Promise<ShoppingList | null> => {
     setIsLoading(true);
     
@@ -223,7 +224,7 @@ export const useShoppingList = () => {
             menuId,
             clientName,
             budgetPredicted,
-            servingsPerDay: 100
+            servingsPerDay
           }
         });
 
@@ -479,8 +480,8 @@ export const useShoppingList = () => {
     window.URL.revokeObjectURL(url);
   };
 
-  const createFromMenu = async (menuId: string, clientName: string, totalCost: number): Promise<void> => {
-    await generateShoppingList(menuId, clientName, totalCost);
+  const createFromMenu = async (menuId: string, clientName: string, totalCost: number, servingsPerDay: number = 50): Promise<void> => {
+    await generateShoppingList(menuId, clientName, totalCost, servingsPerDay);
   };
 
   return {
