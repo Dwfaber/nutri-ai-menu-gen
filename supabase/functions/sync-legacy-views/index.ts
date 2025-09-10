@@ -397,6 +397,7 @@ async function processViewData(supabaseClient: any, viewName: string, data: any[
         solicitacao_compra_tipo_descricao: record.solicitacao_compra_tipo_descricao?.toString() || null,
         sync_at: new Date().toISOString()
       };
+    });
 
     // DEBUG: Verificar dados mapeados antes de enviar
     const dadosMapeadosSemFilialId = mappedData.filter(record => !record.filial_id);
