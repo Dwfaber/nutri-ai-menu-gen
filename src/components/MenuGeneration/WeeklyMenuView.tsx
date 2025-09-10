@@ -48,16 +48,27 @@ export const WeeklyMenuView: React.FC<WeeklyMenuViewProps> = ({ menu }) => {
   console.log('🍽️ Total de receitas:', menu.recipes.length);
   console.log('🍽️ Primeira receita:', menu.recipes[0]);
   
+  // 🔍 Debug: Mostrar todas as categorias únicas encontradas
+  const categoriasEncontradas = [...new Set(menu.recipes.map(r => r.category))];
+  console.log('📋 Categorias encontradas no backend:', categoriasEncontradas);
+  
   const receitasPorDia = menu.recipes.reduce((acc: any, r) => {
     if (!acc[r.day]) acc[r.day] = {};
     
     // 🔧 Mapeia categoria do backend para código da UI
     const categoriaMapeada = CATEGORY_MAPPING[r.category] || r.category;
     
-    // 🔧 Elimina duplicadas: se já existe categoria, não sobrescreve
+    // 🔍 Debug: Log do mapeamento de cada receita
+    console.log(`🔄 Receita: ${r.name} | Categoria original: ${r.category} | Categoria mapeada: ${categoriaMapeada} | Dia: ${r.day}`);
+    
+    // 🔧 CORREÇÃO: Permitir múltiplas receitas por categoria usando arrays
     if (!acc[r.day][categoriaMapeada]) {
-      acc[r.day][categoriaMapeada] = r;
+      acc[r.day][categoriaMapeada] = [];
     }
+    
+    // Adicionar receita ao array da categoria
+    acc[r.day][categoriaMapeada].push(r);
+    
     return acc;
   }, {});
 
@@ -91,10 +102,21 @@ export const WeeklyMenuView: React.FC<WeeklyMenuViewProps> = ({ menu }) => {
   const totalSemanas = Object.keys(semanas).length;
   const [semanaAtual, setSemanaAtual] = useState(1);
 
-  // Debug logs
+  // 🔍 Debug: Mostrar estrutura detalhada dos dados agrupados
   console.log('🗓️ Dias disponíveis:', diasDisponiveis);
   console.log('📊 Semanas agrupadas:', semanas);
   console.log('📈 Total de semanas:', totalSemanas);
+  console.log('🏗️ Estrutura completa receitasPorDia:', receitasPorDia);
+  
+  // 🔍 Debug: Verificar especificamente PP1 e PP2 em cada dia
+  Object.keys(receitasPorDia).forEach(dia => {
+    const categoriasDoDia = Object.keys(receitasPorDia[dia]);
+    console.log(`📅 ${dia} - Categorias encontradas:`, categoriasDoDia);
+    if (receitasPorDia[dia]['PP1']) console.log(`  ✅ PP1: ${receitasPorDia[dia]['PP1'].length} receitas`);
+    if (receitasPorDia[dia]['PP2']) console.log(`  ✅ PP2: ${receitasPorDia[dia]['PP2'].length} receitas`);
+    if (!receitasPorDia[dia]['PP1']) console.log(`  ❌ PP1: Não encontrada`);
+    if (!receitasPorDia[dia]['PP2']) console.log(`  ❌ PP2: Não encontrada`);
+  });
 
   // Obter dias da semana atual
   const diasSemanaAtual = semanas[semanaAtual] || [];
@@ -125,7 +147,10 @@ export const WeeklyMenuView: React.FC<WeeklyMenuViewProps> = ({ menu }) => {
             <CardContent>
               <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                 {CATEGORIAS_FIXAS.map((cat) => {
-                  const receita = (categorias as any)[cat];
+                  const receitasArray = (categorias as any)[cat];
+                  // 🔧 CORREÇÃO: Pegar a primeira receita do array
+                  const receita = Array.isArray(receitasArray) ? receitasArray[0] : receitasArray;
+                  
                   return (
                     <div
                       key={cat}
@@ -138,6 +163,12 @@ export const WeeklyMenuView: React.FC<WeeklyMenuViewProps> = ({ menu }) => {
                           <p className="text-sm text-muted-foreground">
                             Custo: R$ {Number(receita.cost || 0).toFixed(2)}
                           </p>
+                          {/* 🔍 Debug: Mostrar quantas receitas existem para esta categoria */}
+                          {Array.isArray(receitasArray) && receitasArray.length > 1 && (
+                            <p className="text-xs text-blue-600">
+                              +{receitasArray.length - 1} outras opções
+                            </p>
+                          )}
                         </>
                       ) : (
                         <p className="text-muted-foreground italic">Não disponível</p>
