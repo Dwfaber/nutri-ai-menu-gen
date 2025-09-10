@@ -21,14 +21,14 @@ const PROTEIN_TYPES: Record<string, string[]> = {
 
 // ================= CORREÇÕES ESTRUTURAIS ADICIONADAS =================
 
-// Limite semanal de proteínas
+// Limite semanal de proteínas AJUSTADO para 14 proteínas/semana (7 dias × 2 proteínas)
 const LIMITE_PROTEINAS_SEMANA = { 
-  "Carne Vermelha": 2, 
-  "Frango": 2, 
-  "Peixe": 2, 
-  "Ovo": 1, 
-  "Vegetariano": 1 
-};
+  "Carne Vermelha": 3,   // ↑ era 2
+  "Frango": 4,           // ↑ era 2  
+  "Peixe": 2,            // = mantém
+  "Ovo": 2,              // ↑ era 1
+  "Vegetariano": 3       // ↑ era 1
+}; // TOTAL = 14 proteínas/semana ✅
 
 let contadorProteinas = {
   "Carne Vermelha": 0, 
@@ -39,14 +39,15 @@ let contadorProteinas = {
 };
 
 // ESTRUTURA COM 10 CATEGORIAS (INCLUINDO GUARNIÇÃO)
+// ESTRUTURA CORRIGIDA com nomes das categorias que batem com categoria_descricao do banco
 const ESTRUTURA_CARDAPIO = {
-  PP1: { categoria: 'Proteína Principal 1', budget_percent: 22 },
-  PP2: { categoria: 'Proteína Principal 2', budget_percent: 18 },
+  PP1: { categoria: 'Prato Principal 1', budget_percent: 22 },
+  PP2: { categoria: 'Prato Principal 2', budget_percent: 18 },
   ARROZ: { categoria: 'Arroz Branco', budget_percent: 12, receita_id: 580 },
   FEIJAO: { categoria: 'Feijão', budget_percent: 12, receita_id: 1600 },
   GUARNICAO: { categoria: 'Guarnição', budget_percent: 10 },
-  SALADA1: { categoria: 'Salada 1 (Verduras)', budget_percent: 8 },
-  SALADA2: { categoria: 'Salada 2 (Legumes)', budget_percent: 8 },
+  SALADA1: { categoria: 'Salada 1', budget_percent: 8 },
+  SALADA2: { categoria: 'Salada 2', budget_percent: 8 },
   SOBREMESA: { categoria: 'Sobremesa', budget_percent: 2 }
 };
 
@@ -178,16 +179,34 @@ Deno.serve(async (req) => {
       return { id: selecionada.produto_base_id, nome: selecionada.nome };
     }
 
-    // Fallback para categorias vazias
+    // Fallback para categorias vazias CORRIGIDO com nomes reais e categorias que existem
     function fallbackReceita(categoria: string) {
       switch (categoria) {
-        case "Salada 1 (Verduras)": return { id: -1, nome: "Salada de folhas simples", custo_por_refeicao: 0.5 };
-        case "Salada 2 (Legumes)": return { id: -2, nome: "Salada de legumes cozidos", custo_por_refeicao: 0.6 };
-        case "Suco 1": return { id: -3, nome: "Suco de laranja natural", custo_por_refeicao: 0.4 };
-        case "Suco 2": return { id: -4, nome: "Suco de uva", custo_por_refeicao: 0.4 };
+        case "Prato Principal 1":
+          return { id: -10, nome: "FRANGO GRELHADO SIMPLES", custo_por_refeicao: 2.5 };
+        case "Prato Principal 2":
+          return { id: -11, nome: "OVO REFOGADO", custo_por_refeicao: 2.0 };
+        case "Proteína Principal 1": // compatibilidade com código antigo
+          return { id: -10, nome: "FRANGO GRELHADO SIMPLES", custo_por_refeicao: 2.5 };
+        case "Proteína Principal 2": // compatibilidade com código antigo
+          return { id: -11, nome: "OVO REFOGADO", custo_por_refeicao: 2.0 };
+        case "Salada 1":
+          return { id: -1, nome: "SALADA MISTA", custo_por_refeicao: 0.5 };
+        case "Salada 2": 
+          return { id: -2, nome: "LEGUMES COZIDOS SIMPLES", custo_por_refeicao: 0.6 };
+        case "Salada 1 (Verduras)": // compatibilidade com código antigo
+          return { id: -1, nome: "SALADA MISTA", custo_por_refeicao: 0.5 };
+        case "Salada 2 (Legumes)": // compatibilidade com código antigo
+          return { id: -2, nome: "LEGUMES COZIDOS SIMPLES", custo_por_refeicao: 0.6 };
+        case "Guarnição":
+          return { id: -3, nome: "BATATA COZIDA", custo_por_refeicao: 0.8 };
+        case "Suco 1": 
+          return { id: -4, nome: "Suco de laranja natural", custo_por_refeicao: 0.4 };
+        case "Suco 2": 
+          return { id: -5, nome: "Suco de uva", custo_por_refeicao: 0.4 };
         case "Sobremesa": 
           const idx = Math.floor(Math.random() * SOBREMESAS.length);
-          return { id: -5, nome: SOBREMESAS[idx], custo_por_refeicao: 0.5 };
+          return { id: -6, nome: SOBREMESAS[idx], custo_por_refeicao: 0.5 };
         default: return null;
       }
     }
@@ -582,13 +601,13 @@ Deno.serve(async (req) => {
     async function buscarReceitaComVariacao(categoria, budget, mealQuantity, diaIndex = 0) {
       console.log(`🔍 Buscando ${categoria} (dia ${diaIndex + 1}) - orçamento R$${budget.toFixed(2)}`);
 
-      const palavrasChave = {
-        'Proteína Principal 1': [
+        const palavrasChave = {
+        'Prato Principal 1': [
           'FRANGO', 'CARNE', 'BOVINA', 'PEIXE', 'SUÍNO',
           'FILÉ', 'PEITO', 'COXA', 'ASSADO', 'ENSOPADO', 'GRELHADO',
           'BIFE', 'COSTELA', 'CHURRASCO'
         ],
-        'Proteína Principal 2': [
+        'Prato Principal 2': [
           'LINGUIÇA', 'SALSICHA', 'HAMBURGUER', 'ALMÔNDEGA',
           'OVO', 'OMELETE', 'FRITADA', 'FRANGO DESFIADO',
           'CARNE MOÍDA', 'KAFTA', 'ISCAS', 'STROGONOFF'
@@ -600,11 +619,11 @@ Deno.serve(async (req) => {
           'GRATINADO', 'REFOGADO', 'LEGUMES', 'ACOMPANHAMENTO',
           'MACARRÃO', 'MASSA'
         ],
-        'Salada 1 (Verduras)': [
+        'Salada 1': [
           'SALADA', 'ALFACE', 'ACELGA', 'COUVE', 'FOLHAS',
           'RÚCULA', 'ESPINAFRE', 'AGRIAO'
         ],
-        'Salada 2 (Legumes)': [
+        'Salada 2': [
           'TOMATE', 'PEPINO', 'CENOURA', 'ABOBRINHA',
           'BETERRABA', 'CHUCHU', 'LEGUME'
         ],
@@ -623,19 +642,31 @@ Deno.serve(async (req) => {
         ]
       };
 
-      // Keywords para a categoria
-      const keywords = palavrasChave[categoria] || [categoria];
+      // CORREÇÃO: usar categoria_descricao como fonte única de verdade
+      console.log(`🔍 Buscando por categoria_descricao: ${categoria}`);
 
       let receitas = [];
       try {
-        // 1) Tenta buscar receitas usando todas as keywords (OR)
+        // 1) Tenta buscar receitas usando categoria_descricao
         const { data } = await supabase
           .from('receita_ingredientes')
-          .select('receita_id_legado, nome')
-          .or(keywords.map(k => `nome.ilike.%${k}%`).join(','))
+          .select('receita_id_legado, nome, categoria_descricao')
+          .eq('categoria_descricao', categoria)
           .limit(25);
 
         receitas = data || [];
+
+        // 2) Se não encontrou nada, tenta com keywords como fallback
+        if (!receitas.length) {
+          console.warn(`⚠️ Nenhuma receita encontrada para categoria_descricao '${categoria}', tentando keywords...`);
+          const keywords = palavrasChave[categoria] || [categoria];
+          const { data: keywordData } = await supabase
+            .from('receita_ingredientes')
+            .select('receita_id_legado, nome, categoria_descricao')
+            .or(keywords.map(k => `nome.ilike.%${k}%`).join(','))
+            .limit(25);
+          receitas = keywordData || [];
+        }
 
         // 2) Fallback: se não encontrou nada, pega qualquer receita
         if (!receitas.length) {
@@ -919,12 +950,12 @@ Deno.serve(async (req) => {
             }
             if (tipoPP2 === "Carne Vermelha") {
               if (contadorCarnesVermelhas >= 2) {
-                console.log(`⚠️ Limite de carne vermelha atingido, buscando alternativa para PP2`);
-                const alternativa = receitasPool.find(r => 
-                  r.categoria === "Proteína Principal 2" && 
-                  r.tipo_proteina !== "Carne Vermelha" &&
-                  (!proteinGrams || r.nome.toUpperCase().includes(`${proteinGrams}G`))
-                );
+            console.log(`⚠️ Limite de carne vermelha atingido, buscando alternativa para PP2`);
+            const alternativa = receitasPool.find(r => 
+              r.categoria === "Prato Principal 2" && 
+              r.tipo_proteina !== "Carne Vermelha" &&
+              (!proteinGrams || r.nome.toUpperCase().includes(`${proteinGrams}G`))
+            );
                 if (alternativa) {
                   const altResult = await calculateSimpleCost(alternativa.id, mealQuantity);
                   if (altResult.custo_por_refeicao > 0) {
@@ -941,12 +972,42 @@ Deno.serve(async (req) => {
           }
         }
         
+        // Garantir que PP1 sempre exista (com fallback se necessário)
+        if (!pp1) {
+          const fallbackPP1 = fallbackReceita("Prato Principal 1");
+          if (fallbackPP1) {
+            console.log(`🔧 Usando fallback para PP1: ${fallbackPP1.nome}`);
+            pp1 = {
+              id: fallbackPP1.id,
+              nome: fallbackPP1.nome,
+              custo_por_refeicao: fallbackPP1.custo_por_refeicao,
+              grams: proteinGrams || 100,
+              tipo_proteina: "Frango" // assumir frango para o fallback
+            };
+          }
+        }
+
+        // Garantir que PP2 sempre exista (com fallback se necessário)  
+        if (!pp2) {
+          const fallbackPP2 = fallbackReceita("Prato Principal 2");
+          if (fallbackPP2) {
+            console.log(`🔧 Usando fallback para PP2: ${fallbackPP2.nome}`);
+            pp2 = {
+              id: fallbackPP2.id,
+              nome: fallbackPP2.nome,
+              custo_por_refeicao: fallbackPP2.custo_por_refeicao,
+              grams: proteinGrams || 90,
+              tipo_proteina: "Ovo" // assumir ovo para o fallback
+            };
+          }
+        }
+
         // Adicionar proteínas ao dia
         if (pp1) {
           receitasDia.push({
             id: pp1.id,
             nome: pp1.nome,
-            categoria: 'Proteína Principal 1',
+            categoria: 'Prato Principal 1',
             codigo: 'PP1',
             custo_por_refeicao: pp1.custo_por_refeicao,
             custo_total: pp1.custo_por_refeicao * mealQuantity,
@@ -962,7 +1023,7 @@ Deno.serve(async (req) => {
           receitasDia.push({
             id: pp2.id,
             nome: pp2.nome,
-            categoria: 'Proteína Principal 2',
+            categoria: 'Prato Principal 2',
             codigo: 'PP2',
             custo_por_refeicao: pp2.custo_por_refeicao,
             custo_total: pp2.custo_por_refeicao * mealQuantity,
@@ -979,8 +1040,8 @@ Deno.serve(async (req) => {
           { codigo: 'ARROZ', categoria: 'Arroz Branco', receita_id: 580 },
           { codigo: 'FEIJAO', categoria: 'Feijão', receita_id: 1600 },
           { codigo: 'GUARNICAO', categoria: 'Guarnição' },
-          { codigo: 'SALADA1', categoria: 'Salada 1 (Verduras)' },
-          { codigo: 'SALADA2', categoria: 'Salada 2 (Legumes)' },
+          { codigo: 'SALADA1', categoria: 'Salada 1' },
+          { codigo: 'SALADA2', categoria: 'Salada 2' },
           { codigo: 'SUCO1', categoria: 'Suco 1' },
           { codigo: 'SUCO2', categoria: 'Suco 2' },
           { codigo: 'SOBREMESA', categoria: 'Sobremesa' }
