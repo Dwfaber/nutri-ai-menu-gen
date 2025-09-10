@@ -597,57 +597,13 @@ Deno.serve(async (req) => {
       }
     }
 
-    // FUNÇÃO PARA BUSCAR RECEITAS COM VARIAÇÃO (com fallback inteligente)
+    // FUNÇÃO PARA BUSCAR RECEITAS COM VARIAÇÃO (simplificada)
     async function buscarReceitaComVariacao(categoria, budget, mealQuantity, diaIndex = 0) {
       console.log(`🔍 Buscando ${categoria} (dia ${diaIndex + 1}) - orçamento R$${budget.toFixed(2)}`);
 
-        const palavrasChave = {
-        'Prato Principal 1': [
-          'FRANGO', 'CARNE', 'BOVINA', 'PEIXE', 'SUÍNO',
-          'FILÉ', 'PEITO', 'COXA', 'ASSADO', 'ENSOPADO', 'GRELHADO',
-          'BIFE', 'COSTELA', 'CHURRASCO'
-        ],
-        'Prato Principal 2': [
-          'LINGUIÇA', 'SALSICHA', 'HAMBURGUER', 'ALMÔNDEGA',
-          'OVO', 'OMELETE', 'FRITADA', 'FRANGO DESFIADO',
-          'CARNE MOÍDA', 'KAFTA', 'ISCAS', 'STROGONOFF'
-        ],
-        'Guarnição': [
-          'BATATA', 'MANDIOCA', 'AIPIM', 'MACAXEIRA', 'INHAME',
-          'PURÊ', 'FAROFA', 'POLENTA', 'MANDIOQUINHA', 'BATATA DOCE',
-          'ESCONDIDINHO', 'TORTA', 'QUICHE', 'LASANHA',
-          'GRATINADO', 'REFOGADO', 'LEGUMES', 'ACOMPANHAMENTO',
-          'MACARRÃO', 'MASSA'
-        ],
-        'Salada 1': [
-          'SALADA', 'ALFACE', 'ACELGA', 'COUVE', 'FOLHAS',
-          'RÚCULA', 'ESPINAFRE', 'AGRIAO'
-        ],
-        'Salada 2': [
-          'TOMATE', 'PEPINO', 'CENOURA', 'ABOBRINHA',
-          'BETERRABA', 'CHUCHU', 'LEGUME'
-        ],
-        'Suco 1': [
-          'SUCO DE LARANJA', 'SUCO DE LIMAO', 'REFRESCO',
-          'SUCO DE MARACUJA', 'SUCO DE ABACAXI'
-        ],
-        'Suco 2': [
-          'SUCO DE GOIABA', 'AGUA SABORIZADA', 'SUCO TROPICAL',
-          'SUCO DE UVA', 'SUCO DE MELANCIA'
-        ],
-        'Sobremesa': [
-          'BOLO', 'PUDIM', 'MOUSSE', 'COMPOTA', 'DOCE',
-          'GELATINA', 'FRUTA', 'CREME', 'TORTA', 'SORVETE',
-          'BRIGADEIRO', 'BEIJINHO', 'COCADA'
-        ]
-      };
-
-      // CORREÇÃO: usar categoria_descricao como fonte única de verdade
-      console.log(`🔍 Buscando por categoria_descricao: ${categoria}`);
-
       let receitas = [];
       try {
-        // 1) Tenta buscar receitas usando categoria_descricao
+        // Buscar por categoria_descricao (fonte única e confiável)
         const { data } = await supabase
           .from('receita_ingredientes')
           .select('receita_id_legado, nome, categoria_descricao')
@@ -656,26 +612,10 @@ Deno.serve(async (req) => {
 
         receitas = data || [];
 
-        // 2) Se não encontrou nada, tenta com keywords como fallback
+        // Se não encontrou receitas, usar fallback controlado
         if (!receitas.length) {
-          console.warn(`⚠️ Nenhuma receita encontrada para categoria_descricao '${categoria}', tentando keywords...`);
-          const keywords = palavrasChave[categoria] || [categoria];
-          const { data: keywordData } = await supabase
-            .from('receita_ingredientes')
-            .select('receita_id_legado, nome, categoria_descricao')
-            .or(keywords.map(k => `nome.ilike.%${k}%`).join(','))
-            .limit(25);
-          receitas = keywordData || [];
-        }
-
-        // 2) Fallback: se não encontrou nada, pega qualquer receita
-        if (!receitas.length) {
-          console.warn(`⚠️ Nenhuma receita encontrada para ${categoria}, usando fallback geral...`);
-          const { data: fallback } = await supabase
-            .from('receita_ingredientes')
-            .select('receita_id_legado, nome')
-            .limit(30);
-          receitas = fallback || [];
+          console.warn(`⚠️ Nenhuma receita encontrada para '${categoria}', usando fallback...`);
+          return fallbackReceita(categoria);
         }
 
         // Remove duplicadas
