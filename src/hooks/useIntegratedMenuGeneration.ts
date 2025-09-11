@@ -1073,10 +1073,25 @@ export const useIntegratedMenuGeneration = () => {
       // Usar os custos e informações calculados pela IA
 
       // Gerar estrutura de semanas usando o período do contrato
-      const [dataInicio, dataFim] = weekPeriod.split(' a ').map(s => {
-        const [dia, mes, ano] = s.split('/').map(Number);
-        return new Date(ano, mes - 1, dia); // Mês em JS é 0-indexed
-      });
+      // Suporta formatos "DD/MM/YYYY a DD/MM/YYYY" e "YYYY-MM-DD a YYYY-MM-DD"
+      const parseDate = (str: string) => {
+        const s = String(str || '').trim();
+        if (s.includes('/')) {
+          const [dd, mm, yyyy] = s.split('/').map(Number);
+          return new Date(yyyy, (mm || 1) - 1, dd || 1);
+        }
+        if (s.includes('-')) {
+          const [yyyy, mm, dd] = s.split('-').map(Number);
+          return new Date(yyyy, (mm || 1) - 1, dd || 1);
+        }
+        const d = new Date(s);
+        return isNaN(d.getTime()) ? new Date() : d;
+      };
+
+      const [dataInicio, dataFim] = (() => {
+        const [ini, fim] = weekPeriod.split(' a ').map(s => s.trim());
+        return [parseDate(ini), parseDate(fim)];
+      })();
 
       // Determinar se deve incluir fins de semana baseado no contrato
       const incluirFDS = !clientToUse.dias_uteis; // Se dias_uteis for false, incluir FDS
