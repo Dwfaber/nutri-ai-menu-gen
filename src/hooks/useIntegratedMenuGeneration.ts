@@ -8,6 +8,7 @@ import { MarketProduct } from './useMarketProducts';
 import { useMarketAvailability } from './useMarketAvailability';
 import { useMenuBusinessRules } from './useMenuBusinessRules';
 import { SimpleMenuFormData } from '@/components/MenuGeneration/SimpleMenuForm';
+import { gerarSemanas } from '@/utils/weekGenerator';
 
 export interface MenuGenerationPayload extends SimpleMenuFormData {
   action: 'generate_menu';
@@ -1071,6 +1072,34 @@ export const useIntegratedMenuGeneration = () => {
 
       // Usar os custos e informações calculados pela IA
 
+      // Gerar estrutura de semanas usando o período do contrato
+      const [dataInicio, dataFim] = weekPeriod.split(' a ').map(s => {
+        const [dia, mes, ano] = s.split('/').map(Number);
+        return new Date(ano, mes - 1, dia); // Mês em JS é 0-indexed
+      });
+
+      // Determinar se deve incluir fins de semana baseado no contrato
+      const incluirFDS = !clientToUse.dias_uteis; // Se dias_uteis for false, incluir FDS
+      const semanas = gerarSemanas(dataInicio, dataFim, incluirFDS);
+
+      // Preencher receitas nos slots das semanas
+      for (const semanaKey in semanas) {
+        semanas[semanaKey] = semanas[semanaKey].map(dia => {
+          // Encontrar receitas para este dia específico
+          const receitasDoDia = receitasCardapio.filter(r => {
+            // Mapear nome do dia da receita para formato compatível
+            const diaReceita = dayLabelToTitle(r.day).toLowerCase();
+            const diaSlot = dia.dia.toLowerCase();
+            return diaReceita === diaSlot;
+          });
+          
+          return {
+            ...dia,
+            receitas: receitasDoDia
+          };
+        });
+      }
+
       // Create generated menu
       const menu: GeneratedMenu = {
         id: `temp-${Date.now()}`, // ID temporário até salvar no banco
@@ -1083,7 +1112,10 @@ export const useIntegratedMenuGeneration = () => {
         totalRecipes: receitasCardapio.length,
         recipes: receitasCardapio,
         createdAt: new Date().toISOString(),
-        menu: aiMenu, // Incluir dados detalhados do menu da Edge Function
+        menu: {
+          ...aiMenu, // Incluir dados detalhados do menu da Edge Function
+          semanas: semanas // Adicionar estrutura de semanas gerada
+        },
         warnings: data.warnings || []
       };
 
