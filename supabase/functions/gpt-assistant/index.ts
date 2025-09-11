@@ -290,29 +290,39 @@ Deno.serve(async (req) => {
       if (!guarnicaoPool || guarnicaoPool.length === 0) return null;
       
       console.log(`🥔 [${dia}] Buscando guarnição: ${guarnicaoPool.length} opções encontradas`);
+      console.log(`🥔 [${dia}] Guarnições já usadas esta semana: [${Array.from(guarnicoesUsadas).join(', ')}]`);
+      console.log(`🥔 [${dia}] Última guarnição usada: ${ultimaGuarnicaoUsada}`);
       
-      // ETAPA 2: Filtrar guarnições já usadas na semana + evitar repetir a última usada
+      // PRIORIDADE 1: Filtrar guarnições já usadas na semana + evitar repetir a última usada
       let guarnicoesDisponiveis = guarnicaoPool.filter(g => 
         !guarnicoesUsadas.has(g.nome) && g.nome !== ultimaGuarnicaoUsada
       );
       
-      // Se filtro muito restritivo, relaxar apenas para não repetir a última
+      console.log(`🥔 [${dia}] Opções após filtro completo: ${guarnicoesDisponiveis.length}`);
+      
+      // PRIORIDADE 2: Se muito restritivo, permitir repetir guarnições da semana (mas não a última usada)
       if (guarnicoesDisponiveis.length === 0) {
+        console.log(`🔄 [${dia}] Relaxando filtro - permitindo guarnições já usadas (exceto a última)`);
         guarnicoesDisponiveis = guarnicaoPool.filter(g => g.nome !== ultimaGuarnicaoUsada);
-        
-        // Se ainda assim vazio, resetar tudo e permitir qualquer uma
-        if (guarnicoesDisponiveis.length === 0) {
-          console.log(`🔄 [${dia}] Resetando pool de guarnições - todas foram usadas`);
-          guarnicoesUsadas.clear();
-          guarnicoesDisponiveis = guarnicaoPool;
-        }
+        console.log(`🥔 [${dia}] Opções após relaxar filtro: ${guarnicoesDisponiveis.length}`);
+      }
+      
+      // PRIORIDADE 3: Se ainda vazio, permitir qualquer uma (pool muito pequeno)
+      if (guarnicoesDisponiveis.length === 0) {
+        console.log(`⚠️ [${dia}] Pool muito pequeno - usando qualquer guarnição disponível`);
+        guarnicoesDisponiveis = guarnicaoPool;
       }
       
       const selecionada = guarnicoesDisponiveis[Math.floor(Math.random() * guarnicoesDisponiveis.length)];
-      guarnicoesUsadas.add(selecionada.nome);
-      ultimaGuarnicaoUsada = selecionada.nome; // ETAPA 2: Memorizar última usada
+      
+      // CORREÇÃO: Só adicionar às usadas se realmente for diferente da última
+      if (selecionada.nome !== ultimaGuarnicaoUsada) {
+        guarnicoesUsadas.add(selecionada.nome);
+      }
+      ultimaGuarnicaoUsada = selecionada.nome;
       
       console.log(`✅ [${dia}] Guarnição selecionada: ${selecionada.nome}`);
+      console.log(`📊 [${dia}] Total de guarnições diferentes usadas: ${guarnicoesUsadas.size}`);
       return { id: selecionada.produto_base_id, nome: selecionada.nome };
     }
 
@@ -1034,8 +1044,13 @@ Deno.serve(async (req) => {
             "Vegetariano": 0
           };
           saladasUsadas.clear();
-          guarnicoesUsadas.clear();
-          console.log("♻️ Resetando limites de proteína, saladas e guarnições para nova semana");
+          // CORREÇÃO: Reset de guarnições menos agressivo para maior variação
+          if (guarnicoesUsadas.size >= 10) { // Só resetar se já usou muitas guarnições
+            console.log(`🔄 Resetando pool de guarnições - ${guarnicoesUsadas.size} já utilizadas`);
+            guarnicoesUsadas.clear();
+          }
+          console.log("♻️ Resetando limites de proteína e saladas para nova semana");
+          console.log(`📊 Mantendo ${guarnicoesUsadas.size} guarnições no histórico para evitar repetições`);
         }
         
         let receitasDia: any[] = [];
