@@ -495,30 +495,78 @@ export const useIntegratedMenuGeneration = () => {
         throw new Error(data?.erro || 'Resposta inválida da IA');
       }
 
-      // ⚡ IMEDIATAMENTE criar e definir o generatedMenu
+      // ⚡ Preparar receitas e estrutura de semanas para o novo modelo
+      const recipes = (data.cardapio?.flatMap((dia: any, diaIndex: number) =>
+        dia.receitas?.map((r: any, index: number) => ({
+          id: r.id || `recipe-${diaIndex}-${index}`,
+          name: r.nome || 'Receita sem nome',
+          category: r.categoria || 'Outros',
+          day: dia.dia || 'Segunda-feira',
+          cost: Number(r.custo_por_refeicao || 0),
+          servings: Number(r.porcoes || expectedServings),
+          ingredients: r.ingredientes || [],
+          nutritionalInfo: r.nutritional_info || {}
+        }))
+      ) || []);
+
+      // Funções auxiliares para parsing e normalização de dias
+      const parseDate = (str: string) => {
+        const s = String(str || '').trim();
+        if (s.includes('/')) {
+          const [dd, mm, yyyy] = s.split('/').map(Number);
+          return new Date(yyyy, (mm || 1) - 1, dd || 1);
+        }
+        if (s.includes('-')) {
+          const [yyyy, mm, dd] = s.split('-').map(Number);
+          return new Date(yyyy, (mm || 1) - 1, dd || 1);
+        }
+        const d = new Date(s);
+        return isNaN(d.getTime()) ? new Date() : d;
+      };
+      const toDayKey = (label: string) => {
+        const s = String(label || '')
+          .toLowerCase()
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, '');
+        if (s.includes('seg')) return 'seg';
+        if (s.includes('ter')) return 'ter';
+        if (s.includes('qua')) return 'qua';
+        if (s.includes('qui')) return 'qui';
+        if (s.includes('sex')) return 'sex';
+        if (s.includes('sab')) return 'sab';
+        if (s.includes('dom')) return 'dom';
+        return 'seg';
+      };
+
+      // Gerar semanas a partir do período do formulário
+      const [iniStr, fimStr] = weekPeriod.split(' a ').map(s => s.trim());
+      const dataInicio = parseDate(iniStr);
+      const dataFim = parseDate(fimStr);
+      const incluirFDS = !(formData.diasUteis ?? true);
+      let semanas = gerarSemanas(dataInicio, dataFim, incluirFDS);
+
+      // Preencher as receitas de cada dia usando chave de dia normalizada
+      for (const semanaKey in semanas) {
+        semanas[semanaKey] = semanas[semanaKey].map((dia: any) => {
+          const slotKey = toDayKey(dia.dia);
+          const receitasDoDia = recipes.filter((r: any) => toDayKey(r.day) === slotKey);
+          return { ...dia, receitas: receitasDoDia };
+        });
+      }
+
+      // ⚡ IMEDIATAMENTE criar e definir o generatedMenu no novo e no legado
       const menu: GeneratedMenu = {
-        id: `temp-${Date.now()}`, // ID temporário até salvar no banco
+        id: `temp-${Date.now()}`,
         clientId: formData.clientId,
         clientName: clientToUse.nome_fantasia || 'Cliente',
         weekPeriod: weekPeriod,
         status: 'pending_approval',
         totalCost: Number(data.resumo_financeiro?.custo_total_periodo || 0),
         costPerMeal: Number(data.resumo_financeiro?.custo_medio_por_refeicao || 0),
-        totalRecipes: data.cardapio?.reduce((total: number, dia: any) => 
-          total + (dia.receitas?.length || 0), 0) || 0,
-        recipes: data.cardapio?.flatMap((dia: any) =>
-          dia.receitas?.map((r: any, index: number) => ({
-            id: r.id || `recipe-${index}`,
-            name: r.nome || 'Receita sem nome',
-            category: r.categoria || 'Outros',
-            day: dia.dia || 'Segunda-feira',
-            cost: Number(r.custo_por_refeicao || 0),
-            servings: Number(r.porcoes || expectedServings),
-            ingredients: r.ingredientes || [],
-            nutritionalInfo: r.nutritional_info || {}
-          }))
-        ) || [],
+        totalRecipes: recipes.length,
+        recipes,
         createdAt: new Date().toISOString(),
+        menu: { semanas },
         warnings: data.avisos || []
       };
 
