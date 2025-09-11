@@ -549,8 +549,30 @@ export const useIntegratedMenuGeneration = () => {
       for (const semanaKey in semanas) {
         semanas[semanaKey] = semanas[semanaKey].map((dia: any) => {
           const slotKey = toDayKey(dia.dia);
-          const receitasDoDia = recipes.filter((r: any) => toDayKey(r.day) === slotKey);
-          return { ...dia, receitas: receitasDoDia };
+          const receitasDoDia = recipes
+            .filter((r: any) => toDayKey(r.day) === slotKey)
+            .map((r: any) => ({
+              id: r.id,
+              nome: r.name,                    // name → nome
+              categoria: r.category,           // category → categoria  
+              custo_total: r.cost * (r.servings || expectedServings), // custo total calculado
+              custo_por_refeicao: r.cost       // custo unitário
+            }));
+
+          const totalDia = receitasDoDia.reduce((s, rr) => s + rr.custo_total, 0);
+
+          return {
+            ...dia,
+            receitas: receitasDoDia,
+            resumo_dia: {
+              total_receitas: receitasDoDia.length,
+              custo_total: totalDia.toFixed(2),
+              custo_por_refeicao: receitasDoDia.length 
+                ? (totalDia / (expectedServings || 50)).toFixed(2) 
+                : "0.00",
+              dentro_orcamento: true
+            }
+          };
         });
       }
 
