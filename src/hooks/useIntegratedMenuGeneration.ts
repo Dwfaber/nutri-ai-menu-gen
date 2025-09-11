@@ -566,7 +566,26 @@ export const useIntegratedMenuGeneration = () => {
         totalRecipes: recipes.length,
         recipes,
         createdAt: new Date().toISOString(),
-        menu: { semanas },
+        menu: { 
+          semanas,
+          days: data.cardapio?.map((dia: any) => ({
+            dia: dia.dia || 'Segunda-feira',
+            budget_per_meal: Number(dia.orcamento_por_refeicao || 0),
+            custo_por_refeicao: Number(dia.custo_por_refeicao || 0),
+            custo_total_dia: Number(dia.custo_total_dia || 0),
+            dentro_orcamento: Boolean(dia.dentro_orcamento),
+            itens: dia.receitas?.map((r: any) => ({
+              slot: r.categoria || 'Principal',
+              nome: r.nome || 'Receita sem nome',
+              custo_total: Number(r.custo_total || 0),
+              custo_por_refeicao: Number(r.custo_por_refeicao || 0),
+              placeholder: false
+            })) || []
+          })) || [],
+          total_cost: Number(data.resumo_financeiro?.custo_total_periodo || 0),
+          average_cost_per_meal: Number(data.resumo_financeiro?.custo_medio_por_refeicao || 0),
+          portions_total: Number(data.resumo_financeiro?.total_porcoes || 0)
+        },
         warnings: data.avisos || []
       };
 
