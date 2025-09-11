@@ -70,10 +70,25 @@ export const WeeklyMenuView: React.FC<WeeklyMenuViewProps> = ({ menu }) => {
           </div>
         )}
         
-        <div className="overflow-x-auto">
-          <div className="flex space-x-4 pb-4" style={{ minWidth: 'max-content' }}>
+        {/* Indicadores visuais de navegação */}
+        <div className="flex justify-center mb-4">
+          <div className="flex space-x-2">
+            {semanas[`Semana ${semanaAtual}`]?.map((_, index) => (
+              <div
+                key={index}
+                className="w-2 h-2 rounded-full bg-primary/30"
+              />
+            ))}
+          </div>
+          <p className="text-xs text-muted-foreground ml-3">
+            {semanas[`Semana ${semanaAtual}`]?.length || 0} dias
+          </p>
+        </div>
+        
+        <div className="overflow-x-auto snap-x snap-mandatory">
+          <div className="flex space-x-4 pb-4 snap-start" style={{ minWidth: 'max-content' }}>
             {semanas[`Semana ${semanaAtual}`]?.map((dia: any) => (
-              <Card key={dia.dia} className="border shadow-sm flex-shrink-0 w-80">
+              <Card key={dia.dia} className="border shadow-sm flex-shrink-0 w-80 hover:shadow-md transition-shadow">
                 <CardHeader>
                   <CardTitle className="text-lg font-semibold">{dia.dia}</CardTitle>
                   {dia.data && (
@@ -207,12 +222,27 @@ export const WeeklyMenuView: React.FC<WeeklyMenuViewProps> = ({ menu }) => {
         </div>
       )}
       
-      <div className="overflow-x-auto">
-        <div className="flex space-x-4 pb-4" style={{ minWidth: 'max-content' }}>
+      {/* Indicadores visuais de navegação */}
+      <div className="flex justify-center mb-4">
+        <div className="flex space-x-2">
+          {diasSemanaAtual.map((_, index) => (
+            <div
+              key={index}
+              className="w-2 h-2 rounded-full bg-primary/30"
+            />
+          ))}
+        </div>
+        <p className="text-xs text-muted-foreground ml-3">
+          {diasSemanaAtual.length} dias
+        </p>
+      </div>
+      
+      <div className="overflow-x-auto snap-x snap-mandatory">
+        <div className="flex space-x-4 pb-4 snap-start" style={{ minWidth: 'max-content' }}>
           {diasSemanaAtual.map((dia) => {
             const categorias = receitasPorDia[dia];
             return (
-              <Card key={dia} className="border shadow-sm flex-shrink-0 w-80">
+              <Card key={dia} className="border shadow-sm flex-shrink-0 w-80 hover:shadow-md transition-shadow">
                 <CardHeader>
                   <CardTitle className="text-lg font-semibold">{dia}</CardTitle>
                 </CardHeader>
