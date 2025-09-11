@@ -551,15 +551,24 @@ export const useIntegratedMenuGeneration = () => {
           const slotKey = toDayKey(dia.dia);
           const receitasDoDia = recipes
             .filter((r: any) => toDayKey(r.day) === slotKey)
-            .map((r: any) => ({
-              id: r.id,
-              nome: r.name,                    // name → nome
-              categoria: r.category,           // category → categoria  
-              custo_total: r.cost * (r.servings || expectedServings), // custo total calculado
-              custo_por_refeicao: r.cost       // custo unitário
-            }));
+            .map((r: any, idx: number) => {
+              let cat = mapCategoryToMenuStructure(r.category || '');
+              if (cat === 'Salada') cat = categorizeSalad(r.name || '', idx);
+              if (cat === 'Suco') cat = categorizeJuice(r.name || '', idx);
 
-          const totalDia = receitasDoDia.reduce((s, rr) => s + rr.custo_total, 0);
+              return {
+                id: r.id,
+                nome: r.name,
+                categoria: cat,
+                custo_total: r.cost,         // custo unitário
+                custo_por_refeicao: r.cost   // custo unitário
+              };
+            });
+
+          const totalDia = receitasDoDia.reduce(
+            (s, rr) => s + rr.custo_por_refeicao * (expectedServings || 50),
+            0
+          );
 
           return {
             ...dia,
