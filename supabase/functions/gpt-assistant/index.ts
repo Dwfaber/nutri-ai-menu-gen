@@ -1058,6 +1058,9 @@ Deno.serve(async (req) => {
         console.log(`   PP1: ${pp1?.nome} (${pp1?.tipo_proteina})`);
         console.log(`   PP2: ${pp2?.nome} (${pp2?.tipo_proteina})`);
         
+        // Verificar se há carne vermelha no dia
+        const jaTemCarneVermelha = pp1?.tipo_proteina === 'Carne Vermelha' || pp2?.tipo_proteina === 'Carne Vermelha';
+        
         if (pp1?.tipo_proteina === 'Carne Vermelha' && pp2?.tipo_proteina === 'Carne Vermelha') {
           console.error(`🚫 ERRO CRÍTICO: Duas carnes vermelhas no mesmo dia!`);
           console.error(`❌ Quebra de regra nutricional detectada!`);
