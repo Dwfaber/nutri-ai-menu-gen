@@ -436,7 +436,7 @@ Deno.serve(async (req) => {
           return {
             id: proteinaEstruturada.id,
             nome: proteinaEstruturada.nome,
-            categoria: categoria,
+            categoria: proteinaEstruturada.categoria_descricao,
             tipo_proteina: tipo,
             custo_por_refeicao: custo.custo_por_refeicao || 2.5,
             grams: proteinGrams
@@ -446,8 +446,8 @@ Deno.serve(async (req) => {
         }
       }
       
-      console.log(`⚠️ Todas as proteínas ${categoria} excederiam limites, usando fallback`);
-      return fallbackReceita(categoria);
+      console.log(`⚠️ Todas as proteínas ${poolName} excederiam limites, usando fallback`);
+      return fallbackReceita(poolName);
     }
 
     // ========== VALIDAÇÃO SIMPLIFICADA ==========
