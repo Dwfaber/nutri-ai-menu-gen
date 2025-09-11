@@ -545,25 +545,41 @@ export const useIntegratedMenuGeneration = () => {
       const incluirFDS = !(formData.diasUteis ?? true);
       let semanas = gerarSemanas(dataInicio, dataFim, incluirFDS);
 
-      // Preencher as receitas de cada dia usando chave de dia normalizada
+      // Preencher as receitas de cada dia usando chave de dia normalizada E aplicando regras de variedade
+      const dias = ['Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira'];
+      let receitasUsadasAnterior: any[] = [];
+      
       for (const semanaKey in semanas) {
-        semanas[semanaKey] = semanas[semanaKey].map((dia: any) => {
+        semanas[semanaKey] = semanas[semanaKey].map((dia: any, dayIndex: number) => {
           const slotKey = toDayKey(dia.dia);
-          const receitasDoDia = recipes
-            .filter((r: any) => toDayKey(r.day) === slotKey)
-            .map((r: any, idx: number) => {
-              let cat = mapCategoryToMenuStructure(r.category || '');
-              if (cat === 'Salada') cat = categorizeSalad(r.name || '', idx);
-              if (cat === 'Suco') cat = categorizeJuice(r.name || '', idx);
+          
+          // Filtrar receitas disponíveis para este dia (com regras de variedade)
+          const receitasDisponiveis = recipes.filter((r: any) => toDayKey(r.day) === slotKey);
+          
+          // Aplicar regras de negócio para evitar repetições de proteína
+          const receitasFiltradas = filterRecipesForDay(
+            receitasDisponiveis, 
+            dia.dia, 
+            dayIndex, 
+            receitasUsadasAnterior
+          );
+          
+          const receitasDoDia = receitasFiltradas.map((r: any, idx: number) => {
+            let cat = mapCategoryToMenuStructure(r.category || '');
+            if (cat === 'Salada') cat = categorizeSalad(r.name || '', idx);
+            if (cat === 'Suco') cat = categorizeJuice(r.name || '', idx);
 
-              return {
-                id: r.id,
-                nome: r.name,
-                categoria: cat,
-                custo_total: r.cost,         // custo unitário
-                custo_por_refeicao: r.cost   // custo unitário
-              };
-            });
+            return {
+              id: r.id,
+              nome: r.name,
+              categoria: cat,
+              custo_total: r.cost,         // custo unitário
+              custo_por_refeicao: r.cost   // custo unitário
+            };
+          });
+          
+          // Atualizar receitas usadas para próximo dia
+          receitasUsadasAnterior = receitasDoDia;
 
           const totalDia = receitasDoDia.reduce(
             (s, rr) => s + rr.custo_por_refeicao * (expectedServings || 50),
