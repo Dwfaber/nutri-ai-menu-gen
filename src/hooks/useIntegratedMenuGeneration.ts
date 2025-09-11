@@ -61,6 +61,23 @@ export interface GeneratedMenu {
         placeholder?: boolean;
       }>;
     }>;
+    semanas?: Record<string, Array<{
+      dia: string;
+      data?: string;
+      receitas: Array<{
+        id?: string;
+        nome: string;
+        categoria: string;
+        custo_total: number;
+        custo_por_refeicao: number;
+      }>;
+      resumo_dia?: {
+        total_receitas: number;
+        custo_total: string;
+        custo_por_refeicao: string;
+        dentro_orcamento: boolean;
+      };
+    }>>;
     total_cost: number;
     average_cost_per_meal: number;
     portions_total: number;

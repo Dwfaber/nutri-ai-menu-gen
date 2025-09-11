@@ -1443,10 +1443,22 @@ Deno.serve(async (req) => {
           : 0;
         const custoTotalPeriodo = cardapioPorDia.reduce((sum, dia) => sum + dia.custo_total_dia, 0);
         
-        // RESPOSTA ESTRUTURADA POR DIA
+        // AGRUPAMENTO POR SEMANAS
+        const cardapioPorSemana = {};
+        cardapioPorDia.forEach((dia, i) => {
+          const semana = Math.floor(i / 7) + 1;
+          if (!cardapioPorSemana[`Semana ${semana}`]) {
+            cardapioPorSemana[`Semana ${semana}`] = [];
+          }
+          cardapioPorSemana[`Semana ${semana}`].push(dia);
+        });
+        
+        const totalSemanas = Object.keys(cardapioPorSemana).length;
+        
+        // RESPOSTA ESTRUTURADA POR DIA E SEMANA
         const response = {
           success: true,
-          version: 'CORRIGIDA-FINAL-v3.0',
+          version: 'NUTRICIONISTA-v5.1',
           
           solicitacao: {
             cliente: dadosFilial?.nome_filial || clientName,
@@ -1457,7 +1469,7 @@ Deno.serve(async (req) => {
             origem_orcamento: dadosFilial ? "custos_filiais" : "fallback"
           },
           
-          // CARDÁPIO AGRUPADO POR DIA
+          // CARDÁPIO AGRUPADO POR DIA (compatibilidade)
           cardapio: cardapioPorDia.map(dia => ({
             dia: dia.dia,
             data: dia.data,
@@ -1469,6 +1481,9 @@ Deno.serve(async (req) => {
               dentro_orcamento: dia.dentro_orcamento
             }
           })),
+          
+          // NOVA ESTRUTURA: CARDÁPIO AGRUPADO POR SEMANA
+          semanas: cardapioPorSemana,
           
           // RESUMO FINANCEIRO GERAL
           resumo_financeiro: {
@@ -1484,6 +1499,8 @@ Deno.serve(async (req) => {
             data_geracao: new Date().toISOString(),
             tempo_processamento_ms: Date.now() - startTime,
             dias_gerados: diasGerados,
+            total_semanas: totalSemanas,
+            dias_por_semana: 7,
             dias_uteis: diasUteis,
             estrutura_por_dia: Object.keys(ESTRUTURA_CARDAPIO)
           }

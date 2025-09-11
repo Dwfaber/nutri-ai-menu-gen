@@ -40,10 +40,81 @@ const CATEGORIAS_FIXAS = [
 ];
 
 export const WeeklyMenuView: React.FC<WeeklyMenuViewProps> = ({ menu }) => {
-  if (!menu?.recipes?.length) {
+  if (!menu?.recipes?.length && !menu?.menu?.semanas) {
     return <p>Nenhuma receita encontrada para este cardápio.</p>;
   }
 
+  const [semanaAtual, setSemanaAtual] = useState(1);
+
+  // 📊 NOVA LÓGICA: Usar estrutura de semanas do backend se disponível
+  if (menu?.menu?.semanas) {
+    const semanas = menu.menu.semanas;
+    const totalSemanas = Object.keys(semanas).length;
+    
+    console.log('📊 Usando nova estrutura por semanas:', semanas);
+    console.log('📈 Total de semanas disponíveis:', totalSemanas);
+
+    return (
+      <div className="space-y-6">
+        <WeekNavigator
+          currentWeek={semanaAtual}
+          totalWeeks={totalSemanas}
+          onWeekChange={setSemanaAtual}
+        />
+        
+        {totalSemanas > 1 && (
+          <div className="text-center mb-4">
+            <h3 className="text-lg font-semibold text-muted-foreground">
+              Semana {semanaAtual} - {menu.clientName}
+            </h3>
+          </div>
+        )}
+        
+        {semanas[`Semana ${semanaAtual}`]?.map((dia: any) => (
+          <Card key={dia.dia} className="border shadow-sm">
+            <CardHeader>
+              <CardTitle className="text-lg font-semibold">{dia.dia}</CardTitle>
+              {dia.data && (
+                <p className="text-sm text-muted-foreground">{dia.data}</p>
+              )}
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                {dia.receitas?.map((receita: any) => (
+                  <div
+                    key={receita.id || receita.nome}
+                    className="border rounded p-2 shadow-sm bg-card"
+                  >
+                    <p className="font-semibold text-foreground">{receita.categoria}</p>
+                    <p className="text-foreground">{receita.nome}</p>
+                    <p className="text-sm text-muted-foreground">
+                      Custo: R$ {Number(receita.custo_total || 0).toFixed(2)}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Por porção: R$ {Number(receita.custo_por_refeicao || 0).toFixed(2)}
+                    </p>
+                  </div>
+                ))}
+              </div>
+              {dia.resumo_dia && (
+                <div className="mt-4 p-3 bg-muted rounded">
+                  <p className="text-sm font-semibold">Resumo do Dia:</p>
+                  <p className="text-sm">Total de receitas: {dia.resumo_dia.total_receitas}</p>
+                  <p className="text-sm">Custo total: R$ {dia.resumo_dia.custo_total}</p>
+                  <p className="text-sm">Custo por refeição: R$ {dia.resumo_dia.custo_por_refeicao}</p>
+                  <p className={`text-sm ${dia.resumo_dia.dentro_orcamento ? 'text-green-600' : 'text-red-600'}`}>
+                    {dia.resumo_dia.dentro_orcamento ? '✅ Dentro do orçamento' : '❌ Acima do orçamento'}
+                  </p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+    );
+  }
+
+  // 🔄 LÓGICA LEGADA: Para compatibilidade com estrutura antiga
   // 🔎 Agrupar receitas por dia com mapeamento de categorias
   console.log('🍽️ Total de receitas:', menu.recipes.length);
   console.log('🍽️ Primeira receita:', menu.recipes[0]);
@@ -100,7 +171,6 @@ export const WeeklyMenuView: React.FC<WeeklyMenuViewProps> = ({ menu }) => {
   });
 
   const totalSemanas = Object.keys(semanas).length;
-  const [semanaAtual, setSemanaAtual] = useState(1);
 
   // 🔍 Debug: Mostrar estrutura detalhada dos dados agrupados
   console.log('🗓️ Dias disponíveis:', diasDisponiveis);
