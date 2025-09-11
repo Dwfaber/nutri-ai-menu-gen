@@ -106,7 +106,7 @@ export const WeeklyMenuView: React.FC<WeeklyMenuViewProps> = ({ menu }) => {
                 )}
               </CardHeader>
               <CardContent>
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-3 gap-3">
                   {diaAtivo.receitas?.map((receita: any) => (
                     <div
                       key={receita.id || receita.nome}
@@ -290,7 +290,7 @@ export const WeeklyMenuView: React.FC<WeeklyMenuViewProps> = ({ menu }) => {
               <CardTitle className="text-xl font-semibold text-center">{diaAtivo}</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-3 gap-3">
                 {CATEGORIAS_FIXAS.map((cat) => {
                   const receitasArray = (categorias as any)[cat];
                   const receita = Array.isArray(receitasArray) ? receitasArray[0] : receitasArray;
