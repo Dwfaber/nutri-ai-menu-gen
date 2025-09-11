@@ -50,80 +50,116 @@ export const WeeklyMenuView: React.FC<WeeklyMenuViewProps> = ({ menu }) => {
   if (menu?.menu?.semanas) {
     const semanas = menu.menu.semanas;
     const totalSemanas = Object.keys(semanas).length;
+    const [diaAtual, setDiaAtual] = useState(0);
+    
+    const diasDaSemana = semanas[`Semana ${semanaAtual}`] || [];
+
+    const irParaAnterior = () => {
+      setDiaAtual((prev) => Math.max(prev - 1, 0));
+    };
+
+    const irParaProximo = () => {
+      setDiaAtual((prev) => Math.min(prev + 1, diasDaSemana.length - 1));
+    };
+
+    const handleWeekChange = (newWeek: number) => {
+      setSemanaAtual(newWeek);
+      setDiaAtual(0); // Reset para primeiro dia da nova semana
+    };
     
     console.log('📊 Usando nova estrutura por semanas:', semanas);
     console.log('📈 Total de semanas disponíveis:', totalSemanas);
+
+    const diaAtivo = diasDaSemana[diaAtual];
 
     return (
       <div className="space-y-6">
         <WeekNavigator
           currentWeek={semanaAtual}
           totalWeeks={totalSemanas}
-          onWeekChange={setSemanaAtual}
+          onWeekChange={handleWeekChange}
         />
         
-        {totalSemanas > 1 && (
-          <div className="text-center mb-4">
-            <h3 className="text-lg font-semibold text-muted-foreground">
-              Semana {semanaAtual} - {menu.clientName}
-            </h3>
-          </div>
-        )}
-        
-        {/* Indicadores visuais de navegação */}
-        <div className="flex justify-center mb-4">
-          <div className="flex space-x-2">
-            {semanas[`Semana ${semanaAtual}`]?.map((_, index) => (
-              <div
-                key={index}
-                className="w-2 h-2 rounded-full bg-primary/30"
-              />
-            ))}
-          </div>
-          <p className="text-xs text-muted-foreground ml-3">
-            {semanas[`Semana ${semanaAtual}`]?.length || 0} dias
-          </p>
+        <div className="text-center">
+          <h3 className="text-lg font-semibold text-muted-foreground">
+            Semana {semanaAtual} - {menu.clientName}
+          </h3>
         </div>
-        
-        <div className="overflow-x-auto snap-x snap-mandatory">
-          <div className="flex space-x-4 pb-4 snap-start" style={{ minWidth: 'max-content' }}>
-            {semanas[`Semana ${semanaAtual}`]?.map((dia: any) => (
-              <Card key={dia.dia} className="border shadow-sm flex-shrink-0 w-80 hover:shadow-md transition-shadow">
-                <CardHeader>
-                  <CardTitle className="text-lg font-semibold">{dia.dia}</CardTitle>
-                  {dia.data && (
-                    <p className="text-sm text-muted-foreground">{dia.data}</p>
-                  )}
-                </CardHeader>
-                <CardContent>
-                  <div className="grid grid-cols-2 gap-2">
-                    {dia.receitas?.map((receita: any) => (
-                      <div
-                        key={receita.id || receita.nome}
-                        className="border rounded p-2 shadow-sm bg-card text-xs"
-                      >
-                        <p className="font-semibold text-foreground">{receita.categoria}</p>
-                        <p className="text-foreground truncate">{receita.nome}</p>
-                        <p className="text-xs text-muted-foreground">
-                          R$ {Number(receita.custo_total || 0).toFixed(2)}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-                  {dia.resumo_dia && (
-                    <div className="mt-3 p-2 bg-muted rounded">
-                      <p className="text-xs font-semibold">Resumo:</p>
-                      <p className="text-xs">Receitas: {dia.resumo_dia.total_receitas}</p>
-                      <p className="text-xs">Total: R$ {dia.resumo_dia.custo_total}</p>
-                      <p className={`text-xs ${dia.resumo_dia.dentro_orcamento ? 'text-green-600' : 'text-red-600'}`}>
-                        {dia.resumo_dia.dentro_orcamento ? '✅ OK' : '❌ Alto'}
+
+        {/* Navegação de dias estilo Instagram */}
+        <div className="flex justify-center items-center gap-4">
+          <button
+            onClick={irParaAnterior}
+            disabled={diaAtual === 0}
+            className="p-2 rounded-full bg-muted disabled:opacity-40 hover:bg-muted/80 transition-colors"
+          >
+            ←
+          </button>
+
+          {/* Card único do dia ativo */}
+          {diaAtivo && (
+            <Card className="w-full max-w-lg border shadow-md hover:shadow-lg transition-shadow">
+              <CardHeader>
+                <CardTitle className="text-xl font-semibold text-center">{diaAtivo.dia}</CardTitle>
+                {diaAtivo.data && (
+                  <p className="text-sm text-muted-foreground text-center">{diaAtivo.data}</p>
+                )}
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-2 gap-3">
+                  {diaAtivo.receitas?.map((receita: any) => (
+                    <div
+                      key={receita.id || receita.nome}
+                      className="border rounded p-3 shadow-sm bg-card"
+                    >
+                      <p className="font-semibold text-primary text-sm">{receita.categoria}</p>
+                      <p className="text-foreground font-medium truncate">{receita.nome}</p>
+                      <p className="text-sm text-muted-foreground">
+                        R$ {Number(receita.custo_total || 0).toFixed(2)}
                       </p>
                     </div>
-                  )}
-                </CardContent>
-              </Card>
-            ))}
-          </div>
+                  ))}
+                </div>
+                {diaAtivo.resumo_dia && (
+                  <div className="mt-4 p-3 bg-muted rounded-lg">
+                    <p className="text-sm font-semibold">Resumo do Dia:</p>
+                    <p className="text-sm">Receitas: {diaAtivo.resumo_dia.total_receitas}</p>
+                    <p className="text-sm">Total: R$ {diaAtivo.resumo_dia.custo_total}</p>
+                    <p className={`text-sm ${diaAtivo.resumo_dia.dentro_orcamento ? 'text-green-600' : 'text-red-600'}`}>
+                      {diaAtivo.resumo_dia.dentro_orcamento ? '✅ Dentro do Orçamento' : '❌ Acima do Orçamento'}
+                    </p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          <button
+            onClick={irParaProximo}
+            disabled={diaAtual === diasDaSemana.length - 1}
+            className="p-2 rounded-full bg-muted disabled:opacity-40 hover:bg-muted/80 transition-colors"
+          >
+            →
+          </button>
+        </div>
+
+        {/* Indicadores estilo Instagram */}
+        <div className="flex justify-center gap-2 mt-4">
+          {diasDaSemana.map((_, idx) => (
+            <div
+              key={idx}
+              onClick={() => setDiaAtual(idx)}
+              className={`w-2 h-2 rounded-full cursor-pointer transition-colors ${
+                idx === diaAtual ? "bg-primary" : "bg-muted-foreground/30"
+              }`}
+            />
+          ))}
+        </div>
+        
+        <div className="text-center">
+          <p className="text-xs text-muted-foreground">
+            {diaAtual + 1} de {diasDaSemana.length} dias
+          </p>
         </div>
       </div>
     );
@@ -205,85 +241,115 @@ export const WeeklyMenuView: React.FC<WeeklyMenuViewProps> = ({ menu }) => {
 
   // Obter dias da semana atual
   const diasSemanaAtual = semanas[semanaAtual] || [];
+  const [diaAtual, setDiaAtual] = useState(0);
+
+  const irParaAnterior = () => {
+    setDiaAtual((prev) => Math.max(prev - 1, 0));
+  };
+
+  const irParaProximo = () => {
+    setDiaAtual((prev) => Math.min(prev + 1, diasSemanaAtual.length - 1));
+  };
+
+  const handleWeekChange = (newWeek: number) => {
+    setSemanaAtual(newWeek);
+    setDiaAtual(0); // Reset para primeiro dia da nova semana
+  };
+
+  const diaAtivo = diasSemanaAtual[diaAtual];
+  const categorias = diaAtivo ? receitasPorDia[diaAtivo] : {};
 
   return (
     <div className="space-y-6">
       <WeekNavigator
         currentWeek={semanaAtual}
         totalWeeks={totalSemanas}
-        onWeekChange={setSemanaAtual}
+        onWeekChange={handleWeekChange}
       />
       
-      {totalSemanas > 1 && (
-        <div className="text-center mb-4">
-          <h3 className="text-lg font-semibold text-muted-foreground">
-            Semana {semanaAtual} - {menu.clientName}
-          </h3>
-        </div>
-      )}
-      
-      {/* Indicadores visuais de navegação */}
-      <div className="flex justify-center mb-4">
-        <div className="flex space-x-2">
-          {diasSemanaAtual.map((_, index) => (
-            <div
-              key={index}
-              className="w-2 h-2 rounded-full bg-primary/30"
-            />
-          ))}
-        </div>
-        <p className="text-xs text-muted-foreground ml-3">
-          {diasSemanaAtual.length} dias
-        </p>
+      <div className="text-center">
+        <h3 className="text-lg font-semibold text-muted-foreground">
+          Semana {semanaAtual} - {menu.clientName}
+        </h3>
+      </div>
+
+      {/* Navegação de dias estilo Instagram */}
+      <div className="flex justify-center items-center gap-4">
+        <button
+          onClick={irParaAnterior}
+          disabled={diaAtual === 0}
+          className="p-2 rounded-full bg-muted disabled:opacity-40 hover:bg-muted/80 transition-colors"
+        >
+          ←
+        </button>
+
+        {/* Card único do dia ativo */}
+        {diaAtivo && (
+          <Card className="w-full max-w-lg border shadow-md hover:shadow-lg transition-shadow">
+            <CardHeader>
+              <CardTitle className="text-xl font-semibold text-center">{diaAtivo}</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-2 gap-3">
+                {CATEGORIAS_FIXAS.map((cat) => {
+                  const receitasArray = (categorias as any)[cat];
+                  const receita = Array.isArray(receitasArray) ? receitasArray[0] : receitasArray;
+                  
+                  return (
+                    <div
+                      key={cat}
+                      className="border rounded p-3 shadow-sm bg-card"
+                    >
+                      <p className="font-semibold text-primary text-sm">{cat}</p>
+                      {receita ? (
+                        <>
+                          <p className="text-foreground font-medium truncate">{receita.name}</p>
+                          <p className="text-sm text-muted-foreground">
+                            R$ {Number(receita.cost || 0).toFixed(2)}
+                          </p>
+                          {Array.isArray(receitasArray) && receitasArray.length > 1 && (
+                            <p className="text-xs text-blue-600">
+                              +{receitasArray.length - 1} opções
+                            </p>
+                          )}
+                        </>
+                      ) : (
+                        <p className="text-muted-foreground italic text-sm">N/A</p>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        <button
+          onClick={irParaProximo}
+          disabled={diaAtual === diasSemanaAtual.length - 1}
+          className="p-2 rounded-full bg-muted disabled:opacity-40 hover:bg-muted/80 transition-colors"
+        >
+          →
+        </button>
+      </div>
+
+      {/* Indicadores estilo Instagram */}
+      <div className="flex justify-center gap-2 mt-4">
+        {diasSemanaAtual.map((_, idx) => (
+          <div
+            key={idx}
+            onClick={() => setDiaAtual(idx)}
+            className={`w-2 h-2 rounded-full cursor-pointer transition-colors ${
+              idx === diaAtual ? "bg-primary" : "bg-muted-foreground/30"
+            }`}
+          />
+        ))}
       </div>
       
-      <div className="overflow-x-auto snap-x snap-mandatory">
-        <div className="flex space-x-4 pb-4 snap-start" style={{ minWidth: 'max-content' }}>
-          {diasSemanaAtual.map((dia) => {
-            const categorias = receitasPorDia[dia];
-            return (
-              <Card key={dia} className="border shadow-sm flex-shrink-0 w-80 hover:shadow-md transition-shadow">
-                <CardHeader>
-                  <CardTitle className="text-lg font-semibold">{dia}</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="grid grid-cols-2 gap-2">
-                    {CATEGORIAS_FIXAS.map((cat) => {
-                      const receitasArray = (categorias as any)[cat];
-                      // 🔧 CORREÇÃO: Pegar a primeira receita do array
-                      const receita = Array.isArray(receitasArray) ? receitasArray[0] : receitasArray;
-                      
-                      return (
-                        <div
-                          key={cat}
-                          className="border rounded p-2 shadow-sm bg-card text-xs"
-                        >
-                          <p className="font-semibold text-foreground">{cat}</p>
-                          {receita ? (
-                            <>
-                              <p className="text-foreground truncate">{receita.name}</p>
-                              <p className="text-xs text-muted-foreground">
-                                R$ {Number(receita.cost || 0).toFixed(2)}
-                              </p>
-                              {/* 🔍 Debug: Mostrar quantas receitas existem para esta categoria */}
-                              {Array.isArray(receitasArray) && receitasArray.length > 1 && (
-                                <p className="text-xs text-blue-600">
-                                  +{receitasArray.length - 1} opções
-                                </p>
-                              )}
-                            </>
-                          ) : (
-                            <p className="text-muted-foreground italic">N/A</p>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                </CardContent>
-              </Card>
-            );
-          })}
-        </div>
+      <div className="text-center">
+        <p className="text-xs text-muted-foreground">
+          {diaAtual + 1} de {diasSemanaAtual.length} dias
+        </p>
       </div>
     </div>
   );
