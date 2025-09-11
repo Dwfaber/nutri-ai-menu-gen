@@ -70,46 +70,46 @@ export const WeeklyMenuView: React.FC<WeeklyMenuViewProps> = ({ menu }) => {
           </div>
         )}
         
-        {semanas[`Semana ${semanaAtual}`]?.map((dia: any) => (
-          <Card key={dia.dia} className="border shadow-sm">
-            <CardHeader>
-              <CardTitle className="text-lg font-semibold">{dia.dia}</CardTitle>
-              {dia.data && (
-                <p className="text-sm text-muted-foreground">{dia.data}</p>
-              )}
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                {dia.receitas?.map((receita: any) => (
-                  <div
-                    key={receita.id || receita.nome}
-                    className="border rounded p-2 shadow-sm bg-card"
-                  >
-                    <p className="font-semibold text-foreground">{receita.categoria}</p>
-                    <p className="text-foreground">{receita.nome}</p>
-                    <p className="text-sm text-muted-foreground">
-                      Custo: R$ {Number(receita.custo_total || 0).toFixed(2)}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      Por porção: R$ {Number(receita.custo_por_refeicao || 0).toFixed(2)}
-                    </p>
+        <div className="overflow-x-auto">
+          <div className="flex space-x-4 pb-4" style={{ minWidth: 'max-content' }}>
+            {semanas[`Semana ${semanaAtual}`]?.map((dia: any) => (
+              <Card key={dia.dia} className="border shadow-sm flex-shrink-0 w-80">
+                <CardHeader>
+                  <CardTitle className="text-lg font-semibold">{dia.dia}</CardTitle>
+                  {dia.data && (
+                    <p className="text-sm text-muted-foreground">{dia.data}</p>
+                  )}
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-2 gap-2">
+                    {dia.receitas?.map((receita: any) => (
+                      <div
+                        key={receita.id || receita.nome}
+                        className="border rounded p-2 shadow-sm bg-card text-xs"
+                      >
+                        <p className="font-semibold text-foreground">{receita.categoria}</p>
+                        <p className="text-foreground truncate">{receita.nome}</p>
+                        <p className="text-xs text-muted-foreground">
+                          R$ {Number(receita.custo_total || 0).toFixed(2)}
+                        </p>
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </div>
-              {dia.resumo_dia && (
-                <div className="mt-4 p-3 bg-muted rounded">
-                  <p className="text-sm font-semibold">Resumo do Dia:</p>
-                  <p className="text-sm">Total de receitas: {dia.resumo_dia.total_receitas}</p>
-                  <p className="text-sm">Custo total: R$ {dia.resumo_dia.custo_total}</p>
-                  <p className="text-sm">Custo por refeição: R$ {dia.resumo_dia.custo_por_refeicao}</p>
-                  <p className={`text-sm ${dia.resumo_dia.dentro_orcamento ? 'text-green-600' : 'text-red-600'}`}>
-                    {dia.resumo_dia.dentro_orcamento ? '✅ Dentro do orçamento' : '❌ Acima do orçamento'}
-                  </p>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        ))}
+                  {dia.resumo_dia && (
+                    <div className="mt-3 p-2 bg-muted rounded">
+                      <p className="text-xs font-semibold">Resumo:</p>
+                      <p className="text-xs">Receitas: {dia.resumo_dia.total_receitas}</p>
+                      <p className="text-xs">Total: R$ {dia.resumo_dia.custo_total}</p>
+                      <p className={`text-xs ${dia.resumo_dia.dentro_orcamento ? 'text-green-600' : 'text-red-600'}`}>
+                        {dia.resumo_dia.dentro_orcamento ? '✅ OK' : '❌ Alto'}
+                      </p>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </div>
       </div>
     );
   }
@@ -207,50 +207,54 @@ export const WeeklyMenuView: React.FC<WeeklyMenuViewProps> = ({ menu }) => {
         </div>
       )}
       
-      {diasSemanaAtual.map((dia) => {
-        const categorias = receitasPorDia[dia];
-        return (
-          <Card key={dia} className="border shadow-sm">
-            <CardHeader>
-              <CardTitle className="text-lg font-semibold">{dia}</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                {CATEGORIAS_FIXAS.map((cat) => {
-                  const receitasArray = (categorias as any)[cat];
-                  // 🔧 CORREÇÃO: Pegar a primeira receita do array
-                  const receita = Array.isArray(receitasArray) ? receitasArray[0] : receitasArray;
-                  
-                  return (
-                    <div
-                      key={cat}
-                      className="border rounded p-2 shadow-sm bg-card"
-                    >
-                      <p className="font-semibold text-foreground">{cat}</p>
-                      {receita ? (
-                        <>
-                          <p className="text-foreground">{receita.name}</p>
-                          <p className="text-sm text-muted-foreground">
-                            Custo: R$ {Number(receita.cost || 0).toFixed(2)}
-                          </p>
-                          {/* 🔍 Debug: Mostrar quantas receitas existem para esta categoria */}
-                          {Array.isArray(receitasArray) && receitasArray.length > 1 && (
-                            <p className="text-xs text-blue-600">
-                              +{receitasArray.length - 1} outras opções
-                            </p>
+      <div className="overflow-x-auto">
+        <div className="flex space-x-4 pb-4" style={{ minWidth: 'max-content' }}>
+          {diasSemanaAtual.map((dia) => {
+            const categorias = receitasPorDia[dia];
+            return (
+              <Card key={dia} className="border shadow-sm flex-shrink-0 w-80">
+                <CardHeader>
+                  <CardTitle className="text-lg font-semibold">{dia}</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-2 gap-2">
+                    {CATEGORIAS_FIXAS.map((cat) => {
+                      const receitasArray = (categorias as any)[cat];
+                      // 🔧 CORREÇÃO: Pegar a primeira receita do array
+                      const receita = Array.isArray(receitasArray) ? receitasArray[0] : receitasArray;
+                      
+                      return (
+                        <div
+                          key={cat}
+                          className="border rounded p-2 shadow-sm bg-card text-xs"
+                        >
+                          <p className="font-semibold text-foreground">{cat}</p>
+                          {receita ? (
+                            <>
+                              <p className="text-foreground truncate">{receita.name}</p>
+                              <p className="text-xs text-muted-foreground">
+                                R$ {Number(receita.cost || 0).toFixed(2)}
+                              </p>
+                              {/* 🔍 Debug: Mostrar quantas receitas existem para esta categoria */}
+                              {Array.isArray(receitasArray) && receitasArray.length > 1 && (
+                                <p className="text-xs text-blue-600">
+                                  +{receitasArray.length - 1} opções
+                                </p>
+                              )}
+                            </>
+                          ) : (
+                            <p className="text-muted-foreground italic">N/A</p>
                           )}
-                        </>
-                      ) : (
-                        <p className="text-muted-foreground italic">Não disponível</p>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </CardContent>
-          </Card>
-        );
-      })}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
+      </div>
     </div>
   );
 };
