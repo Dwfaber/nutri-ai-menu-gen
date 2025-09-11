@@ -86,6 +86,26 @@ export const WeeklyMenuView: React.FC<WeeklyMenuViewProps> = ({ menu }) => {
           </h3>
         </div>
 
+        {/* Navegação de semanas */}
+        <div className="flex justify-center gap-3 mb-6">
+          {Array.from({ length: totalSemanas }, (_, i) => i + 1).map((semana) => (
+            <button
+              key={semana}
+              onClick={() => {
+                setSemanaAtual(semana);
+                setDiaAtual(0); // volta sempre pro 1º dia da semana selecionada
+              }}
+              className={`px-4 py-2 border rounded-lg transition-colors
+                ${semanaAtual === semana 
+                  ? "bg-primary text-primary-foreground border-primary" 
+                  : "bg-card text-foreground border-border hover:bg-muted"}
+              `}
+            >
+              Semana {semana}
+            </button>
+          ))}
+        </div>
+
         {/* Navegação de dias estilo Instagram */}
         <div className="flex justify-center items-center gap-4">
           <button
@@ -271,6 +291,26 @@ export const WeeklyMenuView: React.FC<WeeklyMenuViewProps> = ({ menu }) => {
         <h3 className="text-lg font-semibold text-muted-foreground">
           Semana {semanaAtual} - {menu.clientName}
         </h3>
+      </div>
+
+      {/* Navegação de semanas */}
+      <div className="flex justify-center gap-3 mb-6">
+        {Array.from({ length: totalSemanas }, (_, i) => i + 1).map((semana) => (
+          <button
+            key={semana}
+            onClick={() => {
+              setSemanaAtual(semana);
+              setDiaAtual(0); // volta sempre pro 1º dia da semana selecionada
+            }}
+            className={`px-4 py-2 border rounded-lg transition-colors
+              ${semanaAtual === semana 
+                ? "bg-primary text-primary-foreground border-primary" 
+                : "bg-card text-foreground border-border hover:bg-muted"}
+            `}
+          >
+            Semana {semana}
+          </button>
+        ))}
       </div>
 
       {/* Navegação de dias estilo Instagram */}
