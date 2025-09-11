@@ -1,36 +1,46 @@
-import { useState, useEffect } from 'react';
+/**
+ * Unified hook for integrated menu generation with local calculations and AI support
+ */
+
+import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { withRetry } from '@/utils/connectionUtils';
 import { useSelectedClient } from '@/contexts/SelectedClientContext';
-import { useClientContractsContext } from '@/contexts/ClientContractsContext';
-import { MarketProduct } from './useMarketProducts';
-import { useMarketAvailability } from './useMarketAvailability';
 import { useMenuBusinessRules } from './useMenuBusinessRules';
-import { SimpleMenuFormData } from '@/components/MenuGeneration/SimpleMenuForm';
-import { gerarSemanas } from '@/utils/weekGenerator';
+import { useMarketAvailability } from './useMarketAvailability';
+import { format, addDays, parse } from 'date-fns';
 
-export interface MenuGenerationPayload extends SimpleMenuFormData {
-  action: 'generate_menu';
-  clientName?: string;
-  custoMedioDiario?: number;
-  tipoRefeicao?: string;
-  quantidadeRefeicoes?: number;
-  periodo?: any;
-  baseRecipes?: any;
+export interface SimpleMenuFormData {
+  clientId: string;
+  period: {
+    start: string;
+    end: string;
+  };
+  mealsPerDay: number;
+  estimatedMeals: number;
+  restrictions: string[];
+  preferences: string[];
+  diasUteis?: boolean;
+}
+
+export interface MenuGenerationPayload {
+  client_id: string;
+  period: string;
+  numDays: number;
+  mealsPerDay: number;
+  preferences?: string[];
+  restrictions?: string[];
+  useDiaEspecial?: boolean;
 }
 
 export interface MenuGenerationRequest {
   clientId: string;
-  clientName: string;
   weekPeriod: string;
-  maxCostPerMeal: number;
-  totalEmployees: number;
-  mealsPerMonth: number;
-  mealsPerDay: number;
-  dietaryRestrictions: string[];
+  numDays?: number;
+  totalMeals?: number;
   preferences?: string[];
-  marketProducts: MarketProduct[];
+  restrictions?: string[];
+  specialDay?: boolean;
 }
 
 export interface GeneratedMenu {
@@ -44,79 +54,78 @@ export interface GeneratedMenu {
   totalRecipes: number;
   recipes: MenuRecipe[];
   createdAt: string;
-  approvedAt?: string;
   approvedBy?: string;
+  approvedAt?: string;
   rejectedReason?: string;
-  menu?: {
-    days: Array<{
-      dia: string;
-      budget_per_meal: number;
-      custo_por_refeicao: number;
-      custo_total_dia: number;
-      dentro_orcamento: boolean;
-      itens: Array<{
-        slot: string;
-        nome: string;
-        custo_total: number;
-        custo_por_refeicao: number;
-        placeholder?: boolean;
-      }>;
-    }>;
-    semanas?: Record<string, Array<{
-      dia: string;
-      data?: string;
-      receitas: Array<{
-        id?: string;
-        nome: string;
-        categoria: string;
-        custo_total: number;
-        custo_por_refeicao: number;
-      }>;
-      resumo_dia?: {
-        total_receitas: number;
-        custo_total: string;
-        custo_por_refeicao: string;
-        dentro_orcamento: boolean;
-      };
-    }>>;
-    total_cost: number;
-    average_cost_per_meal: number;
-    portions_total: number;
-  };
+  menu?: any;
   warnings?: string[];
+  juiceMenu?: any;
 }
 
 export interface MenuRecipe {
   id: string;
   name: string;
-  day: string;
   category: string;
   cost: number;
   servings: number;
+  day?: string;
   ingredients?: any[];
-  nutritionalInfo?: any;
 }
 
-export const useIntegratedMenuGeneration = () => {
+// Retry utility
+async function withRetry<T>(
+  operation: () => Promise<T>,
+  options: {
+    maxRetries: number;
+    initialDelay: number;
+    maxDelay: number;
+    backoffFactor: number;
+  }
+): Promise<T> {
+  let lastError: Error;
+  
+  for (let attempt = 0; attempt <= options.maxRetries; attempt++) {
+    try {
+      return await operation();
+    } catch (error) {
+      lastError = error as Error;
+      
+      if (attempt === options.maxRetries) {
+        break;
+      }
+      
+      const delay = Math.min(
+        options.initialDelay * Math.pow(options.backoffFactor, attempt),
+        options.maxDelay
+      );
+      
+      console.log(`Tentativa ${attempt + 1} falhou, tentando novamente em ${delay}ms...`);
+      await new Promise(resolve => setTimeout(resolve, delay));
+    }
+  }
+  
+  throw lastError!;
+}
+
+export function useIntegratedMenuGeneration() {
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
   const [generatedMenu, setGeneratedMenu] = useState<GeneratedMenu | null>(null);
   const [savedMenus, setSavedMenus] = useState<GeneratedMenu[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [isProcessing, setIsProcessing] = useState(false);
-  const { toast } = useToast();
   const { selectedClient } = useSelectedClient();
-  const { getClientWithCosts } = useClientContractsContext();
-  const { viableRecipes, marketIngredients, fetchMarketIngredients, checkRecipeViability, calculateRecipeRealCost } = useMarketAvailability();
-  const { validateMenu, validateMenuAndSetViolations, filterRecipesForDay, violations } = useMenuBusinessRules();
-
-  // Load persisted menu on mount
+  const { toast } = useToast();
+  const { validateMenu, violations, filterRecipesForDay } = useMenuBusinessRules();
+  const { viableRecipes, marketIngredients } = useMarketAvailability();
+  
+  // Load persisted menu from localStorage on mount
   useEffect(() => {
-    const persistedMenu = localStorage.getItem('current-generated-menu');
-    if (persistedMenu) {
+    const stored = localStorage.getItem('current-generated-menu');
+    if (stored) {
       try {
-        const menu = JSON.parse(persistedMenu);
-        // Validate that the menu belongs to the current client
-        const currentClientId = selectedClient?.id || selectedClient?.filial_id;
+        const menu = JSON.parse(stored);
+        const currentClientId = selectedClient?.id;
+        
         if (menu.clientId === currentClientId) {
           setGeneratedMenu(menu);
         } else {
@@ -139,11 +148,19 @@ export const useIntegratedMenuGeneration = () => {
     }
   }, [generatedMenu]);
 
-  // Clear persisted menu when client changes
+  // Clear persisted menu when client changes (only if client actually changed)
+  const [previousClientId, setPreviousClientId] = useState<string | null>(null);
   useEffect(() => {
-    localStorage.removeItem('current-generated-menu');
-    setGeneratedMenu(null);
-  }, [selectedClient?.id]);
+    const currentClientId = selectedClient?.id;
+    
+    if (previousClientId !== null && previousClientId !== currentClientId) {
+      // Only clear if client actually changed (not on first load)
+      localStorage.removeItem('current-generated-menu');
+      setGeneratedMenu(null);
+    }
+    
+    setPreviousClientId(currentClientId);
+  }, [selectedClient?.id, previousClientId]);
 
 
 
@@ -171,149 +188,142 @@ export const useIntegratedMenuGeneration = () => {
       return 'Suco 1';
     }
     
-    // Sucos doces (Suco 2)  
-    if (name.includes('manga') || name.includes('morango') || name.includes('pêssego') || 
-        name.includes('uva') || name.includes('goiaba') || name.includes('coco') ||
-        name.includes('banana') || name.includes('maçã')) {
-      return 'Suco 2';
-    }
-    
-    // Frutas vermelhas como coringa - alternar
-    if (name.includes('frutas vermelhas') || name.includes('tropical')) {
-      return index % 2 === 0 ? 'Suco 1' : 'Suco 2';
-    }
-    
-    // Fallback: alternar entre categorias
-    return index % 2 === 0 ? 'Suco 1' : 'Suco 2';
+    // Sucos doces/neutros (Suco 2)
+    return 'Suco 2';
   };
 
-  // New menu structure mapping based on business requirements
+  // Helper function to map category names to menu structure
   const mapCategoryToMenuStructure = (category: string): string => {
-    const normalizedCategory = category.toLowerCase().trim();
-    
-    console.log('🔄 Mapeando categoria:', category, '→', normalizedCategory);
-    
-    // PP1 - aceita tanto "proteína principal" quanto "prato principal"
-    if (normalizedCategory.includes('proteína principal 1') || 
-        normalizedCategory.includes('prato principal 1') || 
-        normalizedCategory === 'pp1') {
-      console.log('✅ Categoria mapeada para PP1');
+    const categoryMap: { [key: string]: string } = {
+      // Mapeamento de categorias conhecidas
+      'prato_principal': 'PP1',
+      'proteina': 'PP1',
+      'principal': 'PP1',
+      'prato principal': 'PP1',
+      'pp1': 'PP1',
+      
+      'salada': 'Salada',
+      'verdura': 'Salada',
+      'verduras': 'Salada',
+      'folha': 'Salada',
+      'folhas': 'Salada',
+      
+      'guarnicao': 'Guarnição',
+      'guarnição': 'Guarnição',
+      'acompanhamento': 'Guarnição',
+      
+      'suco': 'Suco',
+      'bebida': 'Suco',
+      'refresco': 'Suco',
+      
+      'arroz': 'Arroz',
+      'rice': 'Arroz',
+      
+      'feijao': 'Feijão',
+      'feijão': 'Feijão',
+      'beans': 'Feijão',
+      
+      'sobremesa': 'Sobremesa',
+      'doce': 'Sobremesa',
+      'dessert': 'Sobremesa'
+    };
+
+    // Primeiro tentar mapeamento direto
+    const normalizedCategory = category?.toLowerCase().trim();
+    if (categoryMap[normalizedCategory]) {
+      return categoryMap[normalizedCategory];
+    }
+
+    // Fallback para análise por substring
+    if (normalizedCategory.includes('prato') || normalizedCategory.includes('principal') || normalizedCategory.includes('proteina')) {
       return 'PP1';
     }
-    
-    // PP2 - aceita tanto "proteína principal" quanto "prato principal"
-    if (normalizedCategory.includes('proteína principal 2') || 
-        normalizedCategory.includes('prato principal 2') || 
-        normalizedCategory === 'pp2') {
-      console.log('✅ Categoria mapeada para PP2');
-      return 'PP2';
+    if (normalizedCategory.includes('salada') || normalizedCategory.includes('verdura') || normalizedCategory.includes('folha')) {
+      return 'Salada';
     }
-    
-    if (normalizedCategory.includes('arroz branco') || normalizedCategory === 'arroz') {
-      return 'Arroz Branco';
-    }
-    
-    if (normalizedCategory.includes('feijão') || normalizedCategory === 'feijao') {
-      return 'Feijão';
-    }
-    
-    if (normalizedCategory.includes('salada')) {
-      return 'Salada'; // Will be categorized later
-    }
-    
-    if (normalizedCategory.includes('suco') || normalizedCategory.includes('bebida')) {
-      return 'Suco'; // Will be categorized later
-    }
-    
-    if (normalizedCategory.includes('sobremesa') || normalizedCategory.includes('fruta')) {
-      return 'Sobremesa';
-    }
-    
-    if (normalizedCategory.includes('guarnição') || normalizedCategory.includes('acompanhamento')) {
+    if (normalizedCategory.includes('guarnicao') || normalizedCategory.includes('guarnição') || normalizedCategory.includes('acompanhamento')) {
       return 'Guarnição';
     }
-    
-    // Log para categorias não reconhecidas
-    console.log('⚠️ Categoria não reconhecida:', category, '→ usando "Outros"');
-    return 'Outros';
+    if (normalizedCategory.includes('suco') || normalizedCategory.includes('bebida')) {
+      return 'Suco';
+    }
+    if (normalizedCategory.includes('arroz')) {
+      return 'Arroz';
+    }
+    if (normalizedCategory.includes('feijao') || normalizedCategory.includes('feijão')) {
+      return 'Feijão';
+    }
+    if (normalizedCategory.includes('sobremesa') || normalizedCategory.includes('doce')) {
+      return 'Sobremesa';
+    }
+
+    // Fallback final
+    return category || 'PP1';
+  };
+
+  // Helper function to convert day names to consistent keys
+  const toDayKey = (day: string): string => {
+    const dayMap: { [key: string]: string } = {
+      'segunda': 'Segunda-feira',
+      'segunda-feira': 'Segunda-feira',
+      'monday': 'Segunda-feira',
+      'seg': 'Segunda-feira',
+      
+      'terça': 'Terça-feira',
+      'terca': 'Terça-feira',
+      'terça-feira': 'Terça-feira',
+      'terca-feira': 'Terça-feira',
+      'tuesday': 'Terça-feira',
+      'ter': 'Terça-feira',
+      
+      'quarta': 'Quarta-feira',
+      'quarta-feira': 'Quarta-feira',
+      'wednesday': 'Quarta-feira',
+      'qua': 'Quarta-feira',
+      
+      'quinta': 'Quinta-feira',
+      'quinta-feira': 'Quinta-feira',
+      'thursday': 'Quinta-feira',
+      'qui': 'Quinta-feira',
+      
+      'sexta': 'Sexta-feira',
+      'sexta-feira': 'Sexta-feira',
+      'friday': 'Sexta-feira',
+      'sex': 'Sexta-feira'
+    };
+
+    const normalized = day?.toLowerCase().trim();
+    return dayMap[normalized] || day;
   };
 
   // Carregar cardápios salvos
   const loadSavedMenus = async () => {
     try {
-      // Debug: verificar cliente selecionado
-      console.log('🔍 Cliente selecionado:', selectedClient);
-      const currentClientId = selectedClient?.id || selectedClient?.filial_id;
-      console.log('🔍 ID do cliente para filtro:', currentClientId);
-      
-      let query = supabase
+      const { data: menus, error } = await supabase
         .from('generated_menus')
         .select('*')
         .order('created_at', { ascending: false });
-      
-      // TEMPORARIAMENTE desabilitar filtro para ver todos os cardápios
-      // TODO: Corrigir filtro por cliente após confirmar que cardápios aparecem
-      
-      console.log('⚠️ DEBUG: Mostrando TODOS os cardápios (filtro temporariamente desabilitado)');
 
-      const { data: menus, error: menusError } = await query;
+      if (error) throw error;
 
-      if (menusError) {
-        console.error('❌ Erro Supabase:', menusError);
-      } else {
-        console.log('📊 Total de cardápios no banco:', menus?.length || 0);
-        if (menus?.length) {
-          console.log('🔍 Client IDs salvos:', menus.map(m => `${m.client_id} (${m.client_name})`));
-          console.log('🔍 Primeiro cardápio exemplo:', {
-            id: menus[0].id,
-            client_id: menus[0].client_id, 
-            client_name: menus[0].client_name,
-            total_recipes: menus[0].total_recipes
-          });
-        }
-        if (menus?.length) {
-          console.log('📑 IDs dos cardápios:', menus.map(m => m.id));
-          console.log('💰 Primeiro cardápio - receitas:', menus[0]?.total_recipes, 'custo:', menus[0]?.cost_per_meal);
-        }
-      }
-
-      if (menusError) throw menusError;
-
-      const formattedMenus = menus?.map(menu => ({
+      const formattedMenus: GeneratedMenu[] = menus?.map(menu => ({
         id: menu.id,
         clientId: menu.client_id,
         clientName: menu.client_name,
         weekPeriod: menu.week_period,
-        totalCost: menu.total_cost,
-        costPerMeal: menu.cost_per_meal,
-        totalRecipes: menu.total_recipes,
-        status: menu.status as 'pending_approval' | 'approved' | 'rejected',
+        status: menu.status,
+        totalCost: menu.total_cost || 0,
+        costPerMeal: menu.cost_per_meal || 0,
+        totalRecipes: menu.total_recipes || 0,
+        recipes: (menu as any).recipes || [],
+        menu: (menu as any).menu_data,
+        warnings: (menu as any).warnings,
         approvedBy: menu.approved_by,
+        approvedAt: menu.approved_at,
         rejectedReason: menu.rejected_reason,
-        recipes: (Array.isArray(menu.receitas_adaptadas) ? menu.receitas_adaptadas : []).map((recipe: any, idx: number) => {
-          const mapped = mapCategoryToMenuStructure(recipe.categoria_descricao || '');
-          let finalCategory = mapped;
-          if (mapped === 'Salada') finalCategory = categorizeSalad(recipe.nome_receita || '', idx);
-          if (mapped === 'Suco') finalCategory = categorizeJuice(recipe.nome_receita || '', idx);
-          const s = String(recipe.day || recipe.dia || '').toLowerCase();
-          const normalizedDay = s.includes('seg') ? 'Segunda-feira'
-            : (s.includes('terç') || s.includes('terc') || s === 'terca') ? 'Terça-feira'
-            : s.includes('qua') ? 'Quarta-feira'
-            : s.includes('qui') ? 'Quinta-feira'
-            : s.includes('sex') ? 'Sexta-feira'
-            : s.includes('sab') ? 'Sábado'
-            : s.includes('dom') ? 'Domingo'
-            : 'Segunda-feira';
-          return {
-            id: recipe.receita_id_legado,
-            name: recipe.nome_receita,
-            category: finalCategory,
-            day: normalizedDay,
-            cost: recipe.custo_adaptado,
-            servings: recipe.porcoes,
-            ingredients: recipe.ingredientes || [],
-            nutritionalInfo: recipe.nutritional_info || {}
-          };
+        juiceMenu: menu.juice_menu,
+        ...(!menu.created_at ? {} : {
+          createdAt: menu.created_at
         }),
         createdAt: menu.created_at
       })) || [];
@@ -327,49 +337,20 @@ export const useIntegratedMenuGeneration = () => {
   // Salvar cardápio no banco
   const saveMenuToDatabase = async (menu: GeneratedMenu): Promise<string | null> => {
     try {
-      // Verificar se já existe cardápio com mesmo cliente e período nos últimos 30 segundos
-      const now = new Date();
-      const thirtySecondsAgo = new Date(now.getTime() - 30000);
-      
-      const { data: existingMenus, error: checkError } = await supabase
-        .from('generated_menus')
-        .select('id, client_id, week_period, created_at')
-        .eq('client_id', menu.clientId)
-        .eq('week_period', menu.weekPeriod)
-        .gte('created_at', thirtySecondsAgo.toISOString());
-
-      if (checkError) {
-        console.error('❌ Erro ao verificar duplicatas:', checkError);
-      } else if (existingMenus && existingMenus.length > 0) {
-        console.log('⚠️ Cardápio duplicado detectado, usando existente:', existingMenus[0].id);
-        return existingMenus[0].id;
-      }
-
-      // Preparar receitas adaptadas para salvar
-      const receitasAdaptadas = menu.recipes.map(recipe => ({
-        receita_id_legado: recipe.id,
-        nome_receita: recipe.name,
-        categoria_descricao: recipe.category,
-        day: recipe.day,
-        custo_adaptado: recipe.cost,
-        porcoes: recipe.servings,
-        ingredientes: recipe.ingredients || [],
-        nutritional_info: recipe.nutritionalInfo || {}
-      }));
-
-      // Salvar cardápio principal com receitas adaptadas
       const { data: savedMenu, error: menuError } = await supabase
         .from('generated_menus')
         .insert({
           client_id: menu.clientId,
           client_name: menu.clientName,
           week_period: menu.weekPeriod,
+          status: menu.status,
           total_cost: menu.totalCost,
           cost_per_meal: menu.costPerMeal,
-          total_recipes: receitasAdaptadas.length,   // Usa fonte da verdade real
-          status: menu.status,
-          receitas_ids: menu.recipes.map(r => r.id),
-          receitas_adaptadas: receitasAdaptadas
+          total_recipes: menu.totalRecipes,
+          recipes: menu.recipes,
+          menu_data: menu.menu,
+          warnings: menu.warnings,
+          juice_menu: menu.juiceMenu
         })
         .select('id')
         .single();
@@ -393,10 +374,10 @@ export const useIntegratedMenuGeneration = () => {
 
       if (error) throw error;
 
-      // Remove from local state
+      // Remover da lista local
       setSavedMenus(prev => prev.filter(menu => menu.id !== menuId));
-      
-      // Clear generated menu if it's the one being deleted
+
+      // Se era o menu atual, limpar também
       if (generatedMenu?.id === menuId) {
         setGeneratedMenu(null);
       }
@@ -433,115 +414,101 @@ export const useIntegratedMenuGeneration = () => {
     }
     
     setIsProcessing(true);
-
-    if (!formData.clientId || !formData.period.start || !formData.period.end) {
-      toast({
-        title: "Dados incompletos",
-        description: "Por favor, preencha todos os campos obrigatórios",
-        variant: "destructive"
-      });
-      setIsProcessing(false);
-      return null;
-    }
+    setIsGenerating(true);
+    setError(null);
 
     try {
-      setIsGenerating(true);
-      setError(null);
-      
-      // Clear any existing persisted menu when generating a new one
-      localStorage.removeItem('current-generated-menu');
-
-      const weekPeriod = `${formData.period.start} a ${formData.period.end}`;
-      
-      // Use the selected client from context
       const clientToUse = selectedClient;
-      
       if (!clientToUse) {
-        throw new Error("Cliente não encontrado");
+        throw new Error('Nenhum cliente selecionado');
       }
 
-      // Capturar valor correto de porções ANTES do backend
-      const expectedServings = formData.estimatedMeals || formData.mealsPerDay || 50;
-      
-      // Criar payload para Edge Function
-      const payload: MenuGenerationPayload = {
-        ...formData,
-        action: 'generate_menu',
-        clientName: clientToUse.nome_fantasia,
-        custoMedioDiario: clientToUse.custo_medio_diario,
-        tipoRefeicao: clientToUse.tipo_refeicao || 'almoco',
-        quantidadeRefeicoes: expectedServings,
-        periodo: formData.period,
-        preferences: formData.preferences || [],
-        proteinGrams: formData.proteinGrams || '100',
-        juiceConfig: formData.juiceConfig || {},
-        diasUteis: formData.diasUteis !== undefined ? formData.diasUteis : true, // Padrão apenas dias úteis
-        baseRecipes: {
-          arroz: 580,
-          feijao: 1600
-        }
+      console.log('🔄 Iniciando geração com FormData:', formData);
+
+      // Parse dates and create week period string
+      const startDate = parse(formData.period.start, 'yyyy-MM-dd', new Date());
+      const endDate = parse(formData.period.end, 'yyyy-MM-dd', new Date());
+      const weekPeriod = `${format(startDate, 'dd/MM/yyyy')} a ${format(endDate, 'dd/MM/yyyy')}`;
+
+      console.log('📅 Período formatado:', weekPeriod);
+
+      // Gerar receitas com Edge Function
+      const payload = {
+        action: 'generate_simple_recipes',
+        client_data: {
+          id: clientToUse.id,
+          nome: clientToUse.nome_fantasia,
+          custo_maximo_refeicao: (clientToUse as any).custo_maximo_refeicao || 15,
+          restricoes_alimentares: formData.restrictions,
+          preferencias_alimentares: formData.preferences
+        },
+        meal_quantity: formData.mealsPerDay,
+        estimated_meals: formData.estimatedMeals,
+        week_period: weekPeriod,
+        dias_uteis: formData.diasUteis ?? true
       };
 
-      // Chamar Edge Function
-      const { data, error: functionError } = await supabase.functions.invoke('gpt-assistant', {
-        body: payload
-      });
+      console.log('📤 Enviando payload:', payload);
+
+      // Use GPT Assistant para gerar receitas
+      const { data, error: functionError } = await withRetry(
+        () => supabase.functions.invoke('gpt-assistant', {
+          body: payload
+        }),
+        {
+          maxRetries: 3,
+          initialDelay: 1500,
+          maxDelay: 10000,
+          backoffFactor: 2
+        }
+      );
 
       if (functionError) {
-        throw new Error(functionError.message || 'Erro ao gerar cardápio');
+        console.error('Erro na função GPT:', functionError);
+        throw new Error(functionError.message || 'Erro ao gerar receitas');
       }
 
       if (!data || !data.success) {
-        throw new Error(data?.erro || 'Resposta inválida da IA');
+        console.error('Dados inválidos da função:', data);
+        throw new Error(data?.error || 'Erro na geração das receitas');
       }
 
-      // ⚡ Preparar receitas e estrutura de semanas para o novo modelo
-      const recipes = (data.cardapio?.flatMap((dia: any, diaIndex: number) =>
-        dia.receitas?.map((r: any, index: number) => ({
-          id: r.id || `recipe-${diaIndex}-${index}`,
-          name: r.nome || 'Receita sem nome',
-          category: r.categoria || 'Outros',
-          day: dia.dia || 'Segunda-feira',
-          cost: Number(r.custo_por_refeicao || 0),
-          servings: Number(r.porcoes || expectedServings),
-          ingredients: r.ingredientes || [],
-          nutritionalInfo: r.nutritional_info || {}
-        }))
-      ) || []);
+      console.log('📥 Receitas geradas:', data.recipes?.length || 0);
 
-      // Funções auxiliares para parsing e normalização de dias
-      const parseDate = (str: string) => {
-        const s = String(str || '').trim();
-        if (s.includes('/')) {
-          const [dd, mm, yyyy] = s.split('/').map(Number);
-          return new Date(yyyy, (mm || 1) - 1, dd || 1);
+      const recipes = data.recipes || [];
+      if (!recipes.length) {
+        throw new Error('IA não conseguiu gerar receitas');
+      }
+
+      // Aplicar regras de negócio usando filterRecipesForDay
+      console.log('🔍 Aplicando regras de variedade...');
+      const gerarSemanas = (inicio: Date, fim: Date, incluirFDS: boolean = false) => {
+        const semanas: { [key: string]: any[] } = {};
+        let currentDate = new Date(inicio);
+        
+        while (currentDate <= fim) {
+          const weekKey = `semana-${format(currentDate, 'yyyy-MM-dd')}`;
+          if (!semanas[weekKey]) semanas[weekKey] = [];
+          
+          const dayOfWeek = currentDate.getDay();
+          const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+          
+          if (!isWeekend || incluirFDS) {
+            semanas[weekKey].push({
+              dia: format(currentDate, 'EEEE', { locale: { localize: { day: (n: number) => ['Domingo', 'Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado'][n] } } }),
+              data: format(currentDate, 'dd/MM/yyyy')
+            });
+          }
+          
+          currentDate.setDate(currentDate.getDate() + 1);
         }
-        if (s.includes('-')) {
-          const [yyyy, mm, dd] = s.split('-').map(Number);
-          return new Date(yyyy, (mm || 1) - 1, dd || 1);
-        }
-        const d = new Date(s);
-        return isNaN(d.getTime()) ? new Date() : d;
-      };
-      const toDayKey = (label: string) => {
-        const s = String(label || '')
-          .toLowerCase()
-          .normalize('NFD')
-          .replace(/[\u0300-\u036f]/g, '');
-        if (s.includes('seg')) return 'seg';
-        if (s.includes('ter')) return 'ter';
-        if (s.includes('qua')) return 'qua';
-        if (s.includes('qui')) return 'qui';
-        if (s.includes('sex')) return 'sex';
-        if (s.includes('sab')) return 'sab';
-        if (s.includes('dom')) return 'dom';
-        return 'seg';
+        
+        return semanas;
       };
 
-      // Gerar semanas a partir do período do formulário
-      const [iniStr, fimStr] = weekPeriod.split(' a ').map(s => s.trim());
-      const dataInicio = parseDate(iniStr);
-      const dataFim = parseDate(fimStr);
+      // Organizar receitas por semana aplicando regras de variedade
+      const dataInicio = startDate;
+      const dataFim = endDate;
       const incluirFDS = !(formData.diasUteis ?? true);
       let semanas = gerarSemanas(dataInicio, dataFim, incluirFDS);
 
@@ -582,75 +549,83 @@ export const useIntegratedMenuGeneration = () => {
           receitasUsadasAnterior = receitasDoDia;
 
           const totalDia = receitasDoDia.reduce(
-            (s, rr) => s + rr.custo_por_refeicao * (expectedServings || 50),
+            (s, rr) => s + rr.custo_por_refeicao * (formData.estimatedMeals || 50),
             0
           );
 
           return {
             ...dia,
             receitas: receitasDoDia,
-            resumo_dia: {
-              total_receitas: receitasDoDia.length,
-              custo_total: totalDia.toFixed(2),
-              custo_por_refeicao: receitasDoDia.length 
-                ? (totalDia / (expectedServings || 50)).toFixed(2) 
-                : "0.00",
-              dentro_orcamento: true
-            }
+            custo_total: totalDia
           };
         });
       }
 
-      // ⚡ IMEDIATAMENTE criar e definir o generatedMenu no novo e no legado
+      // Calcular custos totais
+      let custoTotal = 0;
+      let totalReceitas = 0;
+
+      for (const semanaKey in semanas) {
+        for (const dia of semanas[semanaKey]) {
+          custoTotal += dia.custo_total || 0;
+          totalReceitas += dia.receitas?.length || 0;
+        }
+      }
+
+      const custoPorRefeicao = formData.estimatedMeals > 0 ? custoTotal / formData.estimatedMeals : 0;
+
+      // Validar regras de negócio
+      const allRecipes = Object.values(semanas).flat().flatMap((dia: any) => dia.receitas || []);
+      const businessRules = validateMenu(allRecipes);
+      
+      console.log('📋 Regras de negócio aplicadas:', businessRules);
+
+      // Criar menu final
       const menu: GeneratedMenu = {
-        id: `temp-${Date.now()}`,
-        clientId: formData.clientId,
-        clientName: clientToUse.nome_fantasia || 'Cliente',
-        weekPeriod: weekPeriod,
+        id: crypto.randomUUID(),
+        clientId: clientToUse.id,
+        clientName: clientToUse.nome_fantasia,
+        weekPeriod,
         status: 'pending_approval',
-        totalCost: Number(data.resumo_financeiro?.custo_total_periodo || 0),
-        costPerMeal: Number(data.resumo_financeiro?.custo_medio_por_refeicao || 0),
-        totalRecipes: recipes.length,
-        recipes,
+        totalCost: custoTotal,
+        costPerMeal: custoPorRefeicao,
+        totalRecipes: totalReceitas,
+        recipes: allRecipes.map(r => ({
+          id: r.id,
+          name: r.nome,
+          category: r.categoria,
+          cost: r.custo_por_refeicao,
+          servings: formData.estimatedMeals || 50,
+          day: r.dia,
+          ingredients: r.ingredients || []
+        })),
         createdAt: new Date().toISOString(),
-        menu: { 
-          semanas,
-          days: data.cardapio?.map((dia: any) => ({
-            dia: dia.dia || 'Segunda-feira',
-            budget_per_meal: Number(dia.orcamento_por_refeicao || 0),
-            custo_por_refeicao: Number(dia.custo_por_refeicao || 0),
-            custo_total_dia: Number(dia.custo_total_dia || 0),
-            dentro_orcamento: Boolean(dia.dentro_orcamento),
-            itens: dia.receitas?.map((r: any) => ({
-              slot: r.categoria || 'Principal',
-              nome: r.nome || 'Receita sem nome',
-              custo_total: Number(r.custo_total || 0),
-              custo_por_refeicao: Number(r.custo_por_refeicao || 0),
-              placeholder: false
-            })) || []
-          })) || [],
-          total_cost: Number(data.resumo_financeiro?.custo_total_periodo || 0),
-          average_cost_per_meal: Number(data.resumo_financeiro?.custo_medio_por_refeicao || 0),
-          portions_total: Number(data.resumo_financeiro?.total_porcoes || 0)
+        menu: {
+          calculated_locally: true,
+          business_rules: businessRules,
+          weeks: semanas
         },
-        warnings: data.avisos || []
+        warnings: []
       };
 
-      // ⚡ PRIMEIRO atualizar estado local para exibição imediata
-      setGeneratedMenu(menu);
-
-      // 🎉 Feedback imediato ao usuário
-      toast({
-        title: "🎉 Cardápio gerado com sucesso!",
-        description: "Cardápio criado e disponível para análise.",
+      console.log('✅ Menu gerado:', {
+        totalReceitas: menu.totalRecipes,
+        custoTotal: menu.totalCost,
+        custoPorRefeicao: menu.costPerMeal
       });
 
-      // DEPOIS salvar no banco de dados
-      const savedMenuId = await saveMenuToDatabase(menu);
-      
-      if (savedMenuId) {
-        // Atualizar o menu com o ID real do banco
-        setGeneratedMenu(prev => prev ? { ...prev, id: savedMenuId } : null);
+      setGeneratedMenu(menu);
+
+      // Tentar salvar no banco
+      const savedId = await saveMenuToDatabase(menu);
+      if (savedId) {
+        menu.id = savedId;
+        setGeneratedMenu(menu);
+        
+        toast({
+          title: "Cardápio gerado!",
+          description: `${menu.totalRecipes} receitas. Custo: R$ ${menu.costPerMeal.toFixed(2)}/refeição`,
+        });
         
         // Recarregar lista de cardápios salvos
         await loadSavedMenus();
@@ -668,9 +643,11 @@ export const useIntegratedMenuGeneration = () => {
       return null;
     } finally {
       setIsGenerating(false);
+      setIsProcessing(false);
     }
   };
 
+  // Wrapper function for backward compatibility - calls generateMenuWithFormData
   const generateMenu = async (
     weekPeriod: string,
     preferences?: string[],
@@ -682,616 +659,33 @@ export const useIntegratedMenuGeneration = () => {
     
     if (!clientToUse) {
       toast({
-        title: "Cliente não selecionado",
+        title: "Cliente não selecionado", 
         description: "Selecione um cliente antes de gerar o cardápio",
         variant: "destructive"
       });
       return null;
     }
 
-    try {
-      setIsGenerating(true);
-      setError(null);
-      
-      console.log('Gerando cardápio com IA integrada...');
-      console.log('Cliente selecionado:', {
-        id: clientToUse.cliente_id_legado || clientToUse.empresa_id_legado || clientToUse.filial_id_legado || clientToUse.id,
-        nome: clientToUse.nome_fantasia || clientToUse.nome_empresa || clientToUse.razao_social,
-        funcionarios: clientToUse.total_funcionarios,
-        custo_maximo: clientToUse.custo_maximo_refeicao,
-        restricoes: clientToUse.restricoes_alimentares
-      });
-      
-      const legacyId = clientToUse.filial_id;
-      const mpd = mealsPerDay || clientToUse.total_funcionarios || 100;
-      const tMeals = totalMeals || (mpd * 5);
-      
-      // Validação de entrada
-      if (!legacyId || legacyId <= 0) {
-        throw new Error('ID da filial deve ser um número válido maior que zero');
-      }
-      
-      if (!mpd || mpd <= 0) {
-        throw new Error('Número de refeições por dia deve ser maior que zero');
-      }
+    // Map legacy parameters to new FormData structure
+    const [startDate, endDate] = weekPeriod.includes(' a ') 
+      ? weekPeriod.split(' a ')
+      : [weekPeriod, weekPeriod];
 
-      // Calculate requested number of days
-      const requestedNumDays =
-        (typeof tMeals === 'number' && tMeals > 0 && mpd > 0)
-          ? Math.max(1, Math.ceil(tMeals / mpd))
-          : 7;
+    const formData: SimpleMenuFormData = {
+      clientId: clientToUse.id || clientToUse.cliente_id_legado,
+      period: {
+        start: startDate.trim(),
+        end: endDate.trim()
+      },
+      mealsPerDay: mealsPerDay || clientToUse.total_funcionarios || 100,
+      estimatedMeals: totalMeals || ((mealsPerDay || clientToUse.total_funcionarios || 100) * 5),
+      restrictions: clientToUse.restricoes_alimentares || [],
+      preferences: preferences || [],
+      diasUteis: clientToUse.dias_uteis ?? true
+    };
 
-      // Garantir período correto no formato brasileiro
-      console.log('📅 Período enviado:', weekPeriod);
-      console.log('🔢 Refeições por dia:', mpd);
-      console.log('🏢 Filial ID:', legacyId);
-
-      // Payload padronizado - incluindo receitas base obrigatórias
-      const payload = {
-        action: 'generate_menu',
-        client_id: clientToUse.id, // UUID único do cliente
-        filialIdLegado: legacyId,
-        period: weekPeriod, // Período no formato brasileiro DD/MM/YYYY a DD/MM/YYYY
-        numDays: 7, // Sempre 7 dias para cardápio semanal
-        refeicoesPorDia: mpd, // Padronizar nome do parâmetro
-        useDiaEspecial: false,
-        baseRecipes: {
-          arroz: 580,    // ARROZ BRANCO
-          feijao: 1600   // FEIJÃO MIX - CARIOCA + BANDINHA 50%
-        }
-      };
-
-      console.log('[Frontend] Enviando payload padronizado:', payload);
-
-      // Use GPT Assistant com retry logic para maior robustez
-      console.log('[Conectividade] Invocando Edge Function com retry...');
-      const { data, error: functionError } = await withRetry(
-        () => supabase.functions.invoke('gpt-assistant', {
-          body: payload
-        }),
-        {
-          maxRetries: 3,
-          initialDelay: 1500,
-          maxDelay: 10000,
-          backoffFactor: 2
-        }
-      );
-
-      console.log('Resposta da função GPT Assistant:', { data, functionError });
-
-      if (functionError) {
-        console.error('[Frontend] Erro na função GPT:', functionError);
-        
-        // Tratamento detalhado de erros da Edge Function
-        let errorDetails = functionError.message || 'Erro ao gerar cardápio com IA';
-        let errorStatus = 'Erro da função';
-        let shouldFallbackToLocal = false;
-        
-        // Extrair contexto detalhado quando possível
-        try {
-          // Verificar se é erro HTTP (mais comum) e extrair contexto
-          if (functionError.name === 'FunctionsHttpError' && functionError.context) {
-            errorStatus = `HTTP ${(functionError as any).status || 'N/A'}`;
-            try {
-              const contextResponse = functionError.context;
-              if (typeof contextResponse.json === 'function') {
-                const contextData = await contextResponse.json();
-                if (contextData?.error) {
-                  errorDetails = contextData.error;
-                }
-                if (contextData?.details) {
-                  errorDetails += ` | Detalhes: ${contextData.details}`;
-                }
-                if (contextData?.produtoIds) {
-                  errorDetails += ` | IDs: ${JSON.stringify(contextData.produtoIds)}`;
-                }
-              }
-            } catch (parseError) {
-              console.warn('[Frontend] Erro ao processar contexto HTTP:', parseError);
-              errorDetails = `${errorStatus}: ${functionError.message}`;
-            }
-          } else if (functionError.name === 'FunctionsRelayError') {
-            errorStatus = 'Erro de comunicação';
-            errorDetails = 'Falha na comunicação com o servidor. Tente novamente.';
-            shouldFallbackToLocal = true;
-        } else if (functionError.name === 'FunctionsFetchError') {
-            errorStatus = 'Erro de conectividade';
-            errorDetails = 'Falha na comunicação com o servidor. O sistema tentou reconectar automaticamente mas não conseguiu estabelecer conexão estável.';
-            shouldFallbackToLocal = true;
-          }
-        } catch (processingError) {
-          console.warn('[Frontend] Erro ao processar detalhes do erro:', processingError);
-          errorDetails = functionError.message || String(functionError);
-          shouldFallbackToLocal = true;
-        }
-        
-        console.error(`[Frontend] ${errorStatus}: ${errorDetails}`);
-        
-        // Se é erro de conectividade, mostrar erro detalhado
-        if (shouldFallbackToLocal) {
-          console.log('[Frontend] Problema de conectividade detectado.');
-        }
-        
-        toast({
-          title: `Erro na geração (${errorStatus})`,
-          description: errorDetails,
-          variant: "destructive"
-        });
-        
-        throw new Error(errorDetails);
-      }
-
-      if (!data || !data.success) {
-        console.error('Dados inválidos da função GPT:', data);
-        throw new Error(data?.error || 'Erro na geração do cardápio');
-      }
-
-      console.log("DEBUG :: Resposta Edge Function bruta (data):", JSON.stringify(data, null, 2));
-      
-      // Verificar diferentes estruturas de resposta
-      const aiMenu = data.menu || data.cardapio || {};
-      console.log("DEBUG :: data.cardapio:", data.cardapio);
-      console.log("DEBUG :: data.cardapio?.receitas:", data.cardapio?.receitas);
-      console.log("DEBUG :: aiMenu.cardapio:", aiMenu.cardapio);
-      console.log("DEBUG :: aiMenu.days:", aiMenu.days);
-      
-      // Mapear receitas do formato real da Edge Function
-      let receitasExtraidas: any[] = [];
-
-      if (Array.isArray(data.cardapio) && data.cardapio.length > 0) {
-        const first = data.cardapio[0];
-        
-        // 🔎 Caso 1: formato simples (array de receitas)
-        if (first && (first.nome || first.categoria || first.custo_por_refeicao)) {
-          console.log('✅ Detectado formato simples de receitas:', data.cardapio.length);
-          receitasExtraidas = data.cardapio;
-        }
-        // 🔎 Caso 2: formato de dias (array de objetos com "receitas")
-        else if (first && Array.isArray(first.receitas)) {
-          console.log('✅ Detectado formato por dias:', data.cardapio.length);
-          receitasExtraidas = data.cardapio.flatMap((diaObj: any) =>
-            (diaObj.receitas || []).map((receita: any) => ({
-              ...receita,
-              dia: diaObj.dia || receita.dia || 'Segunda-feira'
-            }))
-          );
-        }
-        else {
-          console.warn('⚠️ Estrutura de cardápio não reconhecida, tentando fallbacks');
-        }
-      }
-      // 🔎 Caso 3: formato legado - objeto com cardapio.receitas
-      else if (data.cardapio?.receitas && Array.isArray(data.cardapio.receitas)) {
-        console.log('✅ Detectado formato legado cardapio.receitas:', data.cardapio.receitas.length);
-        receitasExtraidas = data.cardapio.receitas;
-      }
-      // 🔎 Caso 4: aiMenu.cardapio
-      else if (Array.isArray(aiMenu.cardapio)) {
-        console.log('✅ Detectado aiMenu.cardapio:', aiMenu.cardapio.length);
-        receitasExtraidas = aiMenu.cardapio;
-      }
-      // 🔎 Caso 5: aiMenu.days
-      else if (Array.isArray(aiMenu.days)) {
-        console.log('✅ Detectado aiMenu.days:', aiMenu.days.length);
-        receitasExtraidas = aiMenu.days.flatMap((day: any) =>
-          (day.receitas || []).map((receita: any) => ({
-            ...receita,
-            dia: day.dia || 'Segunda'
-          }))
-        );
-      }
-
-      // 🔎 Fallback final
-      if (!receitasExtraidas.length && Array.isArray(data.receitas_adaptadas)) {
-        console.log('⚠️ Usando fallback receitas_adaptadas:', data.receitas_adaptadas.length);
-        receitasExtraidas = data.receitas_adaptadas;
-      }
-
-      console.log(`📦 Total de receitas extraídas: ${receitasExtraidas.length}`);
-
-      // Validar se temos receitas
-      if (!receitasExtraidas.length) {
-        console.error('❌ Nenhuma receita encontrada em qualquer formato');
-        console.error('📦 Estrutura data.cardapio:', data.cardapio);
-        console.error('📦 Estrutura aiMenu:', aiMenu);
-        console.error('📦 Estrutura data.receitas_adaptadas:', data.receitas_adaptadas);
-        throw new Error('IA não retornou um cardápio válido - nenhuma receita encontrada');
-      }
-      
-      // Criar estruturas compatíveis para o código legado
-      const cardapioV1 = receitasExtraidas;
-      const daysV2 = Array.isArray(aiMenu.days) ? aiMenu.days : [];
-
-      const dayLabelToTitle = (lbl: string) => {
-        const s = String(lbl || '').toUpperCase();
-        if (s.includes('SEG')) return 'Segunda';
-        if (s.includes('TER')) return 'Terça';
-        if (s.includes('QUA')) return 'Quarta';
-        if (s.includes('QUI')) return 'Quinta';
-        if (s.includes('SEX')) return 'Sexta';
-        if (s.includes('SÁB') || s.includes('SAB')) return 'Sábado';
-        if (s.includes('DOM')) return 'Domingo';
-        return 'Segunda';
-      };
-
-      const mpdFromSummary = Number(
-        aiMenu.summary?.refeicoes_por_dia ??
-        (aiMenu.portions_total && daysV2.length ? aiMenu.portions_total / daysV2.length : undefined) ??
-        mpd ?? 50
-      );
-
-      // Funções auxiliares para validação
-      const isProteinRecipe = (recipeName: string): boolean => {
-        const name = recipeName.toUpperCase();
-        return name.includes('FRANGO') || name.includes('CARNE') || name.includes('BIFE') || 
-               name.includes('PEIXE') || name.includes('OVO') || name.includes('LINGUIÇA') ||
-               name.includes('ALMÔNDEGA') || name.includes('ALMONDEGA') || name.includes('PERNIL') ||
-               name.includes('ACÉM') || name.includes('SUÍNO') || name.includes('BOVINO') ||
-               name.includes('FILÉ') || name.includes('COXA') || name.includes('PEITO');
-      };
-
-      const isGuarnitionRecipe = (recipeName: string): boolean => {
-        const name = recipeName.toUpperCase();
-        return name.includes('BATATA') || name.includes('LEGUMES') || name.includes('MANDIOCA') ||
-               name.includes('PURÊ') || name.includes('REFOGADO') || name.includes('COZIDO') ||
-               name.includes('MACARRÃO') || name.includes('POLENTA') || name.includes('FAROFA');
-      };
-
-      const isFreshSalad = (recipeName: string): boolean => {
-        const name = recipeName.toUpperCase();
-        return name.includes('SALADA') && (name.includes('VERDE') || name.includes('ALFACE') ||
-               name.includes('RÚCULA') || name.includes('FOLHA') || name.includes('MISTA')) &&
-               !name.includes('COZIDA') && !name.includes('COZIDO');
-      };
-
-      const isVegetableSalad = (recipeName: string): boolean => {
-        const name = recipeName.toUpperCase();
-        return name.includes('SALADA') && (name.includes('TOMATE') || name.includes('CENOURA') ||
-               name.includes('PEPINO') || name.includes('RUSSA') || name.includes('MAIONESE'));
-      };
-
-      const mapCategory = (c: string, recipeName: string = '') => {
-        const s = String(c || '').toUpperCase();
-        const recipeUpper = recipeName.toUpperCase();
-        
-        console.log(`🔄 Mapeando categoria: "${c}" para receita: "${recipeName}"`);
-        
-        // Validação prévia - verificar se categoria faz sentido
-        if ((s.includes('PROTEÍNA') || s.includes('PRATO PRINCIPAL')) && 
-            !isProteinRecipe(recipeName)) {
-          console.log(`⚠️ CORREÇÃO: ${recipeName} marcada como proteína mas não parece proteína`);
-          if (isGuarnitionRecipe(recipeName)) {
-            console.log(`✅ Reclassificando para Guarnição`);
-            return 'Guarnição';
-          }
-        }
-        
-        if (s.includes('PROTEÍNA PRINCIPAL 1') || s.includes('PROTEINA PRINCIPAL 1')) return 'PP1';
-        if (s.includes('PROTEÍNA PRINCIPAL 2') || s.includes('PROTEINA PRINCIPAL 2')) return 'PP2';
-        if (s.includes('PRATO PRINCIPAL 1')) return 'PP1';
-        if (s.includes('PRATO PRINCIPAL 2')) return 'PP2';
-        if (s.includes('ARROZ BRANCO') || s.includes('ARROZ')) return 'Arroz Branco';
-        if (s.includes('FEIJ')) return 'Feijão';
-        if (s.includes('GUARNIÇÃO') || s.includes('ACOMPANHAMENTO')) return 'Guarnição';
-        
-        // Saladas com validação
-        if (s.includes('SALADA 1') || s.includes('VERDURAS')) {
-          if (isFreshSalad(recipeName)) {
-            return 'Salada 1';
-          } else {
-            console.log(`⚠️ ${recipeName} marcada como Salada 1 mas não é salada fresca - movendo para Guarnição`);
-            return 'Guarnição';
-          }
-        }
-        
-        if (s.includes('SALADA 2') || s.includes('LEGUMES')) {
-          if (isFreshSalad(recipeName) || isVegetableSalad(recipeName)) {
-            return 'Salada 2';
-          } else {
-            console.log(`⚠️ ${recipeName} marcada como Salada 2 mas não é salada - movendo para Guarnição`);
-            return 'Guarnição';
-          }
-        }
-        
-        if (s.includes('SUCO 1')) return 'Suco 1';
-        if (s.includes('SUCO 2')) return 'Suco 2';
-        if (s.includes('SOBREMESA') || s.includes('CREME') || s.includes('DOCE')) return 'Sobremesa';
-        
-        const mapped = mapCategoryToMenuStructure(c);
-        console.log(`✅ Resultado: ${c} → ${mapped} para ${recipeName}`);
-        return mapped;
-      };
-
-      const receitasCardapio: MenuRecipe[] = [];
-      if (cardapioV1.length) {
-        // Verificar se cardapioV1 é um array de receitas simples (novo formato) ou dias (formato legado)
-        const isSimpleRecipeFormat = cardapioV1.some(item => 
-          item && typeof item === 'object' && 
-          ('nome' in item || 'categoria' in item || 'custo_por_refeicao' in item) &&
-          !('dia' in item || 'itens' in item)
-        );
-
-        if (isSimpleRecipeFormat) {
-          // Novo formato: array direto de receitas
-          for (const receita of cardapioV1) {
-            if (!receita || typeof receita !== 'object') continue;
-            const rid = receita.id || receita.receita_id_legado || receita.receita_id;
-            if (!rid) continue;
-            
-            receitasCardapio.push({
-              id: String(rid),
-              name: String(receita.nome || ''),
-              day: 'Segunda-feira', // Dia padrão para estrutura fixa
-              category: mapCategory(receita.categoria || receita.tipo || ''),
-              cost: Number(receita.custo_por_refeicao || 0),
-              servings: mpdFromSummary,
-              ingredients: [],
-              nutritionalInfo: {}
-            });
-          }
-        } else {
-          // Formato legado: dias com itens
-          for (const dia of cardapioV1) {
-            const dayName = dayLabelToTitle(dia.dia_label || dia.dia);
-            const itens = Array.isArray(dia.itens) ? dia.itens : [];
-            for (const it of itens) {
-              const rid = it.receita_id_legado || it.receita_id;
-              if (!rid) continue;
-              receitasCardapio.push({
-                id: String(rid),
-                name: String(it.nome || ''),
-                day: dayName,
-                category: mapCategory(it.categoria || it.slot || ''),
-                cost: Number(it.custo_por_refeicao || 0),
-                servings: mpdFromSummary,
-                ingredients: [],
-                nutritionalInfo: {}
-              });
-            }
-          }
-        }
-      } else if (daysV2.length) {
-        for (const dia of daysV2) {
-          const dayName = dayLabelToTitle(dia.label_orcamento || dia.dia);
-          const itens = Array.isArray(dia.itens) ? dia.itens : [];
-          for (const it of itens) {
-            if (!it || !it.receita_id) continue;
-            if (it.placeholder) continue; // pular placeholders (ex.: FEIJÃO ausente)
-            receitasCardapio.push({
-              id: String(it.receita_id),
-              name: String(it.nome || ''),
-              day: dayName,
-              category: mapCategory(it.slot || ''),
-              cost: Number(it.custo_por_refeicao || 0),
-              servings: mpdFromSummary,
-              ingredients: [],
-              nutritionalInfo: {}
-            });
-          }
-        }
-      }
-
-      // Enriquecer com ingredientes (até 3 por receita)
-      const recipeIds = Array.from(new Set(receitasCardapio.map(r => r.id).filter(Boolean)));
-      if (recipeIds.length) {
-        const { data: ingredientsData, error: ingError } = await supabase
-          .from('receita_ingredientes')
-          .select('receita_id_legado,produto_base_id,produto_base_descricao,quantidade,unidade')
-          .in('receita_id_legado', recipeIds);
-
-        if (!ingError && ingredientsData) {
-          const byRecipe: Record<string, { produto_base_id:number; name: string; quantity: number; unit: string }[]> = {};
-          for (const ing of ingredientsData as any[]) {
-            const recId = String(ing.receita_id_legado);
-            if (!byRecipe[recId]) byRecipe[recId] = [];
-            // Removida limitação de 3 ingredientes - agora carrega TODOS os ingredientes
-            byRecipe[recId].push({
-              produto_base_id: Number(ing.produto_base_id),
-              name: ing.produto_base_descricao || '',
-              quantity: Number(ing.quantidade ?? 0),
-              unit: ing.unidade || ''
-            });
-          }
-          for (const r of receitasCardapio) r.ingredients = byRecipe[r.id] || [];
-        }
-
-        // Ensure juices are present for each day
-        const daySlots = new Map<string, Set<string>>();
-        for (const r of receitasCardapio) {
-          const key = r.day;
-          if (!daySlots.has(key)) daySlots.set(key, new Set());
-          daySlots.get(key)!.add(r.category.toUpperCase());
-        }
-
-        const dias = Array.from(new Set(receitasCardapio.map(r => r.day)));
-        
-        for (const d of dias) {
-          const have = daySlots.get(d) || new Set();
-          const need1 = !have.has('SUCO 1');
-          const need2 = !have.has('SUCO 2');
-          if (need1) receitasCardapio.push({ 
-            id: '599', 
-            name: 'SUCO EM PÓ DE LARANJA', 
-            day: d, 
-            category: 'Suco 1', 
-            cost: 0, 
-            servings: mpdFromSummary,
-            ingredients: []
-          });
-          if (need2) receitasCardapio.push({ 
-            id: '656', 
-            name: 'SUCO TETRA PAK', 
-            day: d, 
-            category: 'Suco 2', 
-            cost: 0, 
-            servings: mpdFromSummary,
-            ingredients: []
-          });
-        }
-      }
-
-      // Processar warnings informativos da Edge Function
-      if (Array.isArray(data.warnings) && data.warnings.length) {
-        console.log('[Frontend] Warnings recebidos da Edge Function:', data.warnings);
-        
-        // Exibir warnings como informação (não erro)
-        data.warnings.forEach((warning: string, index: number) => {
-          if (index < 3) { // Limitar a 3 toasts para não sobrecarregar
-            toast({
-              title: `Aviso ${index + 1}/${data.warnings.length}`,
-              description: String(warning).slice(0, 150) + (String(warning).length > 150 ? '...' : ''),
-              variant: "default" // Info, não destructive
-            });
-          }
-        });
-        
-        if (data.warnings.length > 3) {
-          console.log(`[Frontend] ${data.warnings.length - 3} warnings adicionais não exibidos:`, 
-            data.warnings.slice(3));
-        }
-      }
-
-      console.log(`IA gerou ${receitasCardapio.length} itens precificados`);
-
-      // Validar regras de negócio no cardápio da IA
-      const businessRules = validateMenu(receitasCardapio);
-      console.log('Validação de regras:', businessRules);
-      console.log('Violações encontradas:', violations);
-      
-      // Custos a partir do resumo da função (compatível com v1 e v2)
-      const totalCost =
-        Number(aiMenu.summary?.total_custo) ||
-        Number(aiMenu.total_cost) ||
-        Number(data.total_custo) ||
-        Number(data.total_cost) ||
-        (daysV2.length ? daysV2.reduce((s: number, d: any) => s + Number(d.custo_total_dia || 0), 0) : 0);
-
-      const costPerMeal =
-        Number(aiMenu.summary?.custo_medio_por_refeicao) ||
-        Number(aiMenu.average_cost_per_meal) ||
-        Number(data.custo_medio_por_refeicao) ||
-        Number(data.average_cost_per_meal) ||
-        (totalCost && mpdFromSummary ? totalCost / (mpdFromSummary * 7) : 0);
-      const budgetLimit = clientToUse.custo_maximo_refeicao || 15;
-      
-      if (costPerMeal > budgetLimit) {
-        console.warn(`Custo por refeição (R$ ${costPerMeal.toFixed(2)}) excede o orçamento (R$ ${budgetLimit.toFixed(2)})`);
-        
-        toast({
-          title: "Atenção: Orçamento Excedido",
-          description: `Custo estimado: R$ ${costPerMeal.toFixed(2)} | Limite: R$ ${budgetLimit.toFixed(2)}`,
-          variant: "destructive"
-        });
-      }
-
-      // Usar os custos e informações calculados pela IA
-
-      // Gerar estrutura de semanas usando o período do contrato
-      // Suporta formatos "DD/MM/YYYY a DD/MM/YYYY" e "YYYY-MM-DD a YYYY-MM-DD"
-      const parseDate = (str: string) => {
-        const s = String(str || '').trim();
-        if (s.includes('/')) {
-          const [dd, mm, yyyy] = s.split('/').map(Number);
-          return new Date(yyyy, (mm || 1) - 1, dd || 1);
-        }
-        if (s.includes('-')) {
-          const [yyyy, mm, dd] = s.split('-').map(Number);
-          return new Date(yyyy, (mm || 1) - 1, dd || 1);
-        }
-        const d = new Date(s);
-        return isNaN(d.getTime()) ? new Date() : d;
-      };
-
-      const [dataInicio, dataFim] = (() => {
-        const [ini, fim] = weekPeriod.split(' a ').map(s => s.trim());
-        return [parseDate(ini), parseDate(fim)];
-      })();
-
-      // Determinar se deve incluir fins de semana baseado no contrato
-      const incluirFDS = !clientToUse.dias_uteis; // Se dias_uteis for false, incluir FDS
-      const semanas = gerarSemanas(dataInicio, dataFim, incluirFDS);
-
-      // Preencher receitas nos slots das semanas
-      for (const semanaKey in semanas) {
-        semanas[semanaKey] = semanas[semanaKey].map(dia => {
-          // Encontrar receitas para este dia específico
-          const receitasDoDia = receitasCardapio.filter(r => {
-            // Mapear nome do dia da receita para formato compatível
-            const diaReceita = dayLabelToTitle(r.day).toLowerCase();
-            const diaSlot = dia.dia.toLowerCase();
-            return diaReceita === diaSlot;
-          });
-          
-          return {
-            ...dia,
-            receitas: receitasDoDia
-          };
-        });
-      }
-
-      // Create generated menu
-      const menu: GeneratedMenu = {
-        id: `temp-${Date.now()}`, // ID temporário até salvar no banco
-        clientId: clientToUse.id || clientToUse.cliente_id_legado,
-        clientName: clientToUse.nome_fantasia || clientToUse.nome_empresa,
-        weekPeriod,
-        status: 'pending_approval',
-        totalCost,
-        costPerMeal,
-        totalRecipes: receitasCardapio.length,
-        recipes: receitasCardapio,
-        createdAt: new Date().toISOString(),
-        menu: {
-          ...aiMenu, // Incluir dados detalhados do menu da Edge Function
-          semanas: semanas // Adicionar estrutura de semanas gerada
-        },
-        warnings: data.warnings || []
-      };
-
-      // ⚡ PRIMEIRO atualizar estado local para exibição imediata
-      setGeneratedMenu(menu);
-
-      // 🎉 Feedback imediato ao usuário
-      toast({
-        title: "🎉 Cardápio gerado com sucesso!",
-        description: `${receitasCardapio.length} receitas otimizadas. Custo: R$ ${costPerMeal.toFixed(2)}/refeição`,
-      });
-
-      // DEPOIS salvar no banco de dados
-      const savedId = await saveMenuToDatabase(menu);
-      if (savedId) {
-        // Atualizar o menu com o ID real do banco
-        setGeneratedMenu(prev => prev ? { ...prev, id: savedId } : null);
-        
-        // Recarregar lista de cardápios salvos
-        await loadSavedMenus();
-        
-        console.log('Menu generation with AI completed successfully');
-        console.log('Final cost per meal:', costPerMeal);
-        console.log('Budget compliance:', costPerMeal <= budgetLimit ? 'OK' : 'EXCEEDED');
-
-        return menu;
-      } else {
-        // Mesmo se não conseguir salvar, mantém o menu gerado na interface
-        console.warn('Não foi possível salvar no banco, mas menu permanece na interface');
-        return menu;
-      }
-
-    } catch (error) {
-      console.error('Error generating menu:', error);
-      const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido ao gerar cardápio';
-      setError(errorMessage);
-      
-      toast({
-        title: "Erro ao gerar cardápio",
-        description: errorMessage,
-        variant: "destructive"
-      });
-      
-      return null;
-    } finally {
-      setIsGenerating(false);
-    }
+    // Call the new unified method
+    return generateMenuWithFormData(formData);
   };
 
   const approveMenu = async (menuId: string, approverName: string): Promise<boolean> => {
@@ -1399,14 +793,7 @@ export const useIntegratedMenuGeneration = () => {
             cost: recipe.cost,
             servings: recipe.servings,
             ingredients: recipe.ingredients || []
-          })),
-          optimizationConfig: {
-            prioridade_promocao: 'media',
-            tolerancia_sobra_percentual: 10,
-            preferir_produtos_integrais: true,
-            maximo_tipos_embalagem_por_produto: 3,
-            considerar_custo_compra: false
-          }
+          }))
         }
       });
 
@@ -1430,23 +817,18 @@ export const useIntegratedMenuGeneration = () => {
     }
   };
 
-  // ⚡ Função que preserva o estado durante navegação
-  const clearGeneratedMenu = (force: boolean = false) => {
-    // Só limpa se for forçado (botão limpar, rejeição, exclusão)
-    if (force) {
-      setGeneratedMenu(null);
-      setError(null);
-    }
-  };
-
-  // Função específica para limpar explicitamente
-  const clearMenuExplicitly = () => {
+  const clearGeneratedMenu = () => {
     setGeneratedMenu(null);
-    setError(null);
     localStorage.removeItem('current-generated-menu');
   };
 
-  const mapRecipesToMarketProducts = async (recipes: MenuRecipe[]): Promise<any[]> => {
+  const clearMenuExplicitly = () => {
+    setGeneratedMenu(null);
+    localStorage.removeItem('current-generated-menu');
+    setError(null);
+  };
+
+  const mapRecipesToMarketProducts = (recipes: MenuRecipe[]): any[] => {
     try {
       const marketProducts: any[] = [];
       
@@ -1496,7 +878,10 @@ export const useIntegratedMenuGeneration = () => {
     // Export related hooks for business rules
     violations,
     validateMenu,
-    validateMenuAndSetViolations,
+    validateMenuAndSetViolations: (recipes: any[]) => {
+      const rules = validateMenu(recipes);
+      return rules;
+    },
     // Export market availability hooks
     viableRecipes,
     marketIngredients
