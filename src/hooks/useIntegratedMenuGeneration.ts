@@ -9,6 +9,7 @@ import { useSelectedClient } from '@/contexts/SelectedClientContext';
 import { useMenuBusinessRules } from './useMenuBusinessRules';
 import { useMarketAvailability } from './useMarketAvailability';
 import { format, addDays, parse } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
 
 export interface SimpleMenuFormData {
   clientId: string;
@@ -17,9 +18,9 @@ export interface SimpleMenuFormData {
     end: string;
   };
   mealsPerDay: number;
-  estimatedMeals: number;
-  restrictions: string[];
-  preferences: string[];
+  estimatedMeals?: number;
+  restrictions?: string[];
+  preferences?: string[];
   diasUteis?: boolean;
 }
 
@@ -306,26 +307,19 @@ export function useIntegratedMenuGeneration() {
 
       if (error) throw error;
 
-      const formattedMenus: GeneratedMenu[] = menus?.map(menu => ({
+      const formattedMenus: GeneratedMenu[] = (menus as any[])?.map((menu: any) => ({
         id: menu.id,
         clientId: menu.client_id,
         clientName: menu.client_name,
         weekPeriod: menu.week_period,
-        status: menu.status,
-        totalCost: menu.total_cost || 0,
-        costPerMeal: menu.cost_per_meal || 0,
-        totalRecipes: menu.total_recipes || 0,
-        recipes: (menu as any).recipes || [],
-        menu: (menu as any).menu_data,
-        warnings: (menu as any).warnings,
+        status: (menu.status as 'pending_approval' | 'approved' | 'rejected' | 'draft') || 'pending_approval',
+        totalCost: Number(menu.total_cost) || 0,
+        costPerMeal: Number(menu.cost_per_meal) || 0,
+        totalRecipes: Number(menu.total_recipes) || 0,
+        recipes: menu.receitas_adaptadas || [],
+        createdAt: menu.created_at,
         approvedBy: menu.approved_by,
-        approvedAt: menu.approved_at,
-        rejectedReason: menu.rejected_reason,
-        juiceMenu: menu.juice_menu,
-        ...(!menu.created_at ? {} : {
-          createdAt: menu.created_at
-        }),
-        createdAt: menu.created_at
+        rejectedReason: menu.rejected_reason
       })) || [];
 
       setSavedMenus(formattedMenus);
@@ -346,11 +340,7 @@ export function useIntegratedMenuGeneration() {
           status: menu.status,
           total_cost: menu.totalCost,
           cost_per_meal: menu.costPerMeal,
-          total_recipes: menu.totalRecipes,
-          recipes: menu.recipes,
-          menu_data: menu.menu,
-          warnings: menu.warnings,
-          juice_menu: menu.juiceMenu
+          total_recipes: menu.totalRecipes
         })
         .select('id')
         .single();
@@ -495,7 +485,7 @@ export function useIntegratedMenuGeneration() {
           
           if (!isWeekend || incluirFDS) {
             semanas[weekKey].push({
-              dia: format(currentDate, 'EEEE', { locale: { localize: { day: (n: number) => ['Domingo', 'Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado'][n] } } }),
+              dia: format(currentDate, 'EEEE', { locale: ptBR }),
               data: format(currentDate, 'dd/MM/yyyy')
             });
           }
