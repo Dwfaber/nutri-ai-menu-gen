@@ -113,7 +113,7 @@ export const WeeklyMenuView: React.FC<WeeklyMenuViewProps> = ({ menu }) => {
                       className="border rounded p-3 shadow-sm bg-card"
                     >
                       <p className="font-semibold text-primary text-sm">{receita.categoria}</p>
-                      <p className="text-foreground font-medium truncate">{receita.nome}</p>
+                      <p className="text-foreground font-medium">{receita.nome}</p>
                       <p className="text-sm text-muted-foreground">
                         R$ {Number(receita.custo_total || 0).toFixed(2)}
                       </p>
@@ -303,7 +303,7 @@ export const WeeklyMenuView: React.FC<WeeklyMenuViewProps> = ({ menu }) => {
                       <p className="font-semibold text-primary text-sm">{cat}</p>
                       {receita ? (
                         <>
-                          <p className="text-foreground font-medium truncate">{receita.name}</p>
+                          <p className="text-foreground font-medium">{receita.name}</p>
                           <p className="text-sm text-muted-foreground">
                             R$ {Number(receita.cost || 0).toFixed(2)}
                           </p>
