@@ -562,7 +562,13 @@ export function useIntegratedMenuGeneration() {
         }
       }
 
-      const custoPorRefeicao = formData.estimatedMeals > 0 ? custoTotal / formData.estimatedMeals : 0;
+      // Calcular número total de dias do período
+      const totalDias = Object.values(semanas).reduce((total, diasSemana) => total + diasSemana.length, 0);
+      
+      // Calcular custo por refeição individual (custo total / refeições por dia / número de dias)
+      const custoPorRefeicao = (formData.estimatedMeals && formData.estimatedMeals > 0 && totalDias > 0) 
+        ? custoTotal / (formData.estimatedMeals * totalDias) 
+        : 0;
 
       // Validar regras de negócio
       const allRecipes = Object.values(semanas).flat().flatMap((dia: any) => dia.receitas || []);
