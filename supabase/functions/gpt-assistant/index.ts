@@ -1559,7 +1559,7 @@ Deno.serve(async (req) => {
         return new Response(
   JSON.stringify({
     success: true,
-    id: savedMenu.id,
+    id: menu?.id,
     message: "Cardápio gerado com sucesso e salvo no banco.",
     resumo_financeiro: response.resumo_financeiro,
     cardapio: response.cardapio
