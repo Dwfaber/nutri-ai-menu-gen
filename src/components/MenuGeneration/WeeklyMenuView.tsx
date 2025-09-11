@@ -98,7 +98,7 @@ export const WeeklyMenuView: React.FC<WeeklyMenuViewProps> = ({ menu }) => {
 
           {/* Card único do dia ativo */}
           {diaAtivo && (
-            <Card className="w-full max-w-lg border shadow-md hover:shadow-lg transition-shadow">
+            <Card className="w-full max-w-2xl border shadow-md hover:shadow-lg transition-shadow">
               <CardHeader>
                 <CardTitle className="text-xl font-semibold text-center">{diaAtivo.dia}</CardTitle>
                 {diaAtivo.data && (
@@ -285,7 +285,7 @@ export const WeeklyMenuView: React.FC<WeeklyMenuViewProps> = ({ menu }) => {
 
         {/* Card único do dia ativo */}
         {diaAtivo && (
-          <Card className="w-full max-w-lg border shadow-md hover:shadow-lg transition-shadow">
+          <Card className="w-full max-w-2xl border shadow-md hover:shadow-lg transition-shadow">
             <CardHeader>
               <CardTitle className="text-xl font-semibold text-center">{diaAtivo}</CardTitle>
             </CardHeader>
