@@ -1043,7 +1043,7 @@ Deno.serve(async (req) => {
             "Ovo": 0,
             "Vegetariano": 0
           };
-          saladasUsadas.clear();
+          Object.values(saladasUsadas).forEach(set => set.clear());
           // CORREÇÃO: Reset de guarnições menos agressivo para maior variação
           if (guarnicoesUsadas.size >= 10) { // Só resetar se já usou muitas guarnições
             console.log(`🔄 Resetando pool de guarnições - ${guarnicoesUsadas.size} já utilizadas`);
@@ -1364,7 +1364,7 @@ Deno.serve(async (req) => {
           substituicoes_orcamento: substituicoesPorOrcamento,
           contadores: {
             carnes_vermelhas_semana: contadorProteinas["Carne Vermelha"],
-            guarnicoes_usadas: guarnicoesUsadas.length
+            guarnicoes_usadas: guarnicoesUsadas.size
           }
         });
 
