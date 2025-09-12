@@ -1,5 +1,5 @@
 /**
- * Hook central para geração integrada de cardápios (menus)
+ * Unified hook for integrated menu generation with local calculations and AI support
  */
 
 import { useState, useEffect } from 'react';
@@ -50,25 +50,23 @@ export interface MenuRecipe {
   ingredients?: any[];
 }
 
-// Função retry para chamadas instáveis
+// Retry helper
 async function withRetry<T>(
   operation: () => Promise<T>,
   options: { maxRetries: number; initialDelay: number; maxDelay: number; backoffFactor: number }
 ): Promise<T> {
   let lastError: Error | null = null;
-
   for (let attempt = 0; attempt <= options.maxRetries; attempt++) {
     try {
       return await operation();
     } catch (error) {
       lastError = error as Error;
       if (attempt === options.maxRetries) break;
-
       const delay = Math.min(options.initialDelay * Math.pow(options.backoffFactor, attempt), options.maxDelay);
-      await new Promise(resolve => setTimeout(resolve, delay));
+      await new Promise(res => setTimeout(res, delay));
     }
   }
-  throw lastError ?? new Error('Erro desconhecido no retry');
+  throw lastError ?? new Error('Erro desconhecido na operação com retry');
 }
 
 export function useIntegratedMenuGeneration() {
@@ -77,60 +75,13 @@ export function useIntegratedMenuGeneration() {
   const [generatedMenu, setGeneratedMenu] = useState<GeneratedMenu | null>(null);
   const [savedMenus, setSavedMenus] = useState<GeneratedMenu[]>([]);
   const [error, setError] = useState<string | null>(null);
+
   const { selectedClient } = useSelectedClient();
   const { toast } = useToast();
   const { validateMenu, filterRecipesForDay, violations } = useMenuBusinessRules();
   const { marketIngredients } = useMarketAvailability();
 
-  /** ---------- Utilidades ---------- **/
-
-  const gerarSemanas = (inicio: Date, fim: Date, incluirFDS = false) => {
-    const semanas: Record<string, any[]> = {};
-    let currentDate = new Date(inicio);
-
-    while (currentDate <= fim) {
-      const weekKey = `semana-${format(currentDate, 'yyyy-MM-dd')}`;
-      if (!semanas[weekKey]) semanas[weekKey] = [];
-
-      const isWeekend = currentDate.getDay() === 0 || currentDate.getDay() === 6;
-      if (!isWeekend || incluirFDS) {
-        semanas[weekKey].push({
-          dia: format(currentDate, 'EEEE', { locale: ptBR }),
-          data: format(currentDate, 'dd/MM/yyyy')
-        });
-      }
-      currentDate.setDate(currentDate.getDate() + 1);
-    }
-    return semanas;
-  };
-
-  const toDayKey = (day: unknown): string => {
-    if (!day || typeof day !== 'string') return '';
-    const normalized = day.toLowerCase().trim();
-
-    const dayMap: Record<string, string> = {
-      'segunda': 'Segunda-feira',
-      'segunda-feira': 'Segunda-feira',
-      'monday': 'Segunda-feira',
-      'terça': 'Terça-feira',
-      'tuesday': 'Terça-feira',
-      'quarta': 'Quarta-feira',
-      'wednesday': 'Quarta-feira',
-      'quinta': 'Quinta-feira',
-      'thursday': 'Quinta-feira',
-      'sexta': 'Sexta-feira',
-      'friday': 'Sexta-feira',
-      'sábado': 'Sábado',
-      'sabado': 'Sábado',
-      'saturday': 'Sábado',
-      'domingo': 'Domingo',
-      'sunday': 'Domingo'
-    };
-
-    return dayMap[normalized] || normalized;
-  };
-
-  /** ---------- Persistência ---------- **/
+  /** ---------- Persistência local ---------- **/
   useEffect(() => {
     const stored = localStorage.getItem('current-generated-menu');
     if (stored) {
@@ -154,13 +105,70 @@ export function useIntegratedMenuGeneration() {
     localStorage.removeItem('current-generated-menu');
   }, [selectedClient?.id]);
 
-  /** ---------- CRUD no Supabase ---------- **/
+  /** ---------- Utils ---------- **/
+  const gerarSemanas = (inicio: Date, fim: Date, incluirFDS = false) => {
+    const semanas: Record<string, any[]> = {};
+    let currentDate = new Date(inicio);
+    while (currentDate <= fim) {
+      const weekKey = `semana-${format(currentDate, 'yyyy-MM-dd')}`;
+      if (!semanas[weekKey]) semanas[weekKey] = [];
+      const isWeekend = currentDate.getDay() === 0 || currentDate.getDay() === 6;
+      if (!isWeekend || incluirFDS) {
+        semanas[weekKey].push({
+          dia: format(currentDate, 'EEEE', { locale: ptBR }),
+          data: format(currentDate, 'dd/MM/yyyy')
+        });
+      }
+      currentDate.setDate(currentDate.getDate() + 1);
+    }
+    return semanas;
+  };
 
+  const toDayKey = (day: unknown): string => {
+    if (typeof day !== 'string') return '';
+    const normalized = day.toLowerCase().trim();
+    const dayMap: Record<string, string> = {
+      'segunda': 'Segunda-feira', 'segunda-feira': 'Segunda-feira', 'monday': 'Segunda-feira', 'seg': 'Segunda-feira',
+      'terça': 'Terça-feira', 'terca': 'Terça-feira', 'terça-feira': 'Terça-feira', 'tuesday': 'Terça-feira', 'ter': 'Terça-feira',
+      'quarta': 'Quarta-feira', 'quarta-feira': 'Quarta-feira', 'wednesday': 'Quarta-feira', 'qua': 'Quarta-feira',
+      'quinta': 'Quinta-feira', 'quinta-feira': 'Quinta-feira', 'thursday': 'Quinta-feira', 'qui': 'Quinta-feira',
+      'sexta': 'Sexta-feira', 'sexta-feira': 'Sexta-feira', 'friday': 'Sexta-feira', 'sex': 'Sexta-feira'
+    };
+    return dayMap[normalized] || normalized;
+  };
+
+  const mapCategoryToMenuStructure = (category: string): string => {
+    const c = category?.toLowerCase().trim();
+    if (['prato_principal','proteina','principal','prato principal','pp1'].includes(c)) return 'PP1';
+    if (['salada','verdura','verduras','folha','folhas'].includes(c)) return 'Salada';
+    if (['guarnicao','guarnição','acompanhamento'].includes(c)) return 'Guarnição';
+    if (['suco','bebida','refresco'].includes(c)) return 'Suco';
+    if (c?.includes('arroz')) return 'Arroz';
+    if (c?.includes('feijao') || c?.includes('feijão')) return 'Feijão';
+    if (['sobremesa','doce','dessert'].includes(c)) return 'Sobremesa';
+    return 'PP1';
+  };
+
+  /** ---------- Banco ---------- **/
   const loadSavedMenus = async () => {
     try {
       const { data, error } = await supabase.from('generated_menus').select('*').order('created_at', { ascending: false });
       if (error) throw error;
-      setSavedMenus(data as any);
+      const formatted: GeneratedMenu[] = (data as any[]).map(menu => ({
+        id: menu.id,
+        clientId: menu.client_id,
+        clientName: menu.client_name,
+        weekPeriod: menu.week_period,
+        status: menu.status,
+        totalCost: Number(menu.total_cost),
+        costPerMeal: Number(menu.cost_per_meal),
+        totalRecipes: Number(menu.total_recipes),
+        recipes: menu.receitas_adaptadas || [],
+        createdAt: menu.created_at,
+        approvedBy: menu.approved_by,
+        rejectedReason: menu.rejected_reason
+      }));
+      setSavedMenus(formatted);
     } catch (err) {
       console.error('Erro ao carregar menus:', err);
     }
@@ -168,7 +176,8 @@ export function useIntegratedMenuGeneration() {
 
   const saveMenuToDatabase = async (menu: GeneratedMenu): Promise<string | null> => {
     try {
-      const { data, error } = await supabase.from('generated_menus')
+      const { data, error } = await supabase
+        .from('generated_menus')
         .insert({
           client_id: menu.clientId,
           client_name: menu.clientName,
@@ -176,15 +185,15 @@ export function useIntegratedMenuGeneration() {
           status: menu.status,
           total_cost: menu.totalCost,
           cost_per_meal: menu.costPerMeal,
-          total_recipes: menu.totalRecipes
+          total_recipes: menu.totalRecipes,
+          receitas_adaptadas: menu.recipes   // 🔥 agora salva receitas
         })
         .select('id')
         .single();
-
       if (error) throw error;
       return data.id;
     } catch (err) {
-      console.error('Erro ao salvar menu:', err);
+      console.error('Erro ao salvar:', err);
       return null;
     }
   };
@@ -194,17 +203,18 @@ export function useIntegratedMenuGeneration() {
       await supabase.from('generated_menus').delete().eq('id', menuId);
       setSavedMenus(prev => prev.filter(m => m.id !== menuId));
       if (generatedMenu?.id === menuId) setGeneratedMenu(null);
-      toast({ title: "Menu excluído", description: "Cardápio removido com sucesso" });
-    } catch {
-      toast({ title: "Erro ao excluir", description: "Não foi possível excluir", variant: "destructive" });
+      toast({ title: "Cardápio excluído", description: "Removido com sucesso" });
+      return true;
+    } catch (err) {
+      toast({ title: "Erro", description: "Não foi possível excluir", variant: "destructive" });
+      return false;
     }
   };
 
+  /** ---------- Aprovar / rejeitar ---------- **/
   const approveMenu = async (menuId: string, approver: string) => {
     await supabase.from('generated_menus').update({ status: 'approved', approved_by: approver }).eq('id', menuId);
-    if (generatedMenu?.id === menuId) {
-      setGeneratedMenu({ ...generatedMenu, status: 'approved', approvedBy: approver, approvedAt: new Date().toISOString() });
-    }
+    if (generatedMenu?.id === menuId) setGeneratedMenu({ ...generatedMenu, status: 'approved', approvedBy: approver });
     await loadSavedMenus();
   };
 
@@ -214,13 +224,17 @@ export function useIntegratedMenuGeneration() {
     await loadSavedMenus();
   };
 
+  /** ---------- Lista de compras ---------- **/
   const generateShoppingListFromMenu = async (menu: GeneratedMenu) => {
-    setIsGenerating(true);
     try {
-      await supabase.functions.invoke('generate-shopping-list', { body: { menuId: menu.id, recipes: menu.recipes } });
-      toast({ title: "Lista de compras gerada", description: "Com base no cardápio aprovado" });
-    } catch {
-      toast({ title: "Erro", description: "Não foi possível gerar lista", variant: "destructive" });
+      setIsGenerating(true);
+      await supabase.functions.invoke('generate-shopping-list', {
+        body: {
+          menuId: menu.id,
+          recipes: menu.recipes
+        }
+      });
+      toast({ title: "Lista de compras gerada", description: "Com base no cardápio" });
     } finally {
       setIsGenerating(false);
     }
@@ -230,45 +244,76 @@ export function useIntegratedMenuGeneration() {
     setGeneratedMenu(null);
     localStorage.removeItem('current-generated-menu');
   };
+  const clearMenuExplicitly = () => { clearGeneratedMenu(); setError(null); };
 
-  const clearMenuExplicitly = () => {
-    clearGeneratedMenu();
-    setError(null);
+  /** ---------- Geração ---------- **/
+  const generateMenuWithFormData = async (formData: SimpleMenuFormData) => {
+    if (isProcessing) return null;
+    setIsProcessing(true);
+    setIsGenerating(true);
+    try {
+      if (!selectedClient) throw new Error("Nenhum cliente selecionado");
+      const startDate = parse(formData.period.start, 'yyyy-MM-dd', new Date());
+      const endDate = parse(formData.period.end, 'yyyy-MM-dd', new Date());
+      const weekPeriod = `${format(startDate, 'dd/MM/yyyy')} a ${format(endDate, 'dd/MM/yyyy')}`;
+
+      const payload = { action: 'generate_menu', client_id: formData.clientId, week_period: weekPeriod };
+      const { data, error } = await withRetry(
+        () => supabase.functions.invoke('gpt-assistant', { body: payload }),
+        { maxRetries: 3, initialDelay: 1000, maxDelay: 10000, backoffFactor: 2 }
+      );
+      if (error) throw error;
+      const recipes = data.recipes || [];
+      if (!recipes.length) throw new Error("Nenhuma receita gerada");
+
+      const menu: GeneratedMenu = {
+        id: crypto.randomUUID(),
+        clientId: selectedClient.id,
+        clientName: selectedClient.nome_fantasia,
+        weekPeriod,
+        status: 'pending_approval',
+        totalCost: 0,
+        costPerMeal: 0,
+        totalRecipes: recipes.length,
+        recipes,
+        createdAt: new Date().toISOString(),
+      } as any;
+
+      setGeneratedMenu(menu);
+      const savedId = await saveMenuToDatabase(menu);
+      if (savedId) {
+        menu.id = savedId;
+        setGeneratedMenu(menu);
+        await loadSavedMenus();
+        toast({ title: "Cardápio gerado", description: `${menu.totalRecipes} receitas salvas` });
+      }
+      return menu;
+
+    } catch (err: any) {
+      setError(err.message);
+      toast({ title: "Erro", description: err.message, variant: "destructive" });
+      return null;
+    } finally {
+      setIsGenerating(false);
+      setIsProcessing(false);
+    }
   };
 
-  /** ---------- Geração de Menu ---------- **/
-  const generateMenuWithFormData = async (formData: SimpleMenuFormData): Promise<GeneratedMenu | null> => {
-    // ... implementação de chamada à Edge Function (igual versão anterior)
-    return null; // aqui mantém placeholder porque foco é no retorno
+  const generateMenu = async (weekPeriod: string) => {
+    return generateMenuWithFormData({
+      clientId: selectedClient?.id,
+      period: { start: weekPeriod, end: weekPeriod },
+      mealsPerDay: 50
+    } as SimpleMenuFormData);
   };
 
-  const generateMenu = async (
-    weekPeriod: string,
-    preferences?: string[],
-    clientOverride?: any,
-    mealsPerDay?: number,
-    totalMeals?: number
-  ) => {
-    // monta SimpleMenuFormData e delega para generateMenuWithFormData
-  };
-
-  /** ---------- Retorno do Hook ---------- **/
   return {
-    isGenerating,
-    generatedMenu,
-    savedMenus,
-    error,
-    generateMenuWithFormData,
-    generateMenu,
-    approveMenu,
-    rejectMenu,
-    generateShoppingListFromMenu,
-    clearGeneratedMenu,
-    clearMenuExplicitly,
-    loadSavedMenus,
-    deleteGeneratedMenu,
-    violations,
-    validateMenu,
+    isGenerating, generatedMenu, savedMenus, error,
+    generateMenuWithFormData, generateMenu,
+    approveMenu, rejectMenu, generateShoppingListFromMenu,
+    clearGeneratedMenu, clearMenuExplicitly,
+    loadSavedMenus, deleteGeneratedMenu,
+    violations, validateMenu,
     validateMenuAndSetViolations: (recipes: any[]) => validateMenu(recipes),
     marketIngredients
   };
