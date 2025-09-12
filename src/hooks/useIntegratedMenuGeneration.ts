@@ -452,7 +452,7 @@ export function useIntegratedMenuGeneration() {
         filialIdLegado: (clientToUse as any).filial_id || clientIdResolved,
         client_data: {
           id: clientIdResolved,
-          nome: (clientToUse as any).nome_empresa || (clientToUse as any).nome,
+          nome: (clientToUse as any).nome_empresa || (clientToUse as any).nome_fantasia || (clientToUse as any).nome,
           filial_id: (clientToUse as any).filial_id || clientIdResolved,
           custo_maximo_refeicao: (clientToUse as any).custo_maximo_refeicao || 15,
           restricoes_alimentares: formData.restrictions,
@@ -489,10 +489,32 @@ export function useIntegratedMenuGeneration() {
         throw new Error(data?.error || 'Erro na geração das receitas');
       }
 
-      console.log('📥 Receitas geradas:', data.recipes?.length || 0);
+      console.log('📥 Resposta completa da Edge Function:', JSON.stringify(data, null, 2));
 
-      const recipes = data.recipes || [];
+      // NORMALIZAR RESPOSTA: A Edge Function pode retornar `cardapio` ou `recipes`
+      let recipes = data.recipes || [];
+      
+      // Se veio `cardapio` (estrutura do gpt-assistant), normalizar para `recipes`
+      if (!recipes.length && data.cardapio) {
+        console.log('🔄 Normalizando cardapio para recipes format');
+        recipes = data.cardapio;
+      }
+
+      // Se ainda não tem recipes, tentar extrair de receitas_adaptadas
+      if (!recipes.length && data.receitas_adaptadas) {
+        console.log('🔄 Normalizando receitas_adaptadas para recipes format');
+        recipes = data.receitas_adaptadas;
+      }
+
+      console.log('📥 Receitas finais:', recipes?.length || 0);
+
       if (!recipes.length) {
+        console.error('❌ Nenhuma receita encontrada na resposta:', {
+          hasRecipes: !!data.recipes,
+          hasCardapio: !!data.cardapio,
+          hasReceitasAdaptadas: !!data.receitas_adaptadas,
+          dataKeys: Object.keys(data || {})
+        });
         throw new Error('IA não conseguiu gerar receitas');
       }
 
