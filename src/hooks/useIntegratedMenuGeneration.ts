@@ -520,6 +520,14 @@ export function useIntegratedMenuGeneration() {
 
       // Aplicar regras de negócio usando filterRecipesForDay
       console.log('🔍 Aplicando regras de variedade...');
+      
+      // DIAGNÓSTICO: Verificar estrutura das receitas normalizadas
+      console.log('🔍 ESTRUTURA DAS RECEITAS NORMALIZADAS:');
+      if (recipes.length > 0) {
+        console.log('Primeira receita:', JSON.stringify(recipes[0], null, 2));
+        console.log('Campos disponíveis:', Object.keys(recipes[0]));
+      }
+      
       const gerarSemanas = (inicio: Date, fim: Date, incluirFDS: boolean = false) => {
         const semanas: { [key: string]: any[] } = {};
         let currentDate = new Date(inicio);
@@ -559,7 +567,12 @@ export function useIntegratedMenuGeneration() {
           const slotKey = toDayKey(dia.dia);
           
           // Filtrar receitas disponíveis para este dia (com regras de variedade)
-          const receitasDisponiveis = recipes.filter((r: any) => toDayKey(r.day) === slotKey);
+          const receitasDisponiveis = recipes.filter((r: any) => {
+            const recipeDay = r.day || r.dia;
+            return toDayKey(recipeDay) === slotKey;
+          });
+          
+          console.log(`🔍 ${dia.dia}: ${receitasDisponiveis.length} receitas disponíveis`);
           
           // Aplicar regras de negócio para evitar repetições de proteína
           const receitasFiltradas = filterRecipesForDay(
@@ -569,17 +582,34 @@ export function useIntegratedMenuGeneration() {
             receitasUsadasAnterior
           );
           
+          
+          console.log(`🔍 ${dia.dia}: ${receitasFiltradas.length} receitas filtradas`);
+          
           const receitasDoDia = receitasFiltradas.map((r: any, idx: number) => {
-            let cat = mapCategoryToMenuStructure(r.category || '');
-            if (cat === 'Salada') cat = categorizeSalad(r.name || '', idx);
-            if (cat === 'Suco') cat = categorizeJuice(r.name || '', idx);
+            // NORMALIZAR CAMPOS - diferentes estruturas de receita
+            const nome = r.nome_receita || r.name || r.nome || 'Receita sem nome';
+            const categoria = r.categoria_descricao || r.category || r.categoria || 'Outros';
+            const custo = r.custo_adaptado || r.cost || r.custo_total || r.custo_por_refeicao || 0;
+            
+            console.log(`💰 Receita "${nome}": custo = ${custo} (fonte: ${
+              r.custo_adaptado ? 'custo_adaptado' : 
+              r.cost ? 'cost' : 
+              r.custo_total ? 'custo_total' : 
+              r.custo_por_refeicao ? 'custo_por_refeicao' : 'zero'
+            })`);
+            
+            let cat = mapCategoryToMenuStructure(categoria);
+            if (cat === 'Salada') cat = categorizeSalad(nome, idx);
+            if (cat === 'Suco') cat = categorizeJuice(nome, idx);
 
             return {
-              id: r.id,
-              nome: r.name,
+              id: r.receita_id_legado || r.id || `recipe-${idx}`,
+              nome: nome,
               categoria: cat,
-              custo_total: r.cost,         // custo unitário
-              custo_por_refeicao: r.cost   // custo unitário
+              custo_total: custo,
+              custo_por_refeicao: custo,
+              dia: dia.dia,
+              ingredients: r.ingredientes || r.ingredients || []
             };
           });
           
@@ -587,7 +617,7 @@ export function useIntegratedMenuGeneration() {
           receitasUsadasAnterior = receitasDoDia;
 
           const totalDia = receitasDoDia.reduce(
-            (s, rr) => s + rr.custo_por_refeicao * (formData.estimatedMeals || 50),
+            (s, rr) => s + (rr.custo_por_refeicao || 0) * (formData.estimatedMeals || 50),
             0
           );
 
