@@ -96,7 +96,8 @@ export function useIntegratedMenuGeneration() {
   const [error, setError] = useState<string | null>(null);
   const { selectedClient } = useSelectedClient();
   const { toast } = useToast();
-  const { validateMenu, filterRecipesForDay, violations, viableRecipes } = useMenuBusinessRules();
+  // Removido viableRecipes da desestruturação para evitar erro
+  const { validateMenu, filterRecipesForDay, violations } = useMenuBusinessRules();
   const { marketIngredients } = useMarketAvailability();
 
   // Persistência local do menu
@@ -713,9 +714,6 @@ export function useIntegratedMenuGeneration() {
     violations,
     validateMenu,
     validateMenuAndSetViolations: (recipes: any[]) => validateMenu(recipes),
-    viableRecipes,
     marketIngredients
   };
 }
-
-export type { GeneratedMenu, MenuRecipe, SimpleMenuFormData };
