@@ -413,6 +413,29 @@ export function useIntegratedMenuGeneration() {
         throw new Error('Nenhum cliente selecionado');
       }
 
+      // Logging completo do cliente para diagnóstico
+      console.log("🔍 FULL selectedClient:", JSON.stringify(clientToUse, null, 2));
+
+      // Mapear identificador do cliente com fallback robusto
+      const clientIdResolved = 
+        clientToUse?.id ||
+        (clientToUse as any)?.filial_id ||
+        (clientToUse as any)?.cliente_id_legado ||
+        (clientToUse as any)?.client_id ||
+        null;
+
+      console.log("🔍 CLIENT_ID RESOLVED:", {
+        original_id: clientToUse?.id,
+        filial_id: (clientToUse as any)?.filial_id,
+        cliente_id_legado: (clientToUse as any)?.cliente_id_legado,
+        client_id: (clientToUse as any)?.client_id,
+        resolved: clientIdResolved
+      });
+
+      if (!clientIdResolved) {
+        throw new Error("Cliente não possui identificador válido (id / filial_id / client_id)");
+      }
+
       console.log('🔄 Iniciando geração com FormData:', formData);
 
       // Parse dates and create week period string
@@ -422,12 +445,15 @@ export function useIntegratedMenuGeneration() {
 
       console.log('📅 Período formatado:', weekPeriod);
 
-      // Gerar receitas com Edge Function
+      // Estrutura corrigida do payload para a Edge Function
       const payload = {
-        action: 'generate_simple_recipes',
+        action: 'generate_menu',
+        client_id: clientIdResolved,
+        filialIdLegado: (clientToUse as any).filial_id || clientIdResolved,
         client_data: {
-          id: clientToUse.id,
-          nome: clientToUse.nome_fantasia,
+          id: clientIdResolved,
+          nome: (clientToUse as any).nome_empresa || (clientToUse as any).nome,
+          filial_id: (clientToUse as any).filial_id || clientIdResolved,
           custo_maximo_refeicao: (clientToUse as any).custo_maximo_refeicao || 15,
           restricoes_alimentares: formData.restrictions,
           preferencias_alimentares: formData.preferences
