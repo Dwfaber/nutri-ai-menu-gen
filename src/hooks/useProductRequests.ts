@@ -48,7 +48,17 @@ export const useProductRequests = () => {
         ...item,
         solicitacao_id: item.solicitacao_id ?? undefined,
         categoria_descricao: item.categoria_descricao ?? undefined,
-        grupo: item.grupo ?? undefined
+        grupo: item.grupo ?? undefined,
+        produto_id: item.produto_id ?? undefined,
+        criado_em: item.criado_em ?? undefined,
+        descricao: item.descricao ?? undefined,
+        unidade: item.unidade ?? undefined,
+        preco: item.preco ?? undefined,
+        per_capita: item.per_capita ?? undefined,
+        arredondar_tipo: item.arredondar_tipo ?? undefined,
+        apenas_valor_inteiro: item.apenas_valor_inteiro_sim_nao ?? undefined,
+        em_promocao: item.em_promocao_sim_nao ?? undefined,
+        produto_base_id: item.produto_base_id ?? undefined
       })));
     } catch (err) {
       console.error('Error fetching product requests:', err);
@@ -82,7 +92,17 @@ export const useProductRequests = () => {
         ...data,
         solicitacao_id: data.solicitacao_id ?? undefined,
         categoria_descricao: data.categoria_descricao ?? undefined,
-        grupo: data.grupo ?? undefined
+        grupo: data.grupo ?? undefined,
+        produto_id: data.produto_id ?? undefined,
+        criado_em: data.criado_em ?? undefined,
+        descricao: data.descricao ?? undefined,
+        unidade: data.unidade ?? undefined,
+        preco: data.preco ?? undefined,
+        per_capita: data.per_capita ?? undefined,
+        arredondar_tipo: data.arredondar_tipo ?? undefined,
+        apenas_valor_inteiro: data.apenas_valor_inteiro_sim_nao ?? undefined,
+        em_promocao: data.em_promocao_sim_nao ?? undefined,
+        produto_base_id: data.produto_base_id ?? undefined
       }, ...requests]);
       
       toast({
@@ -123,7 +143,23 @@ export const useProductRequests = () => {
       if (error) throw error;
       
       setRequests(requests.map(req => 
-        req.solicitacao_produto_listagem_id === id ? { ...req, ...data } : req
+        req.solicitacao_produto_listagem_id === id ? { 
+          ...req, 
+          ...data,
+          solicitacao_id: data.solicitacao_id ?? undefined,
+          categoria_descricao: data.categoria_descricao ?? undefined,
+          grupo: data.grupo ?? undefined,
+          produto_id: data.produto_id ?? undefined,
+          criado_em: data.criado_em ?? undefined,
+          descricao: data.descricao ?? undefined,
+          unidade: data.unidade ?? undefined,
+          preco: data.preco ?? undefined,
+          per_capita: data.per_capita ?? undefined,
+          arredondar_tipo: data.arredondar_tipo ?? undefined,
+          apenas_valor_inteiro: data.apenas_valor_inteiro_sim_nao ?? undefined,
+          em_promocao: data.em_promocao_sim_nao ?? undefined,
+          produto_base_id: data.produto_base_id ?? undefined
+        } : req
       ));
       
       toast({

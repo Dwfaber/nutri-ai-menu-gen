@@ -55,7 +55,17 @@ export const usePaginatedRequests = (options: PaginationOptions = {}) => {
         ...item,
         solicitacao_id: item.solicitacao_id ?? undefined,
         categoria_descricao: item.categoria_descricao ?? undefined,
-        grupo: item.grupo ?? undefined
+        grupo: item.grupo ?? undefined,
+        produto_id: item.produto_id ?? undefined,
+        criado_em: item.criado_em ?? undefined,
+        descricao: item.descricao ?? undefined,
+        unidade: item.unidade ?? undefined,
+        preco: item.preco ?? undefined,
+        per_capita: item.per_capita ?? undefined,
+        arredondar_tipo: item.arredondar_tipo ?? undefined,
+        apenas_valor_inteiro_sim_nao: item.apenas_valor_inteiro_sim_nao ?? undefined,
+        em_promocao_sim_nao: item.em_promocao_sim_nao ?? undefined,
+        produto_base_id: item.produto_base_id ?? undefined
       }));
       
       if (reset || page === 0) {
@@ -124,7 +134,17 @@ export const usePaginatedRequests = (options: PaginationOptions = {}) => {
         ...data,
         solicitacao_id: data.solicitacao_id ?? undefined,
         categoria_descricao: data.categoria_descricao ?? undefined,
-        grupo: data.grupo ?? undefined
+        grupo: data.grupo ?? undefined,
+        produto_id: data.produto_id ?? undefined,
+        criado_em: data.criado_em ?? undefined,
+        descricao: data.descricao ?? undefined,
+        unidade: data.unidade ?? undefined,
+        preco: data.preco ?? undefined,
+        per_capita: data.per_capita ?? undefined,
+        arredondar_tipo: data.arredondar_tipo ?? undefined,
+        apenas_valor_inteiro_sim_nao: data.apenas_valor_inteiro_sim_nao ?? undefined,
+        em_promocao_sim_nao: data.em_promocao_sim_nao ?? undefined,
+        produto_base_id: data.produto_base_id ?? undefined
       }, ...prev]);
       setTotalCount(prev => prev + 1);
       
@@ -168,7 +188,23 @@ export const usePaginatedRequests = (options: PaginationOptions = {}) => {
       const data = await withRetry(operation, { maxRetries: 2 });
       
       setRequests(prev => prev.map(req => 
-        req.solicitacao_produto_listagem_id === id ? { ...req, ...data } : req
+        req.solicitacao_produto_listagem_id === id ? { 
+          ...req, 
+          ...data,
+          solicitacao_id: data.solicitacao_id ?? undefined,
+          categoria_descricao: data.categoria_descricao ?? undefined,
+          grupo: data.grupo ?? undefined,
+          produto_id: data.produto_id ?? undefined,
+          criado_em: data.criado_em ?? undefined,
+          descricao: data.descricao ?? undefined,
+          unidade: data.unidade ?? undefined,
+          preco: data.preco ?? undefined,
+          per_capita: data.per_capita ?? undefined,
+          arredondar_tipo: data.arredondar_tipo ?? undefined,
+          apenas_valor_inteiro: data.apenas_valor_inteiro_sim_nao ?? undefined,
+          em_promocao: data.em_promocao_sim_nao ?? undefined,
+          produto_base_id: data.produto_base_id ?? undefined
+        } : req
       ));
       
       toast({

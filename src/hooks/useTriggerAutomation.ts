@@ -54,7 +54,7 @@ export const useTriggerAutomation = () => {
       console.error('Erro ao disparar automação:', error);
       toast({
         title: "Erro na Automação",
-        description: error.message || "Falha ao iniciar o processo de sincronização",
+        description: (error as Error)?.message || "Falha ao iniciar o processo de sincronização",
         variant: "destructive",
       });
       throw error;
@@ -76,7 +76,10 @@ export const useTriggerAutomation = () => {
         return;
       }
 
-      setStatus(data);
+      setStatus({
+        ...data,
+        status: data.status || ''
+      });
     } catch (error) {
       console.error('Erro ao buscar status:', error);
     }

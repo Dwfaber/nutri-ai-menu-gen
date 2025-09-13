@@ -134,7 +134,14 @@ export const useMarketProducts = () => {
         categoria_descricao: p.categoria_descricao ?? undefined,
         grupo: p.grupo ?? undefined,
         produto_id: p.produto_id ?? undefined,
-        preco: p.preco ?? undefined
+        preco: p.preco ?? undefined,
+        per_capita: p.per_capita ?? undefined,
+        produto_base_quantidade_embalagem: p.produto_base_quantidade_embalagem ?? undefined,
+        arredondar_tipo: p.arredondar_tipo ?? undefined,
+        apenas_valor_inteiro_sim_nao: p.apenas_valor_inteiro_sim_nao ?? undefined,
+        em_promocao_sim_nao: p.em_promocao_sim_nao ?? undefined,
+        produto_base_id: p.produto_base_id ?? undefined,
+        criado_em: p.criado_em ?? undefined
       })));
       
       // Extract unique categories

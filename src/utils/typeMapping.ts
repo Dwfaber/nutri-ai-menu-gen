@@ -1,12 +1,10 @@
 // Utility functions for converting null values to undefined for type compatibility
 
 export function mapNullToUndefined<T extends Record<string, any>>(obj: T): T {
-  const result = { ...obj };
+  const result = {} as T;
   
-  Object.keys(result).forEach(key => {
-    if (result[key] === null) {
-      result[key] = undefined;
-    }
+  Object.keys(obj).forEach(key => {
+    result[key as keyof T] = obj[key] === null ? undefined : obj[key];
   });
   
   return result;

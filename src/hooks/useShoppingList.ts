@@ -272,9 +272,8 @@ export const useShoppingList = () => {
       const { error: listError } = await supabase
         .from('shopping_lists')
         .upsert({
-          id: list.id,
-          menu_id: list.cardapio_id,
-          client_name: list.client_name,
+          menu_id: list.cardapio_id || '',
+          client_name: list.client_name || '',
           budget_predicted: list.budget_predicted,
           cost_actual: list.valor_total,
           status: list.status === 'draft' ? 'pending' : list.status === 'approved' ? 'budget_ok' : list.status,

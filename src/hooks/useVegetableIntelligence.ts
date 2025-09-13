@@ -49,15 +49,15 @@ export const useVegetableIntelligence = () => {
         const vegetables: VegetableInfo[] = [];
         
         for (const product of products || []) {
-          const categorized = categorizeVegetable(product.descricao);
+          const categorized = categorizeVegetable(product.descricao || '');
           if (categorized) {
             vegetables.push({
               ...categorized,
-              id: product.produto_id,
-              name: product.descricao,
+              id: product.produto_id || 0,
+              name: product.descricao || '',
               // Determinar categoria de preço baseada no valor
-              priceCategory: product.preco <= 300 ? 'budget' : 
-                           product.preco <= 800 ? 'medium' : 'premium'
+              priceCategory: (product.preco || 0) <= 300 ? 'budget' : 
+                           (product.preco || 0) <= 800 ? 'medium' : 'premium'
             });
           }
         }

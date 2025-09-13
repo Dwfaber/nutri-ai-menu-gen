@@ -160,7 +160,7 @@ export function useSimplifiedMenuGeneration() {
           business_rules: businessRules,
           violations: calculatedMenu.violatedIngredients
         },
-        warnings: calculatedMenu.violatedIngredients.map(ing => 
+        warnings: calculatedMenu.violatedIngredients.map((ing: any) => 
           `Ingrediente não encontrado: ${ing.nome}`),
         juiceMenu: costData?.juice_menu || null
       };
