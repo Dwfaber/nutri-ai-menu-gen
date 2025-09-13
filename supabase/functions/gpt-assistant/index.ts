@@ -213,13 +213,30 @@ Deno.serve(async (req) => {
     const startTime = Date.now();
     const requestData = await req.json();
     
-    console.log('📥 REQUEST:', requestData.action, requestData.filialIdLegado || 'sem filial');
+    console.log('📥 REQUEST:', requestData.action, requestData.filialIdLegado || requestData.filial_id || 'sem filial');
     console.log('🔍 CLIENT_ID DEBUG:', {
       client_id: requestData.client_id,
       clientId: requestData.clientId, 
       filial_id: requestData.filial_id,
-      filialIdLegado: requestData.filialIdLegado
+      filialIdLegado: requestData.filialIdLegado,
+      client_data: requestData.client_data
     });
+
+    // Validate client IDs early
+    const hasValidId = requestData.client_id || requestData.clientId || 
+                      requestData.client_data?.id || requestData.client_data?.cliente_id_legado;
+    
+    if (!hasValidId && requestData.action === 'generate_recipes_only') {
+      console.error('❌ No valid client ID found in request');
+      return new Response(
+        JSON.stringify({ 
+          error: 'Cliente não identificado: IDs ausentes no request',
+          debug: { client_id: requestData.client_id, clientId: requestData.clientId },
+          recipes: []
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
+      );
+    }
     
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
@@ -1611,6 +1628,54 @@ Deno.serve(async (req) => {
             success: false,
             erro: error.message,
             version: 'CORRIGIDA-FINAL-v3.0'
+          }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
+        );
+      }
+    }
+
+    // Handler for simplified recipe generation
+    if (requestData.action === 'generate_recipes_only') {
+      console.log('🍽️ Generating recipes only with simplified mode');
+      
+      try {
+        const { generateRecipesOnly } = await import('./simplified.ts');
+        
+        // Use correct client ID from payload
+        const clientId = requestData.client_id || requestData.clientId || 
+                        requestData.client_data?.id || requestData.client_data?.cliente_id_legado;
+        const filialId = requestData.filial_id || requestData.filialIdLegado || 
+                        requestData.client_data?.filial_id;
+        
+        console.log('🔍 Using IDs for recipe generation:', { clientId, filialId });
+        
+        // Enhance client_data with extracted IDs
+        const enhancedClientData = {
+          ...requestData.client_data,
+          id: clientId,
+          filial_id: filialId
+        };
+        
+        const result = await generateRecipesOnly({
+          ...requestData,
+          client_data: enhancedClientData
+        });
+        
+        console.log('✅ Recipes generated successfully:', result.recipes?.length || 0);
+        
+        return new Response(
+          JSON.stringify(result),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+        
+      } catch (error) {
+        console.error('❌ Error generating recipes:', error);
+        
+        return new Response(
+          JSON.stringify({
+            success: false,
+            error: error.message || 'Erro na geração de receitas',
+            recipes: []
           }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
         );

@@ -36,17 +36,46 @@ export function useSimplifiedMenuGeneration() {
   const { toast } = useToast();
 
   const generateSimpleRecipes = async (clientData: any, mealQuantity: number) => {
-    const { data, error } = await supabase.functions.invoke('gpt-assistant', {
-      body: {
-        action: 'generate_recipes_only',
-        client_data: clientData,
-        meal_quantity: mealQuantity,
-        simple_mode: true
-      }
+    console.log('🔍 Frontend DEBUG - Client data:', {
+      selectedClient,
+      clientData,
+      clientId: clientData?.id || clientData?.cliente_id_legado,
+      filialId: clientData?.filial_id
     });
 
-    if (error) throw error;
-    return data?.recipes || [];
+    // Validate client data before sending
+    if (!clientData?.id && !clientData?.cliente_id_legado) {
+      throw new Error('Cliente inválido: ID não encontrado');
+    }
+
+    const payload = {
+      action: 'generate_recipes_only',
+      client_id: clientData.id || null,
+      clientId: clientData.cliente_id_legado || null,
+      filial_id: clientData.filial_id || null,
+      filialIdLegado: clientData.filial_id || null,
+      client_data: clientData,
+      meal_quantity: mealQuantity,
+      simple_mode: true
+    };
+
+    console.log('📤 Payload being sent:', payload);
+
+    const { data, error } = await supabase.functions.invoke('gpt-assistant', {
+      body: payload
+    });
+
+    if (error) {
+      console.error('Edge Function error:', error);
+      throw new Error(`Erro na geração: ${error.message || 'Falha na comunicação com o servidor'}`);
+    }
+
+    if (!data?.recipes || data.recipes.length === 0) {
+      console.error('No recipes returned from Edge Function:', data);
+      throw new Error('IA não conseguiu gerar receitas para este cliente');
+    }
+
+    return data.recipes;
   };
 
   const saveMenuToDatabase = async (menu: GeneratedMenu): Promise<string | null> => {
@@ -97,8 +126,12 @@ export function useSimplifiedMenuGeneration() {
       const weekPeriod = period || `${format(new Date(), 'dd/MM/yyyy')} - ${format(addDays(new Date(), 6), 'dd/MM/yyyy')}`;
 
       // Step 1: Generate simple recipes with AI
+      console.log('🎯 Using client:', clientToUse);
+      
       const recipes = await generateSimpleRecipes({
-        id: clientToUse.id || clientToUse.cliente_id_legado,
+        id: clientToUse.id,
+        cliente_id_legado: clientToUse.cliente_id_legado,
+        filial_id: clientToUse.filial_id,
         nome: clientToUse.nome_fantasia || clientToUse.nome_empresa,
         custo_maximo_refeicao: clientToUse.custo_maximo_refeicao || 15,
         restricoes_alimentares: restrictions,

@@ -32,6 +32,13 @@ export const SelectedClientProvider = ({ children }: { children: ReactNode }) =>
     if (stored) {
       try {
         const client = JSON.parse(stored);
+        console.log('🔄 Loaded client from localStorage:', client);
+        
+        // Validate that client has required IDs
+        if (!client.id && !client.cliente_id_legado) {
+          console.warn('⚠️ Loaded client missing both id and cliente_id_legado:', client);
+        }
+        
         setSelectedClientState(client);
       } catch (error) {
         console.error('Error loading stored client:', error);
