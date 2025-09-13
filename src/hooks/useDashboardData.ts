@@ -1,8 +1,8 @@
-
 import { useState, useEffect } from 'react';
 import { supabase } from '../integrations/supabase/client';
 import { useToast } from '@/components/ui/use-toast';
 import { calculateCostMetrics, getUniqueClientsCount, calculateContractMealCost } from '@/utils/costCalculations';
+import { ClientCostDetails } from '@/types/clientCosts';
 
 export interface DashboardMetrics {
   activeClients: number;
@@ -15,6 +15,35 @@ export interface DashboardMetrics {
   totalSavings: number;
   acceptanceRate: number;
 }
+
+const toCCD = (row: any): ClientCostDetails => ({
+  id: row.id,
+  cliente_id_legado: row.cliente_id_legado || 0,
+  filial_id: row.filial_id || 0,
+  nome_filial: row.nome_filial || '',
+  razao_social: row.razao_social || '',
+  nome_fantasia: row.nome_fantasia || '',
+  custo_total: Number(row.custo_total || 0),
+  custo_medio_semanal: Number(row.custo_medio_semanal || 0),
+  RefCustoSegunda: Number(row.RefCustoSegunda || 0),
+  RefCustoTerca: Number(row.RefCustoTerca || 0),
+  RefCustoQuarta: Number(row.RefCustoQuarta || 0),
+  RefCustoQuinta: Number(row.RefCustoQuinta || 0),
+  RefCustoSexta: Number(row.RefCustoSexta || 0),
+  RefCustoSabado: Number(row.RefCustoSabado || 0),
+  RefCustoDomingo: Number(row.RefCustoDomingo || 0),
+  RefCustoDiaEspecial: Number(row.RefCustoDiaEspecial || 0),
+  QtdeRefeicoesUsarMediaValidarSimNao: !!row.QtdeRefeicoesUsarMediaValidarSimNao,
+  PorcentagemLimiteAcimaMedia: Number(row.PorcentagemLimiteAcimaMedia || 0),
+  solicitacao_filial_custo_id: row.solicitacao_filial_custo_id || 0,
+  solicitacao_compra_tipo_id: row.solicitacao_compra_tipo_id || 0,
+  solicitacao_compra_tipo_descricao: row.solicitacao_compra_tipo_descricao || '',
+  user_name: row.user_name || '',
+  user_date_time: row.user_date_time || '',
+  sync_at: row.sync_at || '',
+  created_at: row.created_at || '',
+  updated_at: row.updated_at || ''
+});
 
 export const useDashboardData = () => {
   const [metrics, setMetrics] = useState<DashboardMetrics>({
@@ -66,11 +95,12 @@ export const useDashboardData = () => {
 
       // Calculate metrics using real cost data - ignore custo_total (it's 0.00)
       const activeClients = clients?.length || 0;
-      const uniqueClients = costData ? getUniqueClientsCount(costData) : 0;
+      const mappedCosts: ClientCostDetails[] = (costData || []).map(toCCD);
+      const uniqueClients = getUniqueClientsCount(mappedCosts);
       const generatedMenus = shoppingLists?.length || 0;
 
       // Calculate cost metrics using daily costs only
-      const costMetrics = calculateCostMetrics(costData || []);
+      const costMetrics = calculateCostMetrics(mappedCosts);
       const weeklyTotal = costMetrics.totalWeeklyCost;
       const averageWeeklyCost = costMetrics.averageCostPerClient;
       const averageDailyCost = averageWeeklyCost / 7;
@@ -82,7 +112,7 @@ export const useDashboardData = () => {
       const totalSavings = Math.max(0, predictedBudget - actualCosts);
 
       // Calculate acceptance rate (improved calculation)
-      const acceptanceRate = generatedMenus > 0 ? Math.min(95, 75 + (totalSavings / predictedBudget) * 20) : 0;
+      const acceptanceRate = generatedMenus > 0 ? Math.min(95, 75 + (predictedBudget > 0 ? (totalSavings / predictedBudget) * 20 : 0)) : 0;
 
       // Estimate monthly meals based on weekly costs and average meal cost
       const estimatedMealsPerWeek = averageDailyCost > 0 ? Math.round(weeklyTotal / averageDailyCost) : uniqueClients * 35; // fallback estimate
@@ -96,8 +126,8 @@ export const useDashboardData = () => {
         .order('created_at', { ascending: false });
 
       // Criar mapa client_id -> meals_per_day (pega o mais recente)
-      const mealsMap = new Map();
-      menus?.forEach(menu => {
+      const mealsMap = new Map<string, number>();
+      menus?.forEach((menu: any) => {
         if (!mealsMap.has(menu.client_id)) {
           mealsMap.set(menu.client_id, menu.meals_per_day || 1);
         }

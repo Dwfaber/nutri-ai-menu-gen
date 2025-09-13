@@ -1,84 +1,146 @@
-import { useState } from 'react';
-import { supabase } from '../lib/supabaseClient'; // ajuste o caminho conforme seu projeto
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { supabase } from '@/integrations/supabase/client';
+import { useSimplifiedMenuGeneration, GeneratedMenu } from './useSimplifiedMenuGeneration';
+import { useMenuBusinessRules } from './useMenuBusinessRules';
+import { useSelectedClient } from '@/contexts/SelectedClientContext';
+import { useShoppingList } from './useShoppingList';
 
-interface FormData {
-  // defina aqui os campos do seu formulário
-  // exemplo:
-  // dataInicio: string;
-  // dataFim: string;
-  // incluirFinaisDeSemana: boolean;
-  // ...
-}
+// Re-export type for consumers
+export type { GeneratedMenu } from './useSimplifiedMenuGeneration';
 
-interface Receita {
-  // defina os campos da receita conforme seu backend
-  id: string;
-  nome: string;
-  custo_total: number;
-  custo_por_refeicao: number;
-  // ...
+export interface SimpleMenuFormData {
+  clientId: string;
+  period: { start: string; end: string };
+  mealsPerDay: number;
+  estimatedMeals?: number;
+  preferences?: string[];
+  juiceConfig?: any;
+  proteinGrams?: string;
+  diasUteis: boolean;
 }
 
 interface UseIntegratedMenuGenerationReturn {
-  loading: boolean;
+  isGenerating: boolean;
+  generatedMenu: GeneratedMenu | null;
   error: string | null;
-  generateMenu: (formData: FormData) => Promise<Receita[]>;
+  // generation
+  generateMenuWithFormData: (formData: SimpleMenuFormData) => Promise<GeneratedMenu | null>;
+  clearGeneratedMenu: () => void;
+  clearMenuExplicitly: () => void;
+  // approvals
+  approveMenu: (menuId: string, approverName: string) => Promise<boolean>;
+  rejectMenu: (menuId: string, reason: string) => Promise<boolean>;
+  deleteGeneratedMenu: (menuId: string) => Promise<boolean>;
+  // shopping list
+  generateShoppingListFromMenu: (menu: GeneratedMenu) => Promise<void>;
+  // validation
+  violations: any[];
+  validateMenu: (recipes: any[]) => any;
+  validateMenuAndSetViolations: (recipes: any[]) => any;
+  // saved menus
+  savedMenus: GeneratedMenu[];
+  loadSavedMenus: () => Promise<void>;
 }
 
 export function useIntegratedMenuGeneration(): UseIntegratedMenuGenerationReturn {
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const { isGenerating, generatedMenu, error, generateMenu, clearGeneratedMenu } = useSimplifiedMenuGeneration();
+  const { violations, validateMenu, validateMenuAndSetViolations } = useMenuBusinessRules();
+  const { selectedClient } = useSelectedClient();
+  const { generateShoppingList } = useShoppingList();
 
-  async function withRetry<T>(
-    fn: () => Promise<T>,
-    options: { maxRetries: number; initialDelay: number; maxDelay: number; backoffFactor: number }
-  ): Promise<{ data?: T; error?: Error }> {
-    let attempts = 0;
-    let delay = options.initialDelay;
+  const [savedMenus, setSavedMenus] = useState<GeneratedMenu[]>([]);
 
-    while (attempts < options.maxRetries) {
-      try {
-        const data = await fn();
-        return { data };
-      } catch (err: any) {
-        attempts++;
-        if (attempts >= options.maxRetries) {
-          return { error: err };
-        }
-        await new Promise((res) => setTimeout(res, delay));
-        delay = Math.min(delay * options.backoffFactor, options.maxDelay);
-      }
+  const mapRowToMenu = (row: any): GeneratedMenu => ({
+    id: row.id,
+    clientId: row.client_id,
+    clientName: row.client_name,
+    weekPeriod: row.week_period,
+    status: row.status,
+    totalCost: Number(row.total_cost || 0),
+    costPerMeal: Number(row.cost_per_meal || 0),
+    totalRecipes: Number(row.total_recipes || 0),
+    recipes: (row as any).recipes || (row.receitas_adaptadas as any) || [],
+    createdAt: row.created_at,
+    menu: (row as any).menu_data || null,
+    warnings: (row as any).warnings || []
+  });
+
+  const loadSavedMenus = useCallback(async () => {
+    const { data, error } = await supabase
+      .from('generated_menus')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (!error && data) {
+      setSavedMenus(data.map(mapRowToMenu));
     }
-    return { error: new Error('Max retries exceeded') };
-  }
+  }, []);
 
-  async function generateMenu(formData: FormData): Promise<Receita[]> {
-    setLoading(true);
-    setError(null);
+  useEffect(() => {
+    loadSavedMenus();
+  }, [loadSavedMenus]);
 
-    try {
-      const payload = JSON.stringify(formData);
-
-      const { data, error: functionError } = await withRetry(
-        () => supabase.functions.invoke('gpt-assistant', { body: payload }),
-        { maxRetries: 3, initialDelay: 1500, maxDelay: 10000, backoffFactor: 2 }
-      );
-
-      if (functionError) throw new Error(functionError.message || 'Erro ao gerar receitas');
-      if (!data || !data.success) throw new Error(data?.error || 'Erro na geração das receitas');
-
-      // Extrai todas as receitas de todos os dias do cardápio
-      const recipes = data.cardapio?.flatMap((dia: any) => dia.receitas) || [];
-      if (!recipes.length) throw new Error('Nenhuma receita gerada');
-
-      setLoading(false);
-      return recipes;
-    } catch (err: any) {
-      setError(err.message || 'Erro desconhecido');
-      setLoading(false);
-      return [];
+  const generateMenuWithFormData = useCallback(async (formData: SimpleMenuFormData) => {
+    const periodLabel = `${formData.period.start} - ${formData.period.end}`;
+    const menu = await generateMenu(
+      selectedClient,
+      periodLabel,
+      formData.mealsPerDay,
+      [],
+      formData.preferences || [],
+      formData.juiceConfig,
+      formData.proteinGrams
+    );
+    if (menu) {
+      await loadSavedMenus();
     }
-  }
+    return menu;
+  }, [generateMenu, selectedClient, loadSavedMenus]);
 
-  return { loading, error, generateMenu };
+  const approveMenu = useCallback(async (menuId: string, approverName: string) => {
+    const { error } = await supabase
+      .from('generated_menus')
+      .update({ status: 'approved', approved_by: approverName })
+      .eq('id', menuId);
+    return !error;
+  }, []);
+
+  const rejectMenu = useCallback(async (menuId: string, reason: string) => {
+    const { error } = await supabase
+      .from('generated_menus')
+      .update({ status: 'rejected', rejected_reason: reason })
+      .eq('id', menuId);
+    return !error;
+  }, []);
+
+  const deleteGeneratedMenu = useCallback(async (menuId: string) => {
+    const { error } = await supabase
+      .from('generated_menus')
+      .delete()
+      .eq('id', menuId);
+    if (!error) await loadSavedMenus();
+    return !error;
+  }, [loadSavedMenus]);
+
+  const generateShoppingListFromMenu = useCallback(async (menu: GeneratedMenu) => {
+    await generateShoppingList(menu.id, menu.clientName, menu.totalCost, menu.totalRecipes || 50);
+  }, [generateShoppingList]);
+
+  return {
+    isGenerating,
+    generatedMenu,
+    error,
+    generateMenuWithFormData,
+    clearGeneratedMenu,
+    clearMenuExplicitly: () => clearGeneratedMenu(),
+    approveMenu,
+    rejectMenu,
+    deleteGeneratedMenu,
+    generateShoppingListFromMenu,
+    violations,
+    validateMenu,
+    validateMenuAndSetViolations,
+    savedMenus,
+    loadSavedMenus
+  };
 }

@@ -165,7 +165,7 @@ export const WeeklyMenuView: React.FC<WeeklyMenuViewProps> = ({ menu }) => {
 
         {/* Indicadores estilo Instagram */}
         <div className="flex justify-center gap-2 mt-4">
-          {diasDaSemana.map((_, idx) => (
+          {diasDaSemana.map((_: any, idx: number) => (
             <div
               key={idx}
               onClick={() => setDiaAtual(idx)}
@@ -191,10 +191,10 @@ export const WeeklyMenuView: React.FC<WeeklyMenuViewProps> = ({ menu }) => {
   console.log('🍽️ Primeira receita:', menu.recipes[0]);
   
   // 🔍 Debug: Mostrar todas as categorias únicas encontradas
-  const categoriasEncontradas = [...new Set(menu.recipes.map(r => r.category))];
+  const categoriasEncontradas = [...new Set(menu.recipes.map((r: any) => r.category))];
   console.log('📋 Categorias encontradas no backend:', categoriasEncontradas);
   
-  const receitasPorDia = menu.recipes.reduce((acc: any, r) => {
+  const receitasPorDia = menu.recipes.reduce((acc: any, r: any) => {
     if (!acc[r.day]) acc[r.day] = {};
     
     // 🔧 Mapeia categoria do backend para código da UI
@@ -375,7 +375,7 @@ export const WeeklyMenuView: React.FC<WeeklyMenuViewProps> = ({ menu }) => {
 
       {/* Indicadores estilo Instagram */}
       <div className="flex justify-center gap-2 mt-4">
-        {diasSemanaAtual.map((_, idx) => (
+        {diasSemanaAtual.map((_: any, idx: number) => (
           <div
             key={idx}
             onClick={() => setDiaAtual(idx)}

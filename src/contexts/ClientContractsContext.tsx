@@ -217,10 +217,10 @@ export const ClientContractsProvider = ({ children }: { children: ReactNode }) =
       // Transform single record to match ContractClient interface usando dados reais
       return {
         id: data.id,
-        filial_id: data.filial_id,
-        nome_fantasia: data.nome_fantasia || `Filial ${data.filial_id}`,
-        razao_social: data.razao_social,
-        nome_filial: data.nome_filial,
+        filial_id: data.filial_id || 0,
+        nome_fantasia: data.nome_fantasia || `Filial ${data.filial_id || ''}`,
+        razao_social: data.razao_social || undefined,
+        nome_filial: data.nome_filial || undefined,
         tipo_refeicao: data.solicitacao_compra_tipo_descricao || 'REFEIÇÃO',
         custo_medio_diario: (
           Number(data.RefCustoSegunda || 0) + 
@@ -232,10 +232,10 @@ export const ClientContractsProvider = ({ children }: { children: ReactNode }) =
           Number(data.RefCustoDomingo || 0)
         ) / 7,
         custo_dia_especial: Number(data.RefCustoDiaEspecial || 0),
-        usa_validacao_media: data.QtdeRefeicoesUsarMediaValidarSimNao || false,
+        usa_validacao_media: !!data.QtdeRefeicoesUsarMediaValidarSimNao,
         limite_percentual_acima_media: Number(data.PorcentagemLimiteAcimaMedia || 0),
-        created_at: data.created_at,
-        updated_at: data.updated_at
+        created_at: data.created_at || new Date().toISOString(),
+        updated_at: data.updated_at || new Date().toISOString()
       };
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Erro ao buscar contrato do cliente';
@@ -270,7 +270,7 @@ export const ClientContractsProvider = ({ children }: { children: ReactNode }) =
       return (data || []).map(item => ({
         id: item.id,
         cliente_id_legado: item.cliente_id_legado || 0,
-        filial_id: item.filial_id,
+        filial_id: item.filial_id || 0,
         nome_filial: item.nome_filial || '',
         razao_social: item.razao_social || '',
         nome_fantasia: item.nome_fantasia || '',
@@ -284,16 +284,16 @@ export const ClientContractsProvider = ({ children }: { children: ReactNode }) =
         RefCustoSabado: Number(item.RefCustoSabado || 0),
         RefCustoDomingo: Number(item.RefCustoDomingo || 0),
         RefCustoDiaEspecial: Number(item.RefCustoDiaEspecial || 0),
-        QtdeRefeicoesUsarMediaValidarSimNao: item.QtdeRefeicoesUsarMediaValidarSimNao || false,
+        QtdeRefeicoesUsarMediaValidarSimNao: !!item.QtdeRefeicoesUsarMediaValidarSimNao,
         PorcentagemLimiteAcimaMedia: Number(item.PorcentagemLimiteAcimaMedia || 0),
-        solicitacao_filial_custo_id: item.solicitacao_filial_custo_id,
-        solicitacao_compra_tipo_id: item.solicitacao_compra_tipo_id,
+        solicitacao_filial_custo_id: item.solicitacao_filial_custo_id || 0,
+        solicitacao_compra_tipo_id: item.solicitacao_compra_tipo_id || 0,
         solicitacao_compra_tipo_descricao: item.solicitacao_compra_tipo_descricao || '',
         user_name: item.user_name || '',
         user_date_time: item.user_date_time || '',
-        sync_at: item.sync_at,
-        created_at: item.created_at,
-        updated_at: item.updated_at
+        sync_at: item.sync_at || '',
+        created_at: item.created_at || '',
+        updated_at: item.updated_at || ''
       }));
     } catch (err) {
       console.error('Erro ao buscar detalhes de custos do cliente:', err);

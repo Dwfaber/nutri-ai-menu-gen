@@ -4,6 +4,7 @@ import { TrendingUp, TrendingDown, DollarSign, Calendar } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { calculateWeeklyTotalFromDailyCosts, getTopExpensiveClients } from '@/utils/costCalculations';
+import { ClientCostDetails } from '@/types/clientCosts';
 
 interface CostAnalysis {
   totalCost: number;
@@ -13,6 +14,35 @@ interface CostAnalysis {
   costTrend: 'up' | 'down' | 'stable';
   topExpensiveClients: Array<{ name: string; cost: number; filial_id: number }>;
 }
+
+const toCCD = (row: any): ClientCostDetails => ({
+  id: row.id,
+  cliente_id_legado: row.cliente_id_legado || 0,
+  filial_id: row.filial_id || 0,
+  nome_filial: row.nome_filial || '',
+  razao_social: row.razao_social || '',
+  nome_fantasia: row.nome_fantasia || '',
+  custo_total: Number(row.custo_total || 0),
+  custo_medio_semanal: Number(row.custo_medio_semanal || 0),
+  RefCustoSegunda: Number(row.RefCustoSegunda || 0),
+  RefCustoTerca: Number(row.RefCustoTerca || 0),
+  RefCustoQuarta: Number(row.RefCustoQuarta || 0),
+  RefCustoQuinta: Number(row.RefCustoQuinta || 0),
+  RefCustoSexta: Number(row.RefCustoSexta || 0),
+  RefCustoSabado: Number(row.RefCustoSabado || 0),
+  RefCustoDomingo: Number(row.RefCustoDomingo || 0),
+  RefCustoDiaEspecial: Number(row.RefCustoDiaEspecial || 0),
+  QtdeRefeicoesUsarMediaValidarSimNao: !!row.QtdeRefeicoesUsarMediaValidarSimNao,
+  PorcentagemLimiteAcimaMedia: Number(row.PorcentagemLimiteAcimaMedia || 0),
+  solicitacao_filial_custo_id: row.solicitacao_filial_custo_id || 0,
+  solicitacao_compra_tipo_id: row.solicitacao_compra_tipo_id || 0,
+  solicitacao_compra_tipo_descricao: row.solicitacao_compra_tipo_descricao || '',
+  user_name: row.user_name || '',
+  user_date_time: row.user_date_time || '',
+  sync_at: row.sync_at || '',
+  created_at: row.created_at || '',
+  updated_at: row.updated_at || ''
+});
 
 const CostAnalysisCard = () => {
   const [analysis, setAnalysis] = useState<CostAnalysis | null>(null);
@@ -28,27 +58,28 @@ const CostAnalysisCard = () => {
         if (error) throw error;
 
         if (costData && costData.length > 0) {
+          const mapped = costData.map(toCCD);
           // Calculate total cost using daily costs instead of custo_total (which is 0.00)
-          const totalCost = costData.reduce((sum, cost) => sum + calculateWeeklyTotalFromDailyCosts(cost), 0);
-          const averageCost = totalCost / costData.length;
+          const totalCost = mapped.reduce((sum, cost) => sum + calculateWeeklyTotalFromDailyCosts(cost), 0);
+          const averageCost = totalCost / mapped.length;
 
           const costByDay = {
-            Segunda: costData.reduce((sum, cost) => sum + Number(cost.RefCustoSegunda || 0), 0) / costData.length,
-            Terça: costData.reduce((sum, cost) => sum + Number(cost.RefCustoTerca || 0), 0) / costData.length,
-            Quarta: costData.reduce((sum, cost) => sum + Number(cost.RefCustoQuarta || 0), 0) / costData.length,
-            Quinta: costData.reduce((sum, cost) => sum + Number(cost.RefCustoQuinta || 0), 0) / costData.length,
-            Sexta: costData.reduce((sum, cost) => sum + Number(cost.RefCustoSexta || 0), 0) / costData.length,
-            Sábado: costData.reduce((sum, cost) => sum + Number(cost.RefCustoSabado || 0), 0) / costData.length,
-            Domingo: costData.reduce((sum, cost) => sum + Number(cost.RefCustoDomingo || 0), 0) / costData.length,
+            Segunda: mapped.reduce((sum, cost) => sum + Number(cost.RefCustoSegunda || 0), 0) / mapped.length,
+            Terça: mapped.reduce((sum, cost) => sum + Number(cost.RefCustoTerca || 0), 0) / mapped.length,
+            Quarta: mapped.reduce((sum, cost) => sum + Number(cost.RefCustoQuarta || 0), 0) / mapped.length,
+            Quinta: mapped.reduce((sum, cost) => sum + Number(cost.RefCustoQuinta || 0), 0) / mapped.length,
+            Sexta: mapped.reduce((sum, cost) => sum + Number(cost.RefCustoSexta || 0), 0) / mapped.length,
+            Sábado: mapped.reduce((sum, cost) => sum + Number(cost.RefCustoSabado || 0), 0) / mapped.length,
+            Domingo: mapped.reduce((sum, cost) => sum + Number(cost.RefCustoDomingo || 0), 0) / mapped.length,
           };
 
-          const clientsAboveAverage = costData.filter(cost => calculateWeeklyTotalFromDailyCosts(cost) > averageCost).length;
+          const clientsAboveAverage = mapped.filter(cost => calculateWeeklyTotalFromDailyCosts(cost) > averageCost).length;
           
-          const topExpensiveClients = getTopExpensiveClients(costData, 5);
+          const topExpensiveClients = getTopExpensiveClients(mapped, 5);
 
           // Simple trend calculation based on daily costs
-          const recentCosts = costData.slice(0, Math.min(10, costData.length));
-          const oldCosts = costData.slice(-Math.min(10, costData.length));
+          const recentCosts = mapped.slice(0, Math.min(10, mapped.length));
+          const oldCosts = mapped.slice(-Math.min(10, mapped.length));
           const recentAvg = recentCosts.reduce((sum, cost) => sum + calculateWeeklyTotalFromDailyCosts(cost), 0) / recentCosts.length;
           const oldAvg = oldCosts.reduce((sum, cost) => sum + calculateWeeklyTotalFromDailyCosts(cost), 0) / oldCosts.length;
           

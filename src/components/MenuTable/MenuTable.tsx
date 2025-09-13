@@ -136,7 +136,7 @@ const MenuTable: React.FC<MenuTableProps> = ({
               {NEW_MENU_CATEGORIES.map((category, categoryIndex) => (
                 <tr key={category} className={categoryIndex % 2 === 0 ? 'bg-white' : 'bg-gray-25'}>
                   <td className="border border-gray-300 p-3 font-medium bg-gray-50">
-                    {CATEGORY_DISPLAY_NAMES[category] || category}
+                    {(CATEGORY_DISPLAY_NAMES as Record<string, string>)[category] || category}
                   </td>
                   {dynamicDays.map(day => {
                     const recipe = getRecipeForDayAndCategory(day, category);
@@ -154,7 +154,7 @@ const MenuTable: React.FC<MenuTableProps> = ({
                               <ul className="mt-1 space-y-0.5">
                                 {recipe.ingredients.slice(0, 3).map((ing, i) => (
                                   <li key={i} className="text-[11px] text-gray-500 truncate">
-                                    {ing.name}
+                                    {ig.name}
                                     {ing.quantity ? ` - ${Number(ing.quantity).toLocaleString('pt-BR')}` : ''}
                                     {ing.unit ? ` ${ing.unit}` : ''}
                                   </li>

@@ -20,7 +20,7 @@ const DAYS_ORDER = [
   'Domingo'
 ];
 
-const DAY_LABELS = {
+const DAY_LABELS: Record<string, string> = {
   'Segunda-feira': 'SEG',
   'Terça-feira': 'TER',
   'Quarta-feira': 'QUA', 
@@ -78,7 +78,7 @@ export const DayNavigator: React.FC<DayNavigatorProps> = ({
               day === currentDay && "bg-primary text-primary-foreground"
             )}
           >
-            {DAY_LABELS[day] || day.slice(0, 3).toUpperCase()}
+            {(DAY_LABELS as Record<string, string>)[day] || day.slice(0, 3).toUpperCase()}
           </Button>
         ))}
       </div>

@@ -304,11 +304,11 @@ export const VegetableIntelligencePanel: React.FC<VegetableIntelligencePanelProp
           <TabsContent value="rotation" className="space-y-4">
             {activeRecommendations?.weeklyRotation ? (
               <div className="space-y-3">
-                {Object.entries(activeRecommendations.weeklyRotation).map(([day, vegetables]: [string, VegetableInfo[]]) => (
+                {Object.entries(activeRecommendations.weeklyRotation as Record<string, VegetableInfo[]>).map(([day, vegetables]) => (
                   <div key={day} className="p-3 border rounded-lg">
                     <div className="font-medium text-sm mb-2 capitalize">{day}-feira</div>
                     <div className="flex flex-wrap gap-1">
-                      {vegetables.map(veg => (
+                      {vegetables.map((veg: VegetableInfo) => (
                         <Badge key={veg.id} variant="outline" className="text-xs">
                           {veg.name}
                         </Badge>
