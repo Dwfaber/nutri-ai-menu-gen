@@ -112,7 +112,10 @@ export function useSimplifiedMenuGeneration() {
     restrictions: string[],
     preferences: string[],
     juiceConfig?: any,
-    proteinGrams?: string
+    proteinGrams?: string,
+    periodDays: number = 5,
+    budgetPerMeal?: number,
+    selectedRecipes?: number[]
   ): Promise<GeneratedMenu | null> => {
     setIsGenerating(true);
     setError(null);
@@ -123,90 +126,86 @@ export function useSimplifiedMenuGeneration() {
         throw new Error('Nenhum cliente selecionado');
       }
 
-      const weekPeriod = period || `${format(new Date(), 'dd/MM/yyyy')} - ${format(addDays(new Date(), 6), 'dd/MM/yyyy')}`;
+      console.log('🎯 Iniciando geração com CostCalculator...', {
+        selectedClient: clientToUse?.id,
+        mealQuantity,
+        periodDays,
+        budgetPerMeal
+      });
 
-      // Step 1: Generate simple recipes with AI
-      console.log('🎯 Using client:', clientToUse);
-      
-      const recipes = await generateSimpleRecipes({
-        id: clientToUse.id,
-        cliente_id_legado: clientToUse.cliente_id_legado,
-        filial_id: clientToUse.filial_id,
-        nome: clientToUse.nome_fantasia || clientToUse.nome_empresa,
-        custo_maximo_refeicao: clientToUse.custo_maximo_refeicao || 15,
-        restricoes_alimentares: restrictions,
-        preferencias_alimentares: preferences
-      }, mealQuantity);
+      const weekPeriod = period || `${format(new Date(), 'dd/MM/yyyy')} - ${format(addDays(new Date(), periodDays - 1), 'dd/MM/yyyy')}`;
 
-      if (!recipes || !recipes.length) {
-        throw new Error('IA não conseguiu gerar receitas');
-      }
-
-      // Step 2: Calculate costs using Edge Function with juice config
-      const { data: costData, error: costError } = await supabase.functions.invoke('gpt-assistant', {
+      // Use CostCalculator for complete menu generation
+      const { data: response, error: menuError } = await supabase.functions.invoke('gpt-assistant', {
         body: {
-          action: 'calculate_recipes_cost',
-          recipes: recipes,
+          action: 'generate_menu_with_costs',
+          client_id: clientToUse.id,
+          clientId: clientToUse.cliente_id_legado,
+          filial_id: clientToUse.filial_id,
+          filialIdLegado: clientToUse.filial_id,
           mealQuantity: mealQuantity,
-          juice_config: juiceConfig,
-          protein_grams: proteinGrams
+          periodDays: periodDays,
+          budgetPerMeal: budgetPerMeal || clientToUse.custo_maximo_refeicao,
+          selectedRecipes: selectedRecipes,
+          client_data: clientToUse
         }
       });
 
-      if (costError) throw costError;
-      
-      const calculatedMenu = {
-        recipes: recipes,
-        totalCost: costData?.total_cost || 0,
-        costPerMeal: costData?.cost_per_meal || 0,
-        violatedIngredients: costData?.violated_ingredients || []
-      };
-
-      // Step 3: Validate business rules
-      const businessRules = validateMenu(calculatedMenu.recipes);
-      console.log('Business rules validation:', businessRules);
-
-      // Step 4: Check budget
-      const budgetLimit = clientToUse.custo_maximo_refeicao || 15;
-      if (calculatedMenu.costPerMeal > budgetLimit) {
-        toast({
-          title: "Atenção: Orçamento Excedido",
-          description: `Custo: R$ ${calculatedMenu.costPerMeal.toFixed(2)} | Limite: R$ ${budgetLimit.toFixed(2)}`,
-          variant: "destructive"
-        });
+      if (menuError) {
+        throw new Error(`Erro na geração: ${menuError.message}`);
       }
 
-      // Step 5: Create menu object
+      if (!response?.success) {
+        throw new Error(response?.error || 'Falha na geração do cardápio');
+      }
+
+      const menuResult = response.menuResult;
+      console.log('✅ MenuResult recebido:', menuResult);
+
+      // Extract recipes from MenuResult
+      const recipes = menuResult.receitas || [];
+      
+      if (!recipes.length) {
+        throw new Error("Nenhuma receita foi incluída no cardápio");
+      }
+
+      // Validate recipes against business rules
+      const businessRules = validateMenu(recipes);
+      console.log('Business rules validation:', businessRules);
+
+      // Build the GeneratedMenu object from MenuResult
       const menu: GeneratedMenu = {
         id: crypto.randomUUID(),
         clientId: clientToUse.id || clientToUse.cliente_id_legado,
         clientName: clientToUse.nome_fantasia || clientToUse.nome_empresa,
         weekPeriod,
         status: 'pending_approval',
-        totalCost: calculatedMenu.totalCost,
-        costPerMeal: calculatedMenu.costPerMeal,
-        totalRecipes: calculatedMenu.recipes.length,
-        recipes: calculatedMenu.recipes,
+        totalCost: menuResult.custo_total || 0,
+        costPerMeal: menuResult.custo_por_refeicao || 0,
+        totalRecipes: recipes.length,
+        recipes: recipes,
         createdAt: new Date().toISOString(),
-        menu: { 
-          calculated_locally: true,
+        menu: {
+          calculated_with_cost_calculator: true,
           business_rules: businessRules,
-          violations: calculatedMenu.violatedIngredients
+          shopping_list: menuResult.lista_compras || [],
+          budget_adherence: menuResult.aderencia_orcamento,
+          calculation_precision: menuResult.precisao_calculo,
+          savings_summary: menuResult.resumo_economia
         },
-        warnings: calculatedMenu.violatedIngredients.map((ing: any) => 
-          `Ingrediente não encontrado: ${ing.nome}`),
-        juiceMenu: costData?.juice_menu || null
+        warnings: menuResult.avisos || [],
+        juiceMenu: menuResult.cardapio_sucos || null
       };
 
-      // Step 6: Save to database
+      // Save to database
       const savedId = await saveMenuToDatabase(menu);
       if (savedId) {
         menu.id = savedId;
         setGeneratedMenu(menu);
 
         toast({
-          title: "Cardápio Gerado!",
-          description: `${calculatedMenu.recipes.length} receitas. Custo: R$ ${calculatedMenu.costPerMeal.toFixed(2)}/refeição`,
+          title: "Cardápio Gerado com CostCalculator!",
+          description: `${recipes.length} receitas. Custo: R$ ${(menuResult.custo_total || 0).toFixed(2)} total`,
         });
 
         return menu;

@@ -2,6 +2,7 @@
 
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
+import { generateMenu } from './cost-calculator.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -1679,6 +1680,81 @@ Deno.serve(async (req) => {
           }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
         );
+      }
+    }
+
+    // Handle CostCalculator integration
+    if (requestData.action === 'generate_menu_with_costs') {
+      console.log('🔄 Processando geração de cardápio com CostCalculator...');
+      
+      // Extract and validate data for cost calculation
+      const {
+        mealQuantity = 50,
+        periodDays = 5,
+        budgetPerMeal,
+        selectedRecipes = []
+      } = requestData;
+
+      // Extract client ID with fallback chain
+      const clientIdForCosts = requestData.client_id || 
+                              requestData.clientId || 
+                              requestData.filial_id || 
+                              requestData.filialIdLegado ||
+                              requestData.client_data?.id ||
+                              requestData.client_data?.cliente_id_legado;
+
+      if (!clientIdForCosts) {
+        console.error('❌ Nenhum ID de cliente fornecido para CostCalculator');
+        return new Response(JSON.stringify({
+          success: false,
+          error: 'ID do cliente é obrigatório para calcular custos',
+          details: 'Verifique se um cliente está selecionado'
+        }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
+      // Map client data to cost calculator format
+      const menuRequest = {
+        cliente: clientIdForCosts,
+        periodo_dias: periodDays,
+        refeicoes_por_dia: mealQuantity,
+        orcamento_por_refeicao: budgetPerMeal || 5.0,
+        receitas_fixas: [580, 581], // arroz e feijão sempre incluídos
+        receitas_sugeridas: selectedRecipes
+      };
+
+      console.log('📊 MenuRequest para CostCalculator:', JSON.stringify(menuRequest, null, 2));
+
+      try {
+        const menuResult = await generateMenu(menuRequest);
+        
+        console.log('✅ Menu gerado com CostCalculator:', {
+          totalCost: menuResult.custo_total,
+          recipes: menuResult.receitas?.length || 0,
+          warnings: menuResult.avisos?.length || 0
+        });
+
+        return new Response(JSON.stringify({
+          success: true,
+          menuResult: menuResult,
+          timestamp: new Date().toISOString(),
+          mode: 'cost_calculator'
+        }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+
+      } catch (error) {
+        console.error('❌ Erro ao gerar menu com CostCalculator:', error);
+        return new Response(JSON.stringify({
+          success: false,
+          error: 'Erro ao calcular custos do cardápio',
+          details: error.message
+        }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
       }
     }
 
