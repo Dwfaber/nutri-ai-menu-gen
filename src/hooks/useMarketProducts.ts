@@ -113,7 +113,7 @@ export const useMarketProducts = () => {
 
       // Transform data to use produto_base_id (legacy ID) as primary ID
       const productsData = (data || []).map(product => {
-        const produtoBase = produtosBaseMap.get(product.produto_base_id);
+        const produtoBase = produtosBaseMap.get(product.produto_base_id || 0);
         return {
           ...product,
           id: product.produto_base_id?.toString() || `temp-${product.solicitacao_produto_listagem_id}`, // Use legacy ID as primary ID
@@ -128,7 +128,14 @@ export const useMarketProducts = () => {
         };
       });
       
-      setProducts(productsData);
+      setProducts(productsData.map(p => ({
+        ...p,
+        solicitacao_id: p.solicitacao_id ?? undefined,
+        categoria_descricao: p.categoria_descricao ?? undefined,
+        grupo: p.grupo ?? undefined,
+        produto_id: p.produto_id ?? undefined,
+        preco: p.preco ?? undefined
+      })));
       
       // Extract unique categories
       const uniqueCategories = [...new Set(
@@ -136,7 +143,7 @@ export const useMarketProducts = () => {
           .map(p => p.categoria_descricao)
           .filter(Boolean)
       )].sort();
-      setCategories(uniqueCategories);
+      setCategories(uniqueCategories.filter((cat): cat is string => cat !== null));
 
       // Sistema carregado com sucesso
     } catch (err) {

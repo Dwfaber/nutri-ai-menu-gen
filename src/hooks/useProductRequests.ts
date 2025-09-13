@@ -44,7 +44,12 @@ export const useProductRequests = () => {
 
       if (error) throw error;
       
-      setRequests(data || []);
+      setRequests((data || []).map(item => ({
+        ...item,
+        solicitacao_id: item.solicitacao_id ?? undefined,
+        categoria_descricao: item.categoria_descricao ?? undefined,
+        grupo: item.grupo ?? undefined
+      })));
     } catch (err) {
       console.error('Error fetching product requests:', err);
       const errorMessage = err instanceof Error ? err.message : 'Erro ao carregar solicitações';
@@ -73,7 +78,12 @@ export const useProductRequests = () => {
 
       if (error) throw error;
       
-      setRequests([data, ...requests]);
+      setRequests([{
+        ...data,
+        solicitacao_id: data.solicitacao_id ?? undefined,
+        categoria_descricao: data.categoria_descricao ?? undefined,
+        grupo: data.grupo ?? undefined
+      }, ...requests]);
       
       toast({
         title: "Sucesso",

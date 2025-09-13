@@ -50,7 +50,10 @@ export const useJuiceConfiguration = () => {
         .order('produto_base_id');
 
       if (error) throw error;
-      setAvailableJuices(data || []);
+      setAvailableJuices((data || []).map(item => ({
+        ...item,
+        ativo: item.ativo ?? false
+      })));
     } catch (error) {
       console.error('Erro ao carregar sucos disponíveis:', error);
       toast({
@@ -158,7 +161,10 @@ export const useProteinConfiguration = () => {
         .order('tipo, subcategoria, nome');
 
       if (error) throw error;
-      setAvailableProteins(data || []);
+      setAvailableProteins((data || []).map(item => ({
+        ...item,
+        ativo: item.ativo ?? false
+      })));
     } catch (error) {
       console.error('Erro ao carregar proteínas disponíveis:', error);
       toast({

@@ -51,10 +51,17 @@ export const usePaginatedRequests = (options: PaginationOptions = {}) => {
         maxDelay: 8000
       });
 
+      const normalizedData = result.data.map((item: any) => ({
+        ...item,
+        solicitacao_id: item.solicitacao_id ?? undefined,
+        categoria_descricao: item.categoria_descricao ?? undefined,
+        grupo: item.grupo ?? undefined
+      }));
+      
       if (reset || page === 0) {
-        setRequests(result.data);
+        setRequests(normalizedData);
       } else {
-        setRequests(prev => [...prev, ...result.data]);
+        setRequests(prev => [...prev, ...normalizedData]);
       }
 
       setTotalCount(result.count);
@@ -113,7 +120,12 @@ export const usePaginatedRequests = (options: PaginationOptions = {}) => {
 
       const data = await withRetry(operation, { maxRetries: 2 });
       
-      setRequests(prev => [data, ...prev]);
+      setRequests(prev => [{
+        ...data,
+        solicitacao_id: data.solicitacao_id ?? undefined,
+        categoria_descricao: data.categoria_descricao ?? undefined,
+        grupo: data.grupo ?? undefined
+      }, ...prev]);
       setTotalCount(prev => prev + 1);
       
       toast({

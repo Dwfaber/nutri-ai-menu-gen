@@ -55,7 +55,7 @@ export const useHybridSync = () => {
       console.error(`Sync error for ${tableName}:`, error);
       toast({
         title: "Erro na Sincronização",
-        description: error.message || `Falha ao sincronizar ${tableName}`,
+        description: (error as Error)?.message || `Falha ao sincronizar ${tableName}`,
         variant: "destructive",
       });
       throw error;
@@ -106,7 +106,7 @@ export const useHybridSync = () => {
       console.error(`Backup error for ${tableName}:`, error);
       toast({
         title: "Erro no Backup",
-        description: error.message || `Falha ao criar backup de ${tableName}`,
+        description: (error as Error)?.message || `Falha ao criar backup de ${tableName}`,
         variant: "destructive",
       });
       throw error;
@@ -141,7 +141,7 @@ export const useHybridSync = () => {
       console.error(`Restore error for ${tableName}:`, error);
       toast({
         title: "Erro na Restauração",
-        description: error.message || `Falha ao restaurar backup de ${tableName}`,
+        description: (error as Error)?.message || `Falha ao restaurar backup de ${tableName}`,
         variant: "destructive",
       });
       throw error;
@@ -176,7 +176,7 @@ export const useHybridSync = () => {
       console.error(`Cleanup error for ${tableName}:`, error);
       toast({
         title: "Erro na Limpeza",
-        description: error.message || `Falha ao limpar registros órfãos de ${tableName}`,
+        description: (error as Error)?.message || `Falha ao limpar registros órfãos de ${tableName}`,
         variant: "destructive",
       });
       throw error;

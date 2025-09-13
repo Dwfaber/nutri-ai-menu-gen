@@ -154,7 +154,7 @@ const MenuTable: React.FC<MenuTableProps> = ({
                               <ul className="mt-1 space-y-0.5">
                                 {recipe.ingredients.slice(0, 3).map((ing, i) => (
                                   <li key={i} className="text-[11px] text-gray-500 truncate">
-                                    {ig.name}
+                                    {ing.name}
                                     {ing.quantity ? ` - ${Number(ing.quantity).toLocaleString('pt-BR')}` : ''}
                                     {ing.unit ? ` ${ing.unit}` : ''}
                                   </li>

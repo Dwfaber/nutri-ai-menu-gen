@@ -34,7 +34,6 @@ const IntegratedMenuGenerator = () => {
     clearGeneratedMenu,
     clearMenuExplicitly,
     error,
-    marketIngredients,
     violations,
     validateMenu,
     validateMenuAndSetViolations
@@ -254,8 +253,8 @@ const IntegratedMenuGenerator = () => {
                 rules={validationRules}
                 violations={violations}
                 marketAvailability={{
-                  totalIngredients: marketIngredients.length,
-                  availableIngredients: marketIngredients.length, // usamos o total para já alimentar
+                  totalIngredients: 0,
+                  availableIngredients: 0,
                   missingIngredients: []
                 }}
                 menuId={generatedMenu.id}

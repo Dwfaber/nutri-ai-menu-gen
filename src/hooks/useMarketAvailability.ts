@@ -59,7 +59,7 @@ export const useMarketAvailability = () => {
         disponivel: true
       })) || [];
 
-      setMarketIngredients(ingredients);
+      setMarketIngredients(ingredients.filter(ing => ing.produto_base_id !== null) as any[]);
       return ingredients;
     } catch (err) {
       console.error('Error fetching market ingredients:', err);
@@ -141,7 +141,12 @@ export const useMarketAvailability = () => {
         };
       }).filter(recipe => recipe.isViable) || [];
 
-      setViableRecipes(viable);
+      setViableRecipes(viable.map(r => ({
+        ...r,
+        categoria_descricao: r.categoria_descricao || '',
+        custo_total: r.custo_total || 0,
+        porcoes: r.porcoes || 1
+      })));
       return viable;
     } catch (err) {
       console.error('Error checking recipe viability:', err);
@@ -256,7 +261,7 @@ export const useMarketAvailability = () => {
           const baseServings = ingredient.quantidade_refeicoes || 1;
           // Calculate proportional quantity based on original servings, then apply scaling factor
           const proportionalQuantity = (baseQuantity / baseServings) * scalingFactor;
-          const packageQuantity = parseFloat(marketIngredient.produto_base_quantidade_embalagem?.toString()) || 1;
+          const packageQuantity = parseFloat(marketIngredient.produto_base_quantidade_embalagem?.toString() || '1') || 1;
           
           // Use promotion price if available
           const unitPrice = marketIngredient.em_promocao_sim_nao ? 
@@ -299,7 +304,16 @@ export const useMarketAvailability = () => {
     const initializeData = async () => {
       const ingredients = await fetchMarketIngredients();
       if (ingredients.length > 0) {
-        await checkRecipeViability(ingredients);
+        await checkRecipeViability(ingredients.filter(ing => ing.produto_base_id !== null).map(ing => ({
+          ...ing,
+          produto_base_id: ing.produto_base_id!,
+          descricao: ing.descricao || '',
+          categoria_descricao: ing.categoria_descricao || '',
+          unidade: ing.unidade || '',
+          preco: ing.preco || 0,
+          produto_base_quantidade_embalagem: ing.produto_base_quantidade_embalagem || 1,
+          em_promocao_sim_nao: ing.em_promocao_sim_nao || false
+        })));
       }
     };
 
