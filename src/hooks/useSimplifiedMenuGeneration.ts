@@ -161,16 +161,28 @@ export function useSimplifiedMenuGeneration() {
 
       const menuResult = response.menuResult;
       console.log('✅ MenuResult recebido:', menuResult);
+      console.log('🔍 Estrutura de receitas:', menuResult.receitas);
 
-      // Extract recipes from MenuResult
-      const recipes = menuResult.receitas || [];
+      // Extract and flatten recipes from MenuResult (fixas + principais + acompanhamentos)
+      const allRecipes = [
+        ...(menuResult?.receitas?.fixas || []),
+        ...(menuResult?.receitas?.principais || []),
+        ...(menuResult?.receitas?.acompanhamentos || []),
+      ];
+
+      console.log('📊 Receitas encontradas:', {
+        fixas: menuResult?.receitas?.fixas?.length || 0,
+        principais: menuResult?.receitas?.principais?.length || 0,
+        acompanhamentos: menuResult?.receitas?.acompanhamentos?.length || 0,
+        total: allRecipes.length
+      });
       
-      if (!recipes.length) {
+      if (!allRecipes.length) {
         throw new Error("Nenhuma receita foi incluída no cardápio");
       }
 
       // Validate recipes against business rules
-      const businessRules = validateMenu(recipes);
+      const businessRules = validateMenu(allRecipes);
       console.log('Business rules validation:', businessRules);
 
       // Build the GeneratedMenu object from MenuResult
@@ -180,18 +192,21 @@ export function useSimplifiedMenuGeneration() {
         clientName: clientToUse.nome_fantasia || clientToUse.nome_empresa,
         weekPeriod,
         status: 'pending_approval',
-        totalCost: menuResult.custo_total || 0,
-        costPerMeal: menuResult.custo_por_refeicao || 0,
-        totalRecipes: recipes.length,
-        recipes: recipes,
+        totalCost: menuResult.resumo_custos?.custo_total_calculado || 0,
+        costPerMeal: menuResult.resumo_custos?.custo_por_refeicao || 0,
+        totalRecipes: allRecipes.length,
+        recipes: allRecipes,
         createdAt: new Date().toISOString(),
         menu: {
           calculated_with_cost_calculator: true,
           business_rules: businessRules,
-          shopping_list: menuResult.lista_compras || [],
-          budget_adherence: menuResult.aderencia_orcamento,
-          calculation_precision: menuResult.precisao_calculo,
-          savings_summary: menuResult.resumo_economia
+          shopping_list: menuResult.lista_compras?.itens || [],
+          budget_adherence: menuResult.resumo_custos?.dentro_orcamento,
+          calculation_precision: menuResult.metadata?.precision_percentage,
+          savings_summary: {
+            economia_total: menuResult.resumo_custos?.economia_total,
+            economia_percentual: menuResult.resumo_custos?.economia_percentual,
+          }
         },
         warnings: menuResult.avisos || [],
         juiceMenu: menuResult.cardapio_sucos || null
@@ -205,7 +220,7 @@ export function useSimplifiedMenuGeneration() {
 
         toast({
           title: "Cardápio Gerado com CostCalculator!",
-          description: `${recipes.length} receitas. Custo: R$ ${(menuResult.custo_total || 0).toFixed(2)} total`,
+          description: `${allRecipes.length} receitas. Custo: R$ ${(menuResult.resumo_custos?.custo_total_calculado || 0).toFixed(2)} total`,
         });
 
         return menu;
