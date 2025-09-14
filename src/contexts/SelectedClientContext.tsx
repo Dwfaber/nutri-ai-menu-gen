@@ -34,9 +34,15 @@ export const SelectedClientProvider = ({ children }: { children: ReactNode }) =>
         const client = JSON.parse(stored);
         console.log('🔄 Loaded client from localStorage:', client);
         
-        // Validate that client has required IDs
+        // Validate that client has at least one valid identifier
+        if (!client.id && !client.cliente_id_legado && !client.nome_fantasia) {
+          console.warn('🚨 Cliente sem identificadores válidos será ignorado:', client);
+          localStorage.removeItem('selected-client');
+          return;
+        }
+        
         if (!client.id && !client.cliente_id_legado) {
-          console.warn('⚠️ Loaded client missing both id and cliente_id_legado:', client);
+          console.warn('⚠️ Cliente sem IDs específicos mas tem nome:', client.nome_fantasia);
         }
         
         setSelectedClientState(client);

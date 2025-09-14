@@ -61,6 +61,8 @@ export const ClientContractsProvider = ({ children }: { children: ReactNode }) =
       setIsLoading(true);
       setError(null);
 
+      console.log('🔄 Iniciando carregamento de clientes...', { searchTerm, limit });
+
       // Buscar dados otimizados da tabela custos_filiais
       let query = supabase
         .from('custos_filiais')
@@ -106,31 +108,61 @@ export const ClientContractsProvider = ({ children }: { children: ReactNode }) =
         throw fetchError;
       }
 
+      console.log('📊 Dados retornados da query:', { 
+        totalRecords: data?.length || 0,
+        firstRecord: data?.[0],
+        hasNomeFantasia: data?.filter(item => item.nome_fantasia).length || 0,
+        hasFilialId: data?.filter(item => item.filial_id !== null).length || 0
+      });
+
       // Transform data to match ContractClient interface - with null safety
       const transformedData: ContractClient[] = (data || [])
-        .filter(item => item.nome_fantasia || item.cliente_id_legado) // Filter out completely empty records
-        .map(item => ({
-          id: item.id,
-          filial_id: item.filial_id || 0,
-          nome_fantasia: item.nome_fantasia?.trim() || `Cliente ${item.cliente_id_legado || 'Sem ID'}`,
-          razao_social: item.razao_social?.trim() || undefined,
-          nome_filial: item.nome_filial?.trim() || `Filial ${item.filial_id || 'Sem ID'}`,
-          tipo_refeicao: item.solicitacao_compra_tipo_descricao?.trim() || 'REFEIÇÃO',
-          custo_medio_diario: (
-            Number(item.RefCustoSegunda || 0) + 
-            Number(item.RefCustoTerca || 0) + 
-            Number(item.RefCustoQuarta || 0) + 
-            Number(item.RefCustoQuinta || 0) + 
-            Number(item.RefCustoSexta || 0) + 
-            Number(item.RefCustoSabado || 0) + 
-            Number(item.RefCustoDomingo || 0)
-          ) / 7,
-          custo_dia_especial: Number(item.RefCustoDiaEspecial || 0),
-          usa_validacao_media: Boolean(item.QtdeRefeicoesUsarMediaValidarSimNao),
-          limite_percentual_acima_media: Number(item.PorcentagemLimiteAcimaMedia || 0),
-          created_at: item.created_at || new Date().toISOString(),
-          updated_at: item.updated_at || new Date().toISOString()
-        }));
+        .filter(item => {
+          // Relaxar validação - aceitar se tem nome_fantasia OU qualquer ID
+          const isValid = item.nome_fantasia || item.cliente_id_legado || item.id;
+          if (!isValid) {
+            console.log('❌ Cliente rejeitado por falta de identificadores:', item);
+          }
+          return isValid;
+        })
+        .map(item => {
+          const client = {
+            id: item.id,
+            filial_id: item.filial_id !== null ? item.filial_id : 0, // Garantir que seja número
+            nome_fantasia: item.nome_fantasia?.trim() || `Cliente ${item.cliente_id_legado || item.id || 'Sem ID'}`,
+            razao_social: item.razao_social?.trim() || undefined,
+            nome_filial: item.nome_filial?.trim() || `Filial ${item.filial_id || 0}`,
+            tipo_refeicao: item.solicitacao_compra_tipo_descricao?.trim() || 'REFEIÇÃO',
+            custo_medio_diario: (
+              Number(item.RefCustoSegunda || 0) + 
+              Number(item.RefCustoTerca || 0) + 
+              Number(item.RefCustoQuarta || 0) + 
+              Number(item.RefCustoQuinta || 0) + 
+              Number(item.RefCustoSexta || 0) + 
+              Number(item.RefCustoSabado || 0) + 
+              Number(item.RefCustoDomingo || 0)
+            ) / 7,
+            custo_dia_especial: Number(item.RefCustoDiaEspecial || 0),
+            usa_validacao_media: Boolean(item.QtdeRefeicoesUsarMediaValidarSimNao),
+            limite_percentual_acima_media: Number(item.PorcentagemLimiteAcimaMedia || 0),
+            created_at: item.created_at || new Date().toISOString(),
+            updated_at: item.updated_at || new Date().toISOString()
+          };
+          
+          console.log('✅ Cliente transformado:', { 
+            id: client.id, 
+            nome_fantasia: client.nome_fantasia, 
+            filial_id: client.filial_id 
+          });
+          
+          return client;
+        });
+
+      console.log('🔧 Clientes após transformação:', { 
+        total: transformedData.length,
+        validNames: transformedData.filter(c => c.nome_fantasia && c.nome_fantasia !== '').length,
+        validFilials: transformedData.filter(c => c.filial_id !== null && c.filial_id !== undefined).length
+      });
 
       // Para carregamento inicial, mostrar amostra diversificada por empresa
       let finalClients = transformedData;
@@ -146,10 +178,12 @@ export const ClientContractsProvider = ({ children }: { children: ReactNode }) =
             uniqueCompanies.set(companyKey, client);
           }
         });
-        // Limitar a 100 empresas diferentes para melhor performance inicial
-        finalClients = Array.from(uniqueCompanies.values()).slice(0, 100);
+        // Aumentar para 200 empresas para ter mais opções
+        finalClients = Array.from(uniqueCompanies.values()).slice(0, 200);
+        console.log('🏢 Empresas únicas selecionadas:', finalClients.length);
       }
 
+      console.log('✨ Clientes finais definidos no estado:', finalClients.length);
       setClients(finalClients);
 
       // Load cost details for each client

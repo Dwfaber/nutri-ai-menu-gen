@@ -15,14 +15,34 @@ const ClientSelectorDropdown = () => {
   const { selectedClient, setSelectedClient } = useSelectedClient();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
 
-  // Memoize valid clients to prevent unnecessary re-renders
+  // Debug logs
+  console.log('🔍 ClientSelectorDropdown - clients recebidos:', clients.length);
+  console.log('📋 Primeiros 3 clientes:', clients.slice(0, 3));
+
+  // Memoize valid clients with relaxed validation
   const validClients = useMemo(() => {
-    return clients.filter(client => 
-      client.nome_fantasia && 
-      client.nome_fantasia.trim() !== '' &&
-      client.filial_id !== null && 
-      client.filial_id !== undefined
-    );
+    const filtered = clients.filter(client => {
+      // Relaxar validação - aceitar se tem nome_fantasia válido
+      const hasValidName = client.nome_fantasia && client.nome_fantasia.trim() !== '';
+      const hasValidId = client.id || client.filial_id !== null;
+      
+      const isValid = hasValidName && hasValidId;
+      
+      if (!isValid) {
+        console.log('❌ Cliente filtrado:', { 
+          id: client.id, 
+          nome_fantasia: client.nome_fantasia, 
+          filial_id: client.filial_id,
+          hasValidName,
+          hasValidId
+        });
+      }
+      
+      return isValid;
+    });
+    
+    console.log('✅ Clientes válidos após filtro:', filtered.length);
+    return filtered;
   }, [clients]);
 
   const handleClientSelect = (clientId: string) => {
@@ -122,11 +142,27 @@ const ClientSelectorDropdown = () => {
               </DialogHeader>
               <div className="mt-4">
                 {validClients.length === 0 ? (
-                  <div className="text-center py-8">
+                  <div className="text-center py-8 space-y-4">
                     <AlertCircle className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
-                    <p className="text-muted-foreground">
-                      Nenhum cliente válido encontrado
-                    </p>
+                    <div className="space-y-2">
+                      <p className="text-muted-foreground">
+                        Nenhum cliente válido encontrado
+                      </p>
+                      <div className="text-xs text-muted-foreground bg-muted/50 p-3 rounded-lg">
+                        <p>Debug Info:</p>
+                        <p>Total de clientes carregados: {clients.length}</p>
+                        <p>Clientes com nome válido: {clients.filter(c => c.nome_fantasia && c.nome_fantasia.trim()).length}</p>
+                        <p>Clientes com filial_id: {clients.filter(c => c.filial_id !== null && c.filial_id !== undefined).length}</p>
+                      </div>
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        onClick={() => window.location.reload()}
+                        className="mt-2"
+                      >
+                        Recarregar Página
+                      </Button>
+                    </div>
                   </div>
                 ) : (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -144,7 +180,7 @@ const ClientSelectorDropdown = () => {
                               {client.nome_fantasia}
                             </CardTitle>
                             <Badge variant="outline" className="text-primary border-primary flex-shrink-0 ml-2">
-                              Filial {client.filial_id}
+                              {client.filial_id !== null && client.filial_id !== 0 ? `Filial ${client.filial_id}` : 'Filial 0'}
                             </Badge>
                           </div>
                         </CardHeader>
