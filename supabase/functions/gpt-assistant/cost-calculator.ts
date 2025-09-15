@@ -9,7 +9,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
 // ============= TIPOS E INTERFACES =============
 
 export interface RecipeIngredient {
-  receita_id_legado: number;
+  receita_id_legado: string; // CORRIGIDO: string para compatibilidade com DB
   nome: string; // Nome da receita
   produto_base_id: number;
   produto_base_descricao: string; // Nome do ingrediente
@@ -25,7 +25,7 @@ export interface MarketProduct {
   produto_base_quantidade_embalagem: number;
   apenas_valor_inteiro_sim_nao: boolean;
   em_promocao_sim_nao: boolean;
-  fornecedor_nome?: string;
+  // REMOVIDO: fornecedor_nome (campo não existe na tabela)
   unidade?: string;
 }
 
@@ -34,8 +34,8 @@ export interface MenuRequest {
   periodo_dias: number;
   refeicoes_por_dia: number;
   orcamento_por_refeicao: number;
-  receitas_fixas?: number[]; // IDs das receitas obrigatórias (arroz, feijão)
-  receitas_sugeridas?: number[]; // IDs de outras receitas desejadas
+  receitas_fixas?: string[]; // IDs das receitas obrigatórias (arroz, feijão) - CORRIGIDO: string[]
+  receitas_sugeridas?: string[]; // IDs de outras receitas desejadas - CORRIGIDO: string[]
 }
 
 export interface IngredientCost {
@@ -126,8 +126,8 @@ export interface MenuResult {
 // ============= CONSTANTES =============
 
 const RECIPE_IDS = {
-  ARROZ: 580,
-  FEIJAO: 581, // Assumindo ID do feijão
+  ARROZ: "580", // CORRIGIDO: string para compatibilidade
+  FEIJAO: "581", // CORRIGIDO: string para compatibilidade
 };
 
 const UNITS_CONVERSION = {
@@ -184,8 +184,10 @@ export class CostCalculator {
     
     for (const receitaId of receitasFixasIds) {
       try {
+        // CORRIGIDO: converter string para number para calculateRecipeCost
+        const receitaIdNumber = typeof receitaId === 'string' ? parseInt(receitaId) : receitaId;
         const custo = await this.calculateRecipeCost(
-          receitaId,
+          receitaIdNumber,
           request.refeicoes_por_dia,
           request.periodo_dias
         );
@@ -212,8 +214,10 @@ export class CostCalculator {
       
       for (const receitaId of request.receitas_sugeridas) {
         try {
+          // CORRIGIDO: converter string para number para calculateRecipeCost
+          const receitaIdNumber = typeof receitaId === 'string' ? parseInt(receitaId) : receitaId;
           const custo = await this.calculateRecipeCost(
-            receitaId,
+            receitaIdNumber,
             request.refeicoes_por_dia,
             request.periodo_dias
           );
@@ -395,7 +399,7 @@ export class CostCalculator {
         custo_total: custoTotal,
         custo_por_refeicao: custoUtilizado / refeicoesTotal,
         custo_utilizado: custoUtilizado,
-        fornecedor: bestPrice.fornecedor_nome || 'Fornecedor',
+        fornecedor: 'Fornecedor Padrão', // CORRIGIDO: campo removido da interface
         em_promocao: bestPrice.em_promocao_sim_nao,
         sobra: sobra,
         percentual_sobra: percentualSobra,
@@ -444,6 +448,10 @@ export class CostCalculator {
    * Busca ingredientes de uma receita
    */
   private async getRecipeIngredients(recipeId: number): Promise<RecipeIngredient[]> {
+    // CORRIGIDO: converter para string na query
+    const recipeIdString = recipeId.toString();
+    console.log(`🔍 Buscando ingredientes da receita ${recipeIdString}...`);
+    
     const { data, error } = await this.supabase
       .from('receita_ingredientes')
       .select(`
@@ -455,13 +463,14 @@ export class CostCalculator {
         unidade,
         categoria_descricao
       `)
-      .eq('receita_id_legado', recipeId);
+      .eq('receita_id_legado', recipeIdString);
     
     if (error) {
       console.error('Erro ao buscar ingredientes:', error);
       throw error;
     }
     
+    console.log(`📋 Encontrados ${data?.length || 0} ingredientes para receita ${recipeIdString}`);
     return data || [];
   }
 
@@ -469,6 +478,8 @@ export class CostCalculator {
    * Busca preços de mercado
    */
   private async getMarketPrices(productIds: number[]): Promise<MarketProduct[]> {
+    console.log(`💰 Buscando preços para ${productIds.length} produtos...`);
+    
     const { data, error } = await this.supabase
       .from('co_solicitacao_produto_listagem')
       .select(`
@@ -478,7 +489,6 @@ export class CostCalculator {
         produto_base_quantidade_embalagem,
         apenas_valor_inteiro_sim_nao,
         em_promocao_sim_nao,
-        fornecedor_nome,
         unidade
       `)
       .in('produto_base_id', productIds)
@@ -490,6 +500,7 @@ export class CostCalculator {
       throw error;
     }
     
+    console.log(`💵 Encontrados ${data?.length || 0} preços válidos`);
     return data || [];
   }
 
