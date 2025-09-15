@@ -189,7 +189,8 @@ export class CostCalculator {
         const custo = await this.calculateRecipeCost(
           receitaIdNumber,
           request.refeicoes_por_dia,
-          request.periodo_dias
+          request.periodo_dias,
+          request.orcamento_por_refeicao // CORRIGIDO: usar orçamento do cliente
         );
         receitasFixas.push(custo);
         console.log(`  ✅ ${custo.nome}: R$ ${custo.custo_por_porcao.toFixed(2)}/porção`);
@@ -219,7 +220,8 @@ export class CostCalculator {
           const custo = await this.calculateRecipeCost(
             receitaIdNumber,
             request.refeicoes_por_dia,
-            request.periodo_dias
+            request.periodo_dias,
+            orcamentoRestante // CORRIGIDO: usar orçamento restante para receitas principais
           );
           
           // Verificar se cabe no orçamento restante
@@ -328,7 +330,8 @@ export class CostCalculator {
   async calculateRecipeCost(
     recipeId: number,
     refeicoesTotal: number,
-    dias: number = 1
+    dias: number = 1,
+    budgetPerServing?: number
   ): Promise<RecipeCost> {
     const cacheKey = `recipe-${recipeId}-${refeicoesTotal}-${dias}`;
     
@@ -433,7 +436,7 @@ export class CostCalculator {
       ingredientes_sem_preco: ingredientesSemPreco,
       custo_total: totalCost,
       custo_por_porcao: totalCost / refeicoesTotal,
-      dentro_orcamento: (totalCost / refeicoesTotal) <= 9.00, // Usar orçamento padrão
+      dentro_orcamento: (totalCost / refeicoesTotal) <= (budgetPerServing || 9.00), // CORRIGIDO: usar orçamento dinâmico
       precisao_calculo: precisao,
       avisos: avisos
     };
@@ -657,7 +660,7 @@ export class CostCalculator {
       try {
         // CORRIGIDO: converter string para number para calculateRecipeCost
         const recipeIdNumber = parseInt(recipe.receita_id_legado, 10);
-        const cost = await this.calculateRecipeCost(recipeIdNumber, servings, 1);
+        const cost = await this.calculateRecipeCost(recipeIdNumber, servings, 1, maxCostPerServing); // CORRIGIDO: usar orçamento para validação
         if (cost.custo_por_porcao <= maxCostPerServing) {
           recipesWithinBudget.push(cost);
         }
@@ -683,10 +686,11 @@ export class CostCalculator {
 export async function calculateRecipeCost(
   recipeId: number,
   servings: number = 100,
-  days: number = 1
+  days: number = 1,
+  budgetPerServing?: number
 ): Promise<RecipeCost> {
   const calculator = new CostCalculator();
-  return await calculator.calculateRecipeCost(recipeId, servings, days);
+  return await calculator.calculateRecipeCost(recipeId, servings, days, budgetPerServing);
 }
 
 /**
