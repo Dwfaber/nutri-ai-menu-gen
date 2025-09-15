@@ -655,7 +655,9 @@ export class CostCalculator {
     
     for (const recipe of recipes || []) {
       try {
-        const cost = await this.calculateRecipeCost(recipe.receita_id_legado, servings, 1);
+        // CORRIGIDO: converter string para number para calculateRecipeCost
+        const recipeIdNumber = parseInt(recipe.receita_id_legado, 10);
+        const cost = await this.calculateRecipeCost(recipeIdNumber, servings, 1);
         if (cost.custo_por_porcao <= maxCostPerServing) {
           recipesWithinBudget.push(cost);
         }
