@@ -1,5 +1,103 @@
 import { ClientCostDetails } from "@/types/clientCosts";
 
+// ============= TIPOS PARA MENU GENERATION =============
+
+export interface MenuRequest {
+  cliente: string;
+  periodo_dias: number;
+  refeicoes_por_dia: number;
+  orcamento_por_refeicao: number;
+  receitas_fixas?: string[];
+  receitas_sugeridas?: string[];
+}
+
+export interface IngredientCost {
+  nome: string;
+  produto_base_id: number;
+  quantidade_necessaria: number;
+  quantidade_comprar: number;
+  unidade: string;
+  preco_unitario: number;
+  custo_total: number;
+  custo_por_refeicao: number;
+  custo_utilizado: number;
+  fornecedor: string;
+  em_promocao: boolean;
+  sobra: number;
+  percentual_sobra: number;
+  compra_inteira: boolean;
+}
+
+export interface RecipeCost {
+  receita_id: number;
+  nome: string;
+  categoria?: string;
+  porcoes_base: number;
+  porcoes_calculadas: number;
+  ingredientes: IngredientCost[];
+  ingredientes_sem_preco: string[];
+  custo_total: number;
+  custo_por_porcao: number;
+  dentro_orcamento: boolean;
+  precisao_calculo: number;
+  avisos: string[];
+}
+
+export interface ShoppingListItem {
+  produto_base_id: number;
+  nome: string;
+  quantidade_total: number;
+  unidade: string;
+  preco_unitario: number;
+  custo_total: number;
+  fornecedor: string;
+  em_promocao: boolean;
+  receitas: string[];
+  observacao?: string;
+}
+
+export interface MenuResult {
+  cliente: string;
+  periodo: string;
+  data_inicio: string;
+  data_fim: string;
+  total_refeicoes: number;
+  refeicoes_por_dia: number;
+  orcamento_total: number;
+  orcamento_por_refeicao: number;
+
+  receitas: {
+    fixas: RecipeCost[];
+    principais: RecipeCost[];
+    acompanhamentos: RecipeCost[];
+  };
+
+  resumo_custos: {
+    custo_total_calculado: number;
+    custo_por_refeicao: number;
+    economia_total: number;
+    economia_percentual: number;
+    dentro_orcamento: boolean;
+  };
+
+  lista_compras: {
+    itens: ShoppingListItem[];
+    total_itens: number;
+    custo_total: number;
+    itens_promocao: number;
+    economia_promocoes: number;
+  };
+
+  avisos: string[];
+  metadata: {
+    generated_at: string;
+    calculation_time_ms: number;
+    precision_percentage: number;
+  };
+}
+
+// ============= FUNÇÕES DE MÉTRICAS DE CUSTOS CONTRATUAIS =============
+
 /**
  * Calcula o custo semanal total a partir dos custos diários
  * Ignora o campo custo_total pois ele está sempre zerado nos registros
@@ -32,7 +130,6 @@ export const calculateAverageDailyCost = (
 
 /**
  * Retorna a contagem de clientes únicos usando filial_id
- * (já que cliente_id_legado é nulo)
  */
 export const getUniqueClientsCount = (
   costData: ClientCostDetails[]
@@ -100,7 +197,7 @@ export const calculateCostMetrics = (costData: ClientCostDetails[]) => {
 };
 
 /**
- * Calcula o custo contratual por refeição a partir do custo diário
+ * Calcula o custo contratual por refeição
  */
 export const calculateContractMealCost = (
   dailyCost: number,
@@ -111,7 +208,7 @@ export const calculateContractMealCost = (
 };
 
 /**
- * Retorna os clientes mais caros baseado no custo semanal total
+ * Retorna os clientes mais caros baseado no custo semanal
  */
 export const getTopExpensiveClients = (
   costData: ClientCostDetails[],
@@ -126,3 +223,67 @@ export const getTopExpensiveClients = (
     .sort((a, b) => b.cost - a.cost)
     .slice(0, limit);
 };
+
+// ============= GERAÇÃO DE MENU (PROXY PARA EDGE FUNCTION) =============
+
+/**
+ * Proxy do frontend → chama a Edge Function do Supabase
+ */
+export async function generateMenu(request: MenuRequest): Promise<MenuResult> {
+  console.log("🍽️ [Frontend] Chamando Edge Function para gerar menu:", request);
+
+  const response = await fetch("/functions/v1/gpt-assistant", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY}`,
+    },
+    body: JSON.stringify({
+      action: "generate_menu",
+      request,
+    }),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    console.error("❌ Erro na Edge Function:", errorText);
+    throw new Error(`Erro na geração do menu: ${response.statusText}`);
+  }
+
+  return response.json();
+}
+
+/**
+ * Calcula custo de uma receita específica (via Edge Function)
+ */
+export async function calculateRecipeCost(
+  recipeId: number,
+  servings: number = 100,
+  days: number = 1,
+  budgetPerServing?: number
+): Promise<RecipeCost> {
+  console.log("🧮 [Frontend] Calculando custo de receita:", { recipeId, servings, days });
+
+  const response = await fetch("/functions/v1/gpt-assistant", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY}`,
+    },
+    body: JSON.stringify({
+      action: "calculate_recipe_cost",
+      recipeId,
+      servings,
+      days,
+      budgetPerServing,
+    }),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    console.error("❌ Erro no cálculo de receita:", errorText);
+    throw new Error(`Erro no cálculo: ${response.statusText}`);
+  }
+
+  return response.json();
+}
