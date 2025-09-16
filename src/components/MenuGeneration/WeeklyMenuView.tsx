@@ -1,18 +1,14 @@
 import React, { useEffect, useState } from "react";
-import { generateMenu } from "@/utils/costCalculations"; // ✅ garante que o arquivo tenha esse nome
-import { GeneratedMenu } from "@/hooks/useIntegratedMenuGeneration";
+import { generateMenu, MenuResult } from "@/utils/costCalculations";
 import MenuTable from "@/components/MenuTable/MenuTable";
 import { Loader2 } from "lucide-react";
 
 export interface WeeklyMenuViewProps {
-  // modo geração
   clienteId?: string;
   periodoDias?: number;
   refeicoesPorDia?: number;
   orcamentoPorRefeicao?: number;
-
-  // modo renderização
-  menu?: GeneratedMenu;
+  menu?: MenuResult; // Pode receber menu já pronto
 }
 
 const WeeklyMenuView: React.FC<WeeklyMenuViewProps> = ({
@@ -22,22 +18,24 @@ const WeeklyMenuView: React.FC<WeeklyMenuViewProps> = ({
   orcamentoPorRefeicao = 7,
   menu,
 }) => {
-  const [generatedMenu, setGeneratedMenu] = useState<GeneratedMenu | null>(null);
+  const [generatedMenu, setGeneratedMenu] = useState<MenuResult | null>(null);
   const [loading, setLoading] = useState(false);
 
-  // 🔹 Se um menu pronto foi passado via prop → usa direto
+  // Caso já receba menu pronto (ex: vindo de Cardapios.tsx)
   if (menu) {
     return (
       <MenuTable
-        title={`Cardápio - ${menu.weekPeriod}`}
-        weekPeriod={menu.weekPeriod}
-        totalCost={menu.totalCost}
-        recipes={menu.recipes}
+        title={`Cardápio - ${menu.periodo}`}
+        weekPeriod={menu.periodo}
+        totalCost={menu.resumo_custos.custo_total_calculado}
+        costPerServing={menu.resumo_custos.custo_por_refeicao}
+        totalServings={menu.total_refeicoes}
+        recipes={menu.receitas}
       />
     );
   }
 
-  // 🔹 Se não veio menu, gera automaticamente
+  // Gera menu chamando Edge Function quando não recebe pronto
   useEffect(() => {
     const fetchMenu = async () => {
       if (!clienteId) return;
@@ -49,7 +47,7 @@ const WeeklyMenuView: React.FC<WeeklyMenuViewProps> = ({
           refeicoes_por_dia: refeicoesPorDia,
           orcamento_por_refeicao: orcamentoPorRefeicao,
         });
-        setGeneratedMenu(result as unknown as GeneratedMenu);
+        setGeneratedMenu(result);
       } catch (error) {
         console.error("Erro ao gerar cardápio:", error);
       } finally {
@@ -79,10 +77,12 @@ const WeeklyMenuView: React.FC<WeeklyMenuViewProps> = ({
 
   return (
     <MenuTable
-      title={`Cardápio - ${generatedMenu.weekPeriod}`}
-      weekPeriod={generatedMenu.weekPeriod}
-      totalCost={generatedMenu.totalCost}
-      recipes={generatedMenu.recipes}
+      title={`Cardápio - ${generatedMenu.periodo}`}
+      weekPeriod={generatedMenu.periodo}
+      totalCost={generatedMenu.resumo_custos.custo_total_calculado}
+      costPerServing={generatedMenu.resumo_custos.custo_por_refeicao}
+      totalServings={generatedMenu.total_refeicoes}
+      recipes={generatedMenu.receitas}
     />
   );
 };
