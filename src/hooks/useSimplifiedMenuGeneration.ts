@@ -166,7 +166,7 @@ export function useSimplifiedMenuGeneration() {
       console.log('🔍 Estrutura de receitas:', menuResult.receitas);
 
       // Extract and flatten recipes from MenuResult (fixas + principais + acompanhamentos)
-      const allRecipes = [
+      const allRecipesRaw = [
         ...(menuResult?.receitas?.fixas || []),
         ...(menuResult?.receitas?.principais || []),
         ...(menuResult?.receitas?.acompanhamentos || []),
@@ -176,8 +176,28 @@ export function useSimplifiedMenuGeneration() {
         fixas: menuResult?.receitas?.fixas?.length || 0,
         principais: menuResult?.receitas?.principais?.length || 0,
         acompanhamentos: menuResult?.receitas?.acompanhamentos?.length || 0,
-        total: allRecipes.length
+        total: allRecipesRaw.length
       });
+      
+      // Normalize recipes to UI-friendly format expected by WeeklyMenuView
+      const WEEK_DAYS = ['Segunda-feira','Terça-feira','Quarta-feira','Quinta-feira','Sexta-feira','Sábado','Domingo'];
+      const mapCategory = (nome: string = '', categoria: string = ''): string => {
+        if (/arroz/i.test(nome)) return 'Arroz Branco';
+        if (/feij[aã]o/i.test(nome)) return 'Feijão';
+        if (/guarni/i.test(nome)) return 'Guarnição';
+        if (/salada/i.test(nome)) return 'Salada 1';
+        if (/suco/i.test(nome)) return 'Suco 1';
+        if (/principal\s*1|pp1/i.test(categoria)) return 'PP1';
+        if (/principal\s*2|pp2/i.test(categoria)) return 'PP2';
+        return categoria || 'Outros';
+      };
+      const allRecipes = allRecipesRaw.map((r: any, idx: number) => ({
+        id: r.receita_id || r.receita_id_legado || r.id || idx,
+        name: r.nome || r.name || 'Item',
+        category: mapCategory(r.nome, r.categoria || r.category),
+        cost: Number(r.custo_por_porcao ?? r.custo_total ?? r.cost ?? 0),
+        day: r.day || WEEK_DAYS[idx % 5], // distribuir nos 5 dias úteis por padrão
+      }));
       
       if (!allRecipes.length) {
         throw new Error("Nenhuma receita foi incluída no cardápio");
