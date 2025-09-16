@@ -13,6 +13,7 @@ export interface SimpleMenuFormData {
   period: { start: string; end: string };
   mealsPerDay: number;
   estimatedMeals?: number;
+  budgetPerMeal?: number;
   preferences?: string[];
   juiceConfig?: any;
   proteinGrams?: string;
@@ -26,7 +27,6 @@ interface UseIntegratedMenuGenerationReturn {
   // generation
   generateMenuWithFormData: (formData: SimpleMenuFormData) => Promise<GeneratedMenu | null>;
   clearGeneratedMenu: () => void;
-  clearMenuExplicitly: () => void;
   // approvals
   approveMenu: (menuId: string, approverName: string) => Promise<boolean>;
   rejectMenu: (menuId: string, reason: string) => Promise<boolean>;
@@ -60,7 +60,7 @@ export function useIntegratedMenuGeneration(): UseIntegratedMenuGenerationReturn
     costPerMeal: Number(row.cost_per_meal || 0),
     totalRecipes: Number(row.total_recipes || 0),
     mealsPerDay: Number(row.meals_per_day || 50),
-    recipes: row.receitas_adaptadas || [],
+    recipes: row.recipes || [],
     createdAt: row.created_at,
     menu: row.menu_data || null,
     warnings: row.warnings || []
@@ -83,6 +83,7 @@ export function useIntegratedMenuGeneration(): UseIntegratedMenuGenerationReturn
 
   const generateMenuWithFormData = useCallback(async (formData: SimpleMenuFormData) => {
     const periodLabel = `${formData.period.start} - ${formData.period.end}`;
+    const periodDays = formData.diasUteis ? 5 : 7;
     const menu = await generateMenu(
       selectedClient,
       periodLabel,
@@ -90,7 +91,9 @@ export function useIntegratedMenuGeneration(): UseIntegratedMenuGenerationReturn
       [],
       formData.preferences || [],
       formData.juiceConfig,
-      formData.proteinGrams
+      formData.proteinGrams,
+      periodDays,
+      formData.budgetPerMeal
     );
     if (menu) {
       await loadSavedMenus();
@@ -133,7 +136,6 @@ export function useIntegratedMenuGeneration(): UseIntegratedMenuGenerationReturn
     error,
     generateMenuWithFormData,
     clearGeneratedMenu,
-    clearMenuExplicitly: () => clearGeneratedMenu(),
     approveMenu,
     rejectMenu,
     deleteGeneratedMenu,

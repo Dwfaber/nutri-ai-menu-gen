@@ -92,7 +92,7 @@ export function useSimplifiedMenuGeneration() {
           cost_per_meal: menu.costPerMeal,
           total_recipes: menu.totalRecipes,
           meals_per_day: menu.mealsPerDay || 50,
-          receitas_adaptadas: menu.recipes,
+          recipes: menu.recipes,
           menu_data: menu.menu,
           warnings: menu.warnings
         })

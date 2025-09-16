@@ -32,7 +32,6 @@ const IntegratedMenuGenerator = () => {
     rejectMenu,
     generateShoppingListFromMenu,
     clearGeneratedMenu,
-    clearMenuExplicitly,
     error,
     violations,
     validateMenu,
