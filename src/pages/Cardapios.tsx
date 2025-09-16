@@ -15,7 +15,7 @@ import { useIntegratedMenuGeneration, GeneratedMenu } from '../hooks/useIntegrat
 import { useJuiceConfiguration } from '../hooks/useJuiceConfiguration';
 import SyncMonitor from '../components/SyncMonitor/SyncMonitor';
 import IntegratedMenuGenerator from '../components/MenuGeneration/IntegratedMenuGenerator';
-import { WeeklyMenuView } from '../components/MenuGeneration/WeeklyMenuView';
+import WeeklyMenuView from '../components/MenuGeneration/WeeklyMenuView'; // ✅ CORRIGIDO (default export, sem {})
 
 const Cardapios = () => {
   const [searchTerm, setSearchTerm] = useState('');
@@ -247,7 +247,7 @@ const Cardapios = () => {
       <Dialog open={!!viewingMenu} onOpenChange={() => setViewingMenu(null)}>
         <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle>Visualizar Cardápio - {viewingMenu?.weekPeriod}</DialogTitle></DialogHeader>
-          {viewingMenu && <WeeklyMenuView menu={viewingMenu} />}
+          {viewingMenu && <WeeklyMenuView menu={viewingMenu} />} {/* ✅ WeeklyMenuView agora importa certo */}
         </DialogContent>
       </Dialog>
     </div>
