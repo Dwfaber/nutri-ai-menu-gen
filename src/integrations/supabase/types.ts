@@ -342,15 +342,18 @@ export type Database = {
           created_at: string
           id: string
           meals_per_day: number
+          menu_data: Json | null
           nutritionist_suggestions: Json | null
           receitas_adaptadas: Json | null
           receitas_ids: string[] | null
+          recipes: Json | null
           rejected_reason: string | null
           status: string
           total_cost: number
           total_recipes: number
           updated_at: string
           violation_notes: string | null
+          warnings: Json | null
           week_period: string
         }
         Insert: {
@@ -362,15 +365,18 @@ export type Database = {
           created_at?: string
           id?: string
           meals_per_day?: number
+          menu_data?: Json | null
           nutritionist_suggestions?: Json | null
           receitas_adaptadas?: Json | null
           receitas_ids?: string[] | null
+          recipes?: Json | null
           rejected_reason?: string | null
           status?: string
           total_cost?: number
           total_recipes?: number
           updated_at?: string
           violation_notes?: string | null
+          warnings?: Json | null
           week_period: string
         }
         Update: {
@@ -382,15 +388,18 @@ export type Database = {
           created_at?: string
           id?: string
           meals_per_day?: number
+          menu_data?: Json | null
           nutritionist_suggestions?: Json | null
           receitas_adaptadas?: Json | null
           receitas_ids?: string[] | null
+          recipes?: Json | null
           rejected_reason?: string | null
           status?: string
           total_cost?: number
           total_recipes?: number
           updated_at?: string
           violation_notes?: string | null
+          warnings?: Json | null
           week_period?: string
         }
         Relationships: []

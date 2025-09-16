@@ -19,6 +19,7 @@ export interface GeneratedMenu {
   totalCost: number;
   costPerMeal: number;
   totalRecipes: number;
+  mealsPerDay?: number;
   recipes: any[];
   createdAt: string;
   menu?: any;
@@ -90,12 +91,13 @@ export function useSimplifiedMenuGeneration() {
           total_cost: menu.totalCost,
           cost_per_meal: menu.costPerMeal,
           total_recipes: menu.totalRecipes,
-          recipes: menu.recipes,
+          meals_per_day: menu.mealsPerDay || 50,
+          receitas_adaptadas: menu.recipes,
           menu_data: menu.menu,
           warnings: menu.warnings
         })
         .select('id')
-        .single();
+        .maybeSingle();
 
       if (error) throw error;
       return data?.id || null;
@@ -195,6 +197,7 @@ export function useSimplifiedMenuGeneration() {
         totalCost: menuResult.resumo_custos?.custo_total_calculado || 0,
         costPerMeal: menuResult.resumo_custos?.custo_por_refeicao || 0,
         totalRecipes: allRecipes.length,
+        mealsPerDay: mealQuantity,
         recipes: allRecipes,
         createdAt: new Date().toISOString(),
         menu: {

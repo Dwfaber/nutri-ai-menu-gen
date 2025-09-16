@@ -59,10 +59,11 @@ export function useIntegratedMenuGeneration(): UseIntegratedMenuGenerationReturn
     totalCost: Number(row.total_cost || 0),
     costPerMeal: Number(row.cost_per_meal || 0),
     totalRecipes: Number(row.total_recipes || 0),
-    recipes: (row as any).recipes || (row.receitas_adaptadas as any) || [],
+    mealsPerDay: Number(row.meals_per_day || 50),
+    recipes: row.receitas_adaptadas || [],
     createdAt: row.created_at,
-    menu: (row as any).menu_data || null,
-    warnings: (row as any).warnings || []
+    menu: row.menu_data || null,
+    warnings: row.warnings || []
   });
 
   const loadSavedMenus = useCallback(async () => {
