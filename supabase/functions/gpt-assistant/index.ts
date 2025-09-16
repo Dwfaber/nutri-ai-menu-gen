@@ -1721,7 +1721,7 @@ Deno.serve(async (req) => {
         periodo_dias: periodDays,
         refeicoes_por_dia: mealQuantity,
         orcamento_por_refeicao: budgetPerMeal || 5.0,
-        receitas_fixas: [580, 581], // arroz e feijão sempre incluídos
+        receitas_fixas: [580, 1600], // arroz e feijão sempre incluídos
         receitas_sugeridas: selectedRecipes
       };
 
