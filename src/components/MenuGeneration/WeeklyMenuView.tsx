@@ -1,14 +1,18 @@
 import React, { useEffect, useState } from "react";
-import { gerarSemanas, preencherReceitasSugeridas } from "@/utils/weekGenerator";
-import { generateMenu } from "@/utils/costCalculations";
+import { generateMenu } from "@/utils/costCalculations"; // ✅ garante que o arquivo tenha esse nome
+import { GeneratedMenu } from "@/hooks/useIntegratedMenuGeneration";
 import MenuTable from "@/components/MenuTable/MenuTable";
+import { Loader2 } from "lucide-react";
 
-// Interface do componente
-interface WeeklyMenuViewProps {
-  clienteId: string;
+export interface WeeklyMenuViewProps {
+  // modo geração
+  clienteId?: string;
   periodoDias?: number;
   refeicoesPorDia?: number;
   orcamentoPorRefeicao?: number;
+
+  // modo renderização
+  menu?: GeneratedMenu;
 }
 
 const WeeklyMenuView: React.FC<WeeklyMenuViewProps> = ({
@@ -16,75 +20,69 @@ const WeeklyMenuView: React.FC<WeeklyMenuViewProps> = ({
   periodoDias = 5,
   refeicoesPorDia = 50,
   orcamentoPorRefeicao = 7,
+  menu,
 }) => {
-  const [loading, setLoading] = useState(true);
-  const [recipes, setRecipes] = useState<any[]>([]);
-  const [totalCost, setTotalCost] = useState(0);
-  const [weekPeriod, setWeekPeriod] = useState("");
+  const [generatedMenu, setGeneratedMenu] = useState<GeneratedMenu | null>(null);
+  const [loading, setLoading] = useState(false);
 
+  // 🔹 Se um menu pronto foi passado via prop → usa direto
+  if (menu) {
+    return (
+      <MenuTable
+        title={`Cardápio - ${menu.weekPeriod}`}
+        weekPeriod={menu.weekPeriod}
+        totalCost={menu.totalCost}
+        recipes={menu.recipes}
+      />
+    );
+  }
+
+  // 🔹 Se não veio menu, gera automaticamente
   useEffect(() => {
-    const gerarMenu = async () => {
+    const fetchMenu = async () => {
+      if (!clienteId) return;
+      setLoading(true);
       try {
-        // 1. Gera estrutura de semana
-        const semanas = gerarSemanas(
-          new Date(),
-          new Date(Date.now() + (periodoDias - 1) * 86400000),
-          false
-        );
-
-        // 2. Preenche receitas sugeridas automaticamente
-        const receitas_sugeridas = await preencherReceitasSugeridas(semanas);
-
-        // 3. Chama CostCalculator
-        const menuResult = await generateMenu({
+        const result = await generateMenu({
           cliente: clienteId,
           periodo_dias: periodoDias,
           refeicoes_por_dia: refeicoesPorDia,
           orcamento_por_refeicao: orcamentoPorRefeicao,
-          receitas_fixas: ["580", "1600"], // ✅ arroz e feijão
-          receitas_sugeridas: receitas_sugeridas.map((r) => r.id.toString()), // ✅ proteínas, saladas, guarnições, sucos
         });
-
-        // 4. Transforma para formato que MenuTable entende
-        const recipesMapped = [
-          ...(menuResult.receitas.fixas || []),
-          ...(menuResult.receitas.principais || []),
-          ...(menuResult.receitas.acompanhamentos || []),
-        ].map((r: any) => ({
-          id: r.receita_id,
-          name: r.nome,
-          category: r.categoria,
-          day: "Segunda-feira", // FIXME: integrar o dia real baseado no weekGenerator
-          cost: r.custo_por_porcao,
-          servings: r.porcoes_calculadas,
-          ingredients: r.ingredientes?.map((i: any) => ({
-            name: i.nome,
-            quantity: i.quantidade_necessaria,
-            unit: i.unidade,
-          })),
-        }));
-
-        setRecipes(recipesMapped);
-        setTotalCost(menuResult.resumo_custos.custo_total_calculado);
-        setWeekPeriod(`${menuResult.data_inicio} - ${menuResult.data_fim}`);
-      } catch (err) {
-        console.error("❌ Erro ao gerar cardápio:", err);
+        setGeneratedMenu(result as unknown as GeneratedMenu);
+      } catch (error) {
+        console.error("Erro ao gerar cardápio:", error);
       } finally {
         setLoading(false);
       }
     };
 
-    gerarMenu();
+    fetchMenu();
   }, [clienteId, periodoDias, refeicoesPorDia, orcamentoPorRefeicao]);
 
-  if (loading) return <div>Carregando cardápio...</div>;
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center p-8 text-gray-500">
+        <Loader2 className="w-6 h-6 mr-2 animate-spin" />
+        Gerando cardápio...
+      </div>
+    );
+  }
+
+  if (!generatedMenu) {
+    return (
+      <div className="p-8 text-center text-gray-500">
+        Nenhum cardápio disponível
+      </div>
+    );
+  }
 
   return (
     <MenuTable
-      title="Cardápio Semanal"
-      weekPeriod={weekPeriod}
-      totalCost={totalCost}
-      recipes={recipes}
+      title={`Cardápio - ${generatedMenu.weekPeriod}`}
+      weekPeriod={generatedMenu.weekPeriod}
+      totalCost={generatedMenu.totalCost}
+      recipes={generatedMenu.recipes}
     />
   );
 };
