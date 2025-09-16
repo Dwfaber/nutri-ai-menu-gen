@@ -1,6 +1,8 @@
 import { ClientCostDetails } from "@/types/clientCosts";
 
-// ============= TIPOS PARA MENU GENERATION =============
+// ========================================================
+// TIPOS PARA MENU GENERATION
+// ========================================================
 
 export interface MenuRequest {
   cliente: string;
@@ -96,12 +98,10 @@ export interface MenuResult {
   };
 }
 
-// ============= FUNÇÕES DE MÉTRICAS DE CUSTOS CONTRATUAIS =============
+// ========================================================
+// FUNÇÕES DE MÉTRICAS CONTRATUAIS
+// ========================================================
 
-/**
- * Calcula o custo semanal total a partir dos custos diários
- * Ignora o campo custo_total pois ele está sempre zerado nos registros
- */
 export const calculateWeeklyTotalFromDailyCosts = (
   costData: ClientCostDetails
 ): number => {
@@ -118,9 +118,6 @@ export const calculateWeeklyTotalFromDailyCosts = (
   return dailyCosts.reduce((sum, cost) => sum + cost, 0);
 };
 
-/**
- * Calcula o custo diário médio a partir dos custos diários
- */
 export const calculateAverageDailyCost = (
   costData: ClientCostDetails
 ): number => {
@@ -128,18 +125,12 @@ export const calculateAverageDailyCost = (
   return weeklyTotal / 7;
 };
 
-/**
- * Retorna a contagem de clientes únicos usando filial_id
- */
 export const getUniqueClientsCount = (
   costData: ClientCostDetails[]
 ): number => {
   return new Set(costData.map((c) => c.filial_id)).size;
 };
 
-/**
- * Calcula métricas agregadas de custos para vários registros de clientes
- */
 export const calculateCostMetrics = (costData: ClientCostDetails[]) => {
   if (!costData || costData.length === 0) {
     return {
@@ -157,16 +148,13 @@ export const calculateCostMetrics = (costData: ClientCostDetails[]) => {
     };
   }
 
-  // Total semanal somando todos os clientes
   const totalWeeklyCost = costData.reduce(
     (sum, cost) => sum + calculateWeeklyTotalFromDailyCosts(cost),
     0
   );
 
-  // Média por cliente
   const averageCostPerClient = totalWeeklyCost / costData.length;
 
-  // Custos totais por dia
   const totalDailyCosts = costData.reduce(
     (acc, cost) => {
       acc.segunda += Number(cost.RefCustoSegunda) || 0;
@@ -196,9 +184,6 @@ export const calculateCostMetrics = (costData: ClientCostDetails[]) => {
   };
 };
 
-/**
- * Calcula o custo contratual por refeição
- */
 export const calculateContractMealCost = (
   dailyCost: number,
   mealsPerDay: number = 1
@@ -207,9 +192,6 @@ export const calculateContractMealCost = (
   return dailyCost / mealsPerDay;
 };
 
-/**
- * Retorna os clientes mais caros baseado no custo semanal
- */
 export const getTopExpensiveClients = (
   costData: ClientCostDetails[],
   limit: number = 5
@@ -224,19 +206,18 @@ export const getTopExpensiveClients = (
     .slice(0, limit);
 };
 
-// ============= GERAÇÃO DE MENU (PROXY PARA EDGE FUNCTION) =============
+// ========================================================
+// PROXY PARA EDGE FUNCTION (MENU GENERATION)
+// ========================================================
 
-/**
- * Proxy do frontend → chama a Edge Function do Supabase
- */
 export async function generateMenu(request: MenuRequest): Promise<MenuResult> {
-  console.log("🍽️ [Frontend] Chamando Edge Function para gerar menu:", request);
+  console.log("🍽️ [Frontend] Chamando Edge Function:", request);
 
   const response = await fetch("/functions/v1/gpt-assistant", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "Authorization": `Bearer ${process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY}`,
+      Authorization: `Bearer ${process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY}`,
     },
     body: JSON.stringify({
       action: "generate_menu",
@@ -253,22 +234,23 @@ export async function generateMenu(request: MenuRequest): Promise<MenuResult> {
   return response.json();
 }
 
-/**
- * Calcula custo de uma receita específica (via Edge Function)
- */
 export async function calculateRecipeCost(
   recipeId: number,
   servings: number = 100,
   days: number = 1,
   budgetPerServing?: number
 ): Promise<RecipeCost> {
-  console.log("🧮 [Frontend] Calculando custo de receita:", { recipeId, servings, days });
+  console.log("🧮 [Frontend] Calculando custo de receita:", {
+    recipeId,
+    servings,
+    days,
+  });
 
   const response = await fetch("/functions/v1/gpt-assistant", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "Authorization": `Bearer ${process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY}`,
+      Authorization: `Bearer ${process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY}`,
     },
     body: JSON.stringify({
       action: "calculate_recipe_cost",
