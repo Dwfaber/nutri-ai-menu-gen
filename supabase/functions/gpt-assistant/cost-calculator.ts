@@ -1,7 +1,7 @@
 /**
- * Cost Calculator Module
+ * Cost Calculator Module - DEBUG VERSION
  * Sistema de cálculo de custos para cardápios e geração de lista de compras
- * @version 2.0.0
+ * @version 2.0.0-DEBUG
  */
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
@@ -158,6 +158,12 @@ export class CostCalculator {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
     this.cache = new Map();
+    
+    // 🔍 DEBUG: Verificar configuração do Supabase
+    console.log(`🔧 [DEBUG] Supabase configurado:`, {
+      url: Deno.env.get('SUPABASE_URL') ? 'OK' : 'MISSING',
+      key: Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ? 'OK' : 'MISSING'
+    });
   }
 
   /**
@@ -165,37 +171,65 @@ export class CostCalculator {
    */
   async generateOptimizedMenu(request: MenuRequest): Promise<MenuResult> {
     const startTime = Date.now();
-    console.log(`🍽️ Iniciando geração para cliente: ${request.cliente}`);
+    console.log(`🍽️ [DEBUG] Iniciando geração para cliente: ${request.cliente}`);
+    console.log(`📋 [DEBUG] Request completo:`, JSON.stringify(request, null, 2));
 
     const totalRefeicoes = request.refeicoes_por_dia * request.periodo_dias;
     const orcamentoTotal = totalRefeicoes * request.orcamento_por_refeicao;
 
     // === RECEITAS FIXAS (Arroz + Feijão) ===
     const receitasFixasIds = request.receitas_fixas || [RECIPE_IDS.ARROZ, RECIPE_IDS.FEIJAO];
+    console.log(`🍚 [DEBUG] IDs receitas fixas:`, receitasFixasIds);
+    
     const receitasFixas: RecipeCost[] = [];
 
     for (const receitaId of receitasFixasIds) {
+      console.log(`🔄 [DEBUG] Processando receita fixa: ${receitaId}`);
       try {
         const receitaIdNumber = parseInt(receitaId, 10);
+        console.log(`🔢 [DEBUG] ID convertido para número: ${receitaIdNumber}`);
+        
         const custo = await this.calculateRecipeCost(
           receitaIdNumber,
           request.refeicoes_por_dia,
           request.periodo_dias,
           request.orcamento_por_refeicao
         );
+        
+        console.log(`💰 [DEBUG] Custo calculado:`, {
+          id: receitaIdNumber,
+          nome: custo.nome,
+          custo_total: custo.custo_total,
+          custo_por_porcao: custo.custo_por_porcao,
+          ingredientes_count: custo.ingredientes.length,
+          ingredientes_sem_preco: custo.ingredientes_sem_preco.length
+        });
+        
         receitasFixas.push(custo);
       } catch (err) {
-        console.error(`❌ Erro ao calcular receita fixa ${receitaId}:`, err.message);
+        console.error(`❌ [DEBUG] Erro ao calcular receita fixa ${receitaId}:`, err.message);
+        console.error(`❌ [DEBUG] Stack trace:`, err.stack);
       }
     }
+    
+    console.log(`✅ [DEBUG] Receitas fixas processadas: ${receitasFixas.length}`);
 
     // Orçamento restante por refeição depois das fixas
     const custoFixoTotalPorRefeicao = receitasFixas.reduce((sum, r) => sum + r.custo_por_porcao, 0);
     const orcamentoRestante = Math.max(0, request.orcamento_por_refeicao - custoFixoTotalPorRefeicao);
 
+    console.log(`💵 [DEBUG] Orçamento:`, {
+      total: orcamentoTotal,
+      por_refeicao: request.orcamento_por_refeicao,
+      custo_fixo_por_refeicao: custoFixoTotalPorRefeicao,
+      restante: orcamentoRestante
+    });
+
     // === RECEITAS PRINCIPAIS (sugeridas) ===
     const receitasPrincipais: RecipeCost[] = [];
     if (request.receitas_sugeridas?.length) {
+      console.log(`🍖 [DEBUG] Processando receitas principais:`, request.receitas_sugeridas);
+      
       for (const receitaId of request.receitas_sugeridas) {
         try {
           const receitaIdNumber = parseInt(receitaId, 10);
@@ -207,13 +241,15 @@ export class CostCalculator {
           );
           if (custo.dentro_orcamento) receitasPrincipais.push(custo);
         } catch (err) {
-          console.error(`❌ Erro ao calcular receita principal ${receitaId}:`, err.message);
+          console.error(`❌ [DEBUG] Erro ao calcular receita principal ${receitaId}:`, err.message);
         }
       }
     }
 
     // === CONSOLIDAR LISTA DE COMPRAS ===
     const todasReceitas = [...receitasFixas, ...receitasPrincipais];
+    console.log(`📊 [DEBUG] Total de receitas para lista de compras: ${todasReceitas.length}`);
+    
     const listaCompras = await this.consolidateShoppingList(todasReceitas, request.periodo_dias);
 
     const custoTotalCalculado = todasReceitas.reduce((sum, r) => sum + r.custo_total, 0);
@@ -226,6 +262,16 @@ export class CostCalculator {
       (sum, r) => sum + r.ingredientes.filter(i => i.preco_unitario > 0).length, 0
     );
     const precisaoGeral = totalIngredientes > 0 ? (ingredientesComPreco / totalIngredientes) * 100 : 0;
+
+    console.log(`📈 [DEBUG] Resumo final:`, {
+      receitas_fixas: receitasFixas.length,
+      receitas_principais: receitasPrincipais.length,
+      custo_total: custoTotalCalculado,
+      custo_por_refeicao: custoPorRefeicao,
+      economia: economia,
+      precisao: precisaoGeral,
+      lista_compras_itens: listaCompras.length
+    });
 
     // === RESULTADO FINAL ===
     return {
@@ -280,29 +326,51 @@ export class CostCalculator {
     dias: number = 1,
     budgetPerServing?: number
   ): Promise<RecipeCost> {
+    console.log(`🧮 [DEBUG] Calculando custo receita ${recipeId} para ${refeicoesTotal} refeições em ${dias} dias`);
+    
     const cacheKey = `recipe-${recipeId}-${refeicoesTotal}-${dias}`;
-    if (this.cache.has(cacheKey)) return this.cache.get(cacheKey);
+    if (this.cache.has(cacheKey)) {
+      console.log(`📦 [DEBUG] Usando cache para receita ${recipeId}`);
+      return this.cache.get(cacheKey);
+    }
 
     const ingredients = await this.getRecipeIngredients(recipeId);
-    if (!ingredients.length) throw new Error(`Receita ${recipeId} não encontrada`);
+    console.log(`🥕 [DEBUG] Ingredientes encontrados: ${ingredients.length}`);
+    
+    if (!ingredients.length) {
+      console.error(`❌ [DEBUG] FALHA CRÍTICA: Receita ${recipeId} sem ingredientes`);
+      throw new Error(`Receita ${recipeId} não encontrada`);
+    }
 
     const nomeReceita = ingredients[0]?.nome || `Receita ${recipeId}`;
     const categoria = ingredients[0]?.categoria_descricao || 'Outros';
+    console.log(`📝 [DEBUG] Nome da receita: ${nomeReceita}, Categoria: ${categoria}`);
 
     const ids = [...new Set(ingredients.map(i => i.produto_base_id))];
+    console.log(`🛒 [DEBUG] IDs de produtos únicos: ${ids.length} (${ids.join(', ')})`);
+    
     const marketPrices = await this.getMarketPrices(ids);
+    console.log(`💲 [DEBUG] Preços encontrados no mercado: ${marketPrices.length}`);
 
     const ingredientCosts: IngredientCost[] = [];
     const semPreco: string[] = [];
     let totalCost = 0;
 
     for (const ing of ingredients) {
+      console.log(`🔍 [DEBUG] Processando ingrediente: ${ing.produto_base_descricao} (ID: ${ing.produto_base_id})`);
+      
       const options = marketPrices.filter(p => p.produto_base_id === ing.produto_base_id);
+      console.log(`💰 [DEBUG] Opções de preço encontradas: ${options.length}`);
+      
       if (!options.length) {
+        console.warn(`⚠️ [DEBUG] Sem preço para: ${ing.produto_base_descricao}`);
         semPreco.push(ing.produto_base_descricao);
         continue;
       }
+      
       const bestPrice = this.selectBestPrice(options);
+      console.log(`✅ [DEBUG] Melhor preço selecionado: R$ ${bestPrice.preco} (promoção: ${bestPrice.em_promocao_sim_nao})`);
+      
       const fator = refeicoesTotal / this.PORCOES_PADRAO;
       const qtdNec = ing.quantidade * fator;
       const qtdComprar = this.calculatePurchaseQuantity(
@@ -313,6 +381,15 @@ export class CostCalculator {
       );
       const custoTotal = qtdComprar * bestPrice.preco;
       const custoUtilizado = (qtdNec / qtdComprar) * custoTotal;
+
+      console.log(`📊 [DEBUG] Cálculo ingrediente:`, {
+        nome: ing.produto_base_descricao,
+        qtd_necessaria: qtdNec,
+        qtd_comprar: qtdComprar,
+        preco_unitario: bestPrice.preco,
+        custo_total: custoTotal,
+        custo_utilizado: custoUtilizado
+      });
 
       ingredientCosts.push({
         nome: ing.produto_base_descricao,
@@ -333,6 +410,9 @@ export class CostCalculator {
 
       totalCost += custoUtilizado;
     }
+
+    console.log(`💵 [DEBUG] Custo total da receita ${nomeReceita}: R$ ${totalCost}`);
+    console.log(`⚠️ [DEBUG] Ingredientes sem preço: ${semPreco.length} (${semPreco.join(', ')})`);
 
     const result: RecipeCost = {
       receita_id: recipeId,
@@ -356,22 +436,54 @@ export class CostCalculator {
   /** === Funções de apoio abaixo === **/
 
   private async getRecipeIngredients(recipeId: number): Promise<RecipeIngredient[]> {
+    console.log(`🔍 [DEBUG] Buscando ingredientes para receita ID: ${recipeId}`);
+    
     const { data, error } = await this.supabase
       .from('receita_ingredientes')
       .select('*')
       .eq('receita_id_legado', recipeId.toString());
-    if (error) throw error;
+      
+    console.log(`📊 [DEBUG] Query result:`, { 
+      recipeId, 
+      found: data?.length || 0, 
+      error: error?.message,
+      firstItem: data?.[0] 
+    });
+    
+    if (error) {
+      console.error(`❌ [DEBUG] Erro na query ingredientes:`, error);
+      throw error;
+    }
+    
+    if (!data || data.length === 0) {
+      console.warn(`⚠️ [DEBUG] Nenhum ingrediente encontrado para receita ${recipeId}`);
+    }
+    
     return data || [];
   }
 
   private async getMarketPrices(ids: number[]): Promise<MarketProduct[]> {
+    console.log(`💲 [DEBUG] Buscando preços para ${ids.length} produtos: [${ids.join(', ')}]`);
+    
     const { data, error } = await this.supabase
       .from('co_solicitacao_produto_listagem')
       .select('*')
       .in('produto_base_id', ids)
       .gt('preco', 0)
       .order('preco', { ascending: true });
-    if (error) throw error;
+      
+    console.log(`📊 [DEBUG] Preços encontrados:`, {
+      produtos_buscados: ids.length,
+      precos_encontrados: data?.length || 0,
+      error: error?.message,
+      sample: data?.slice(0, 3)
+    });
+    
+    if (error) {
+      console.error(`❌ [DEBUG] Erro na query preços:`, error);
+      throw error;
+    }
+    
     return data || [];
   }
 
@@ -393,6 +505,8 @@ export class CostCalculator {
   }
 
   private async consolidateShoppingList(recipes: RecipeCost[], days: number): Promise<ShoppingListItem[]> {
+    console.log(`🛒 [DEBUG] Consolidando lista de compras para ${recipes.length} receitas`);
+    
     const grouped = new Map<number, ShoppingListItem>();
     for (const r of recipes) {
       for (const ing of r.ingredientes) {
@@ -417,7 +531,11 @@ export class CostCalculator {
         }
       }
     }
-    return Array.from(grouped.values());
+    
+    const result = Array.from(grouped.values());
+    console.log(`✅ [DEBUG] Lista de compras consolidada: ${result.length} itens únicos`);
+    
+    return result;
   }
 
   clearCache() { this.cache.clear(); }
