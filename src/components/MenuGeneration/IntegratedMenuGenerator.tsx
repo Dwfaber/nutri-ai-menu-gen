@@ -9,7 +9,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { ChefHat, Calendar, CheckCircle, XCircle, ShoppingCart, DollarSign, Users, Plus, Wifi, WifiOff } from 'lucide-react';
 import { useIntegratedMenuGeneration } from '@/hooks/useIntegratedMenuGeneration';
 import { useSelectedClient } from '@/contexts/SelectedClientContext';
-import { WeeklyMenuView } from '@/components/MenuGeneration/WeeklyMenuView';
+import WeeklyMenuView from "@/components/MenuGeneration/WeeklyMenuView";
 import { SimpleMenuForm, SimpleMenuFormData } from '@/components/MenuGeneration/SimpleMenuForm';
 import MenuValidationPanel from '@/components/MenuGeneration/MenuValidationPanel';
 import { testEdgeFunctionConnectivity, testMenuGeneration } from '@/utils/edgeFunctionTest';
