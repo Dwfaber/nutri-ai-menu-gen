@@ -5,7 +5,6 @@
 import { useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-// Removed useMenuCalculation - using optimized Edge Function instead
 import { useSelectedClient } from '@/contexts/SelectedClientContext';
 import { useMenuBusinessRules } from './useMenuBusinessRules';
 import { format, addDays } from 'date-fns';
@@ -32,7 +31,6 @@ export function useSimplifiedMenuGeneration() {
   const [generatedMenu, setGeneratedMenu] = useState<GeneratedMenu | null>(null);
   const [error, setError] = useState<string | null>(null);
   const { selectedClient } = useSelectedClient();
-  // Using optimized Edge Function instead of local calculations
   const { validateMenu, violations } = useMenuBusinessRules();
   const { toast } = useToast();
 
@@ -44,7 +42,6 @@ export function useSimplifiedMenuGeneration() {
       filialId: clientData?.filial_id
     });
 
-    // Validate client data before sending
     if (!clientData?.id && !clientData?.cliente_id_legado) {
       throw new Error('Cliente inválido: ID não encontrado');
     }
@@ -137,7 +134,7 @@ export function useSimplifiedMenuGeneration() {
 
       const weekPeriod = period || `${format(new Date(), 'dd/MM/yyyy')} - ${format(addDays(new Date(), periodDays - 1), 'dd/MM/yyyy')}`;
 
-      // Use CostCalculator for complete menu generation
+      // ✅ IDs fixos corrigidos: Arroz (580), Feijão (1600)
       const { data: response, error: menuError } = await supabase.functions.invoke('gpt-assistant', {
         body: {
           action: 'generate_menu_with_costs',
@@ -148,6 +145,7 @@ export function useSimplifiedMenuGeneration() {
           mealQuantity: mealQuantity,
           periodDays: periodDays,
           budgetPerMeal: budgetPerMeal || clientToUse.custo_maximo_refeicao,
+          receitas_fixas: [580, 1600],
           selectedRecipes: selectedRecipes,
           client_data: clientToUse
         }
@@ -162,10 +160,14 @@ export function useSimplifiedMenuGeneration() {
       }
 
       const menuResult = response.menuResult;
-      console.log('✅ MenuResult recebido:', menuResult);
-      console.log('🔍 Estrutura de receitas:', menuResult.receitas);
+      console.log('✅ MenuResult recebido:', {
+        custoTotal: menuResult.resumo_custos?.custo_total_calculado,
+        custoPorRefeicao: menuResult.resumo_custos?.custo_por_refeicao,
+        receitasFixas: menuResult.receitas?.fixas?.length,
+        receitasPrincipais: menuResult.receitas?.principais?.length,
+      });
 
-      // Extract and flatten recipes from MenuResult (fixas + principais + acompanhamentos)
+      // === Flatten receitas
       const allRecipesRaw = [
         ...(menuResult?.receitas?.fixas || []),
         ...(menuResult?.receitas?.principais || []),
@@ -178,36 +180,55 @@ export function useSimplifiedMenuGeneration() {
         acompanhamentos: menuResult?.receitas?.acompanhamentos?.length || 0,
         total: allRecipesRaw.length
       });
-      
-      // Normalize recipes to UI-friendly format expected by WeeklyMenuView
+
+      // === Categorias para UI
       const WEEK_DAYS = ['Segunda-feira','Terça-feira','Quarta-feira','Quinta-feira','Sexta-feira','Sábado','Domingo'];
+
       const mapCategory = (nome: string = '', categoria: string = ''): string => {
-        if (/arroz/i.test(nome)) return 'Arroz Branco';
-        if (/feij[aã]o/i.test(nome)) return 'Feijão';
-        if (/guarni/i.test(nome)) return 'Guarnição';
-        if (/salada/i.test(nome)) return 'Salada 1';
-        if (/suco/i.test(nome)) return 'Suco 1';
-        if (/principal\s*1|pp1/i.test(categoria)) return 'PP1';
-        if (/principal\s*2|pp2/i.test(categoria)) return 'PP2';
+        const lowerNome = nome.toLowerCase();
+        const lowerCat = categoria.toLowerCase();
+
+        if (lowerNome.includes('arroz')) return 'Arroz Branco';
+        if (lowerNome.includes('feij')) return 'Feijão';
+        if (lowerNome.includes('guarni') || lowerCat.includes('guarni')) return 'Guarnição';
+        if (lowerNome.includes('salada 2') || lowerCat.includes('salada 2')) return 'Salada 2';
+        if (lowerNome.includes('salada')) return 'Salada 1';
+        if (lowerNome.includes('suco 2') || lowerCat.includes('suco 2')) return 'Suco 2';
+        if (lowerNome.includes('suco')) return 'Suco 1';
+        if (lowerNome.includes('sobremesa') || lowerCat.includes('sobremesa')) return 'Sobremesa';
+        if (lowerCat.includes('principal 1') || lowerCat.includes('pp1')) return 'PP1';
+        if (lowerCat.includes('principal 2') || lowerCat.includes('pp2')) return 'PP2';
+
         return categoria || 'Outros';
       };
-      const allRecipes = allRecipesRaw.map((r: any, idx: number) => ({
-        id: r.receita_id || r.receita_id_legado || r.id || idx,
-        name: r.nome || r.name || 'Item',
-        category: mapCategory(r.nome, r.categoria || r.category),
-        cost: Number(r.custo_por_porcao ?? r.custo_total ?? r.cost ?? 0),
-        day: r.day || WEEK_DAYS[idx % 5], // distribuir nos 5 dias úteis por padrão
-      }));
-      
+
+      // === Normalização de receitas
+      const allRecipes = allRecipesRaw.map((r: any, idx: number) => {
+        const custo = Number(r.custo_por_porcao ?? r.custo_total ?? r.cost ?? 0);
+        const warnings: string[] = [];
+
+        if (custo > (budgetPerMeal || clientToUse.custo_maximo_refeicao) * 5) {
+          warnings.push(`⚠️ Custo fora da realidade: R$ ${custo.toFixed(2)}/porção`);
+        }
+
+        return {
+          id: r.receita_id || r.receita_id_legado || r.id || idx,
+          name: r.nome || r.name || 'Item',
+          category: mapCategory(r.nome, r.categoria || r.category),
+          cost: custo,
+          warnings,
+          day: r.day || WEEK_DAYS[idx % 5],
+        };
+      });
+
       if (!allRecipes.length) {
         throw new Error("Nenhuma receita foi incluída no cardápio");
       }
 
-      // Validate recipes against business rules
+      // === Validação contra regras de negócio
       const businessRules = validateMenu(allRecipes);
-      console.log('Business rules validation:', businessRules);
 
-      // Build the GeneratedMenu object from MenuResult
+      // === Resultado final
       const menu: GeneratedMenu = {
         id: crypto.randomUUID(),
         clientId: clientToUse.id || clientToUse.cliente_id_legado,
@@ -231,11 +252,14 @@ export function useSimplifiedMenuGeneration() {
             economia_percentual: menuResult.resumo_custos?.economia_percentual,
           }
         },
-        warnings: menuResult.avisos || [],
+        warnings: [
+          ...(menuResult.avisos || []),
+          ...allRecipes.flatMap(r => r.warnings || [])
+        ],
         juiceMenu: menuResult.cardapio_sucos || null
       };
 
-      // Save to database
+      // === Salvar no banco
       const savedId = await saveMenuToDatabase(menu);
       if (savedId) {
         menu.id = savedId;
@@ -243,7 +267,7 @@ export function useSimplifiedMenuGeneration() {
 
         toast({
           title: "Cardápio Gerado com CostCalculator!",
-          description: `${allRecipes.length} receitas. Custo: R$ ${(menuResult.resumo_custos?.custo_total_calculado || 0).toFixed(2)} total`,
+          description: `${allRecipes.length} receitas. Custo: R$ ${(menu.totalCost || 0).toFixed(2)} total`,
         });
 
         return menu;
@@ -254,13 +278,13 @@ export function useSimplifiedMenuGeneration() {
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido';
       setError(errorMessage);
-      
+
       toast({
         title: "Erro ao gerar cardápio",
         description: errorMessage,
         variant: "destructive"
       });
-      
+
       return null;
     } finally {
       setIsGenerating(false);
@@ -271,7 +295,7 @@ export function useSimplifiedMenuGeneration() {
     isGenerating,
     generatedMenu,
     error,
-    progress: null, // Edge Function handles progress internally
+    progress: null,
     generateMenu,
     clearGeneratedMenu: () => setGeneratedMenu(null),
     clearError: () => setError(null)
