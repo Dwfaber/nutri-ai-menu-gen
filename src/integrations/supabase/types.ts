@@ -627,6 +627,7 @@ export type Database = {
           custo_total: number | null
           id: string
           inativa: boolean
+          ingredientes: Json
           modo_preparo: string | null
           nome_receita: string
           porcoes: number | null
@@ -644,6 +645,7 @@ export type Database = {
           custo_total?: number | null
           id?: string
           inativa?: boolean
+          ingredientes?: Json
           modo_preparo?: string | null
           nome_receita: string
           porcoes?: number | null
@@ -661,6 +663,7 @@ export type Database = {
           custo_total?: number | null
           id?: string
           inativa?: boolean
+          ingredientes?: Json
           modo_preparo?: string | null
           nome_receita?: string
           porcoes?: number | null
