@@ -231,7 +231,7 @@ export async function generateMenu(request: MenuRequest): Promise<MenuResult> {
       Authorization: `Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind6YmhoaW9lZ3hkcGVnaXJnbGJxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTI1MDA0MDUsImV4cCI6MjA2ODA3NjQwNX0.ufwv_XD8LZ2SGMPYUy7Z-CkK2GRNx8mailJb6ZRZHXQ`,
     },
     body: JSON.stringify({
-      action: "generate_menu",
+      action: "generate_menu_with_costs",
       request,
     }),
   });
@@ -242,7 +242,11 @@ export async function generateMenu(request: MenuRequest): Promise<MenuResult> {
     throw new Error(`Erro na geração do menu: ${response.statusText}`);
   }
 
-  return response.json();
+  const json = await response.json();
+  if (!json?.success) {
+    throw new Error(json?.error || 'Falha na geração do cardápio');
+  }
+  return json.menuResult as MenuResult;
 }
 
 export async function calculateRecipeCost(

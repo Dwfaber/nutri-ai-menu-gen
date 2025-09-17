@@ -134,10 +134,10 @@ export function useSimplifiedMenuGeneration() {
 
       const weekPeriod = period || `${format(new Date(), 'dd/MM/yyyy')} - ${format(addDays(new Date(), periodDays - 1), 'dd/MM/yyyy')}`;
 
-      // Use the full menu generation logic
+      // Use the cost-calculator path that returns menuResult consistently
       const { data: response, error: menuError } = await supabase.functions.invoke('gpt-assistant', {
         body: {
-          action: 'generate_menu',
+          action: 'generate_menu_with_costs',
           client_id: clientToUse.id,
           clientId: clientToUse.cliente_id_legado,
           filial_id: clientToUse.filial_id,
