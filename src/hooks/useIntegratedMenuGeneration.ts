@@ -67,13 +67,24 @@ export function useIntegratedMenuGeneration(): UseIntegratedMenuGenerationReturn
   });
 
   const loadSavedMenus = useCallback(async () => {
-    const { data, error } = await supabase
-      .from('generated_menus')
-      .select('*')
-      .order('created_at', { ascending: false });
+    try {
+      const { data, error } = await supabase
+        .from('generated_menus')
+        .select('*')
+        .order('created_at', { ascending: false });
 
-    if (!error && data) {
-      setSavedMenus(data.map(mapRowToMenu));
+      if (error) {
+        console.error('❌ Error loading saved menus:', error);
+        setSavedMenus([]);
+        return;
+      }
+
+      const mappedMenus = data?.map(mapRowToMenu) || [];
+      setSavedMenus(mappedMenus);
+      console.log('📋 Loaded saved menus:', mappedMenus.length);
+    } catch (error) {
+      console.error('❌ Error loading saved menus:', error);
+      setSavedMenus([]);
     }
   }, []);
 

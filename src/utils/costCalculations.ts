@@ -9,8 +9,8 @@ export interface MenuRequest {
   periodo_dias: number;
   refeicoes_por_dia: number;
   orcamento_por_refeicao: number;
-  receitas_fixas?: string[];
-  receitas_sugeridas?: string[];
+  receitas_fixas?: (string | number)[];
+  receitas_sugeridas?: (string | number)[];
 }
 
 export interface IngredientCost {
@@ -213,11 +213,11 @@ export const getTopExpensiveClients = (
 export async function generateMenu(request: MenuRequest): Promise<MenuResult> {
   console.log("🍽️ [Frontend] Chamando Edge Function:", request);
 
-  const response = await fetch("/functions/v1/gpt-assistant", {
+  const response = await fetch("https://wzbhhioegxdpegirglbq.supabase.co/functions/v1/gpt-assistant", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY}`,
+      Authorization: `Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind6YmhoaW9lZ3hkcGVnaXJnbGJxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTI1MDA0MDUsImV4cCI6MjA2ODA3NjQwNX0.ufwv_XD8LZ2SGMPYUy7Z-CkK2GRNx8mailJb6ZRZHXQ`,
     },
     body: JSON.stringify({
       action: "generate_menu",
@@ -246,11 +246,11 @@ export async function calculateRecipeCost(
     days,
   });
 
-  const response = await fetch("/functions/v1/gpt-assistant", {
+  const response = await fetch("https://wzbhhioegxdpegirglbq.supabase.co/functions/v1/gpt-assistant", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY}`,
+      Authorization: `Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind6YmhoaW9lZ3hkcGVnaXJnbGJxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTI1MDA0MDUsImV4cCI6MjA2ODA3NjQwNX0.ufwv_XD8LZ2SGMPYUy7Z-CkK2GRNx8mailJb6ZRZHXQ`,
     },
     body: JSON.stringify({
       action: "calculate_recipe_cost",

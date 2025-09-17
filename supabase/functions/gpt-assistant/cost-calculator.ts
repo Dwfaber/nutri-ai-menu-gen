@@ -11,8 +11,8 @@ export interface MenuRequest {
   periodo_dias: number;
   refeicoes_por_dia: number;
   orcamento_por_refeicao: number;
-  receitas_fixas?: string[];
-  receitas_sugeridas?: string[];
+  receitas_fixas?: (string | number)[];
+  receitas_sugeridas?: (string | number)[];
 }
 
 export interface IngredientCost {
@@ -116,20 +116,23 @@ export class CostCalculator {
     // -------------------
     // (1) Pega receitas fixas (ex.: arroz, feijão)
     // -------------------
-    const receitasFixas: RecipeCost[] = (request.receitas_fixas || []).map((nome, idx) => ({
-      receita_id: idx + 1,
-      nome,
-      categoria: mapCategoria(nome),
-      porcoes_base: 100,
-      porcoes_calculadas: request.refeicoes_por_dia * request.periodo_dias,
-      ingredientes: [],
-      ingredientes_sem_preco: [],
-      custo_total: 0,
-      custo_por_porcao: 0,
-      dentro_orcamento: true,
-      precisao_calculo: 100,
-      avisos: []
-    }));
+    const receitasFixas: RecipeCost[] = (request.receitas_fixas || []).map((item, idx) => {
+      const nome = String(item); // Convert to string safely
+      return {
+        receita_id: idx + 1,
+        nome,
+        categoria: mapCategoria(nome),
+        porcoes_base: 100,
+        porcoes_calculadas: request.refeicoes_por_dia * request.periodo_dias,
+        ingredientes: [],
+        ingredientes_sem_preco: [],
+        custo_total: 0,
+        custo_por_porcao: 0,
+        dentro_orcamento: true,
+        precisao_calculo: 100,
+        avisos: []
+      };
+    });
 
     // -------------------
     // (2) Suponha que "principais" sejam sempre vazios (exemplo)
@@ -209,6 +212,11 @@ export async function generateMenu(request: MenuRequest): Promise<MenuResult> {
 // Helper simples para categorizar receitas
 // ======================================
 function mapCategoria(nome: string): string {
+  if (!nome || typeof nome !== 'string') {
+    console.warn('⚠️ mapCategoria received invalid input:', nome);
+    return "Outros";
+  }
+  
   const n = nome.toLowerCase();
   if (n.includes("arroz")) return "Arroz Branco";
   if (n.includes("feijão")) return "Feijão";
