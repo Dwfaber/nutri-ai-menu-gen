@@ -74,6 +74,15 @@ export function gerarSemanas(
 const CATEGORIAS_PRINCIPAIS = ["PROTEÍNA", "PRATO PRINCIPAL", "PP1", "PP2"];
 const CATEGORIAS_ACOMPANHAMENTOS = ["GUARNIÇÃO", "SALADA 1", "SALADA 2", "SUCO 1", "SUCO 2", "SOBREMESA"];
 
+// Helper: detectar "Fruta da Estação" (variações com/sem acento/plural)
+function isSeasonalFruit(text?: string) {
+  const n = (text || '')
+    .normalize('NFD')
+    .replace(/\p{Diacritic}/gu, '')
+    .toLowerCase();
+  return n.includes('fruta da estacao') || n.includes('frutas da estacao');
+}
+
 /**
  * Buscar todas as receitas disponíveis no banco (pode otimizar por categoria)
  */
@@ -118,7 +127,8 @@ export async function preencherReceitasSugeridas(
       const suco1 = receitasDisponiveis.find(r => r.categoria_descricao?.toUpperCase() === "SUCO 1");
       const suco2 = receitasDisponiveis.find(r => r.categoria_descricao?.toUpperCase() === "SUCO 2");
       // Sobremesa
-      const sobremesa = receitasDisponiveis.find(r => r.categoria_descricao?.toUpperCase() === "SOBREMESA");
+      const sobremesas = receitasDisponiveis.filter(r => r.categoria_descricao?.toUpperCase() === "SOBREMESA" && !isSeasonalFruit(r.nome));
+      const sobremesa = sobremesas[0] || receitasDisponiveis.find(r => r.categoria_descricao?.toUpperCase() === "SOBREMESA");
 
       [proteina, guarnicao, salada1, salada2, suco1, suco2, sobremesa].forEach(r => {
         if (r) {

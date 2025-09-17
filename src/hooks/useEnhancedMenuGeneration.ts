@@ -341,8 +341,20 @@ export const useEnhancedMenuGeneration = () => {
 
   const selectRandomFromCategory = (recipes: any[]) => {
     if (recipes.length === 0) return null;
-    
-    const selected = recipes[Math.floor(Math.random() * recipes.length)];
+
+    // Evitar qualquer sobremesa "Fruta da Estação" (com ou sem acentos)
+    const isSeasonalFruit = (text: string) => {
+      const n = (text || '')
+        .normalize('NFD')
+        .replace(/\p{Diacritic}/gu, '')
+        .toLowerCase();
+      return n.includes('fruta da estacao') || n.includes('frutas da estacao');
+    };
+
+    const filtered = recipes.filter(r => !isSeasonalFruit(r.nome_receita || r.nome));
+    const pool = filtered.length > 0 ? filtered : recipes; // fallback seguro
+
+    const selected = pool[Math.floor(Math.random() * pool.length)];
     return {
       id: selected.receita_id_legado,
       nome: selected.nome_receita,
@@ -350,7 +362,6 @@ export const useEnhancedMenuGeneration = () => {
       cost: 0.10
     };
   };
-
   const estimateRecipeCost = (recipe: any, code: string): number => {
     // Base cost estimation by category
     const baseCosts = {

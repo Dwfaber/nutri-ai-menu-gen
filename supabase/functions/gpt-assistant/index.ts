@@ -2069,7 +2069,8 @@ function generateRecipeName(category: string, dayIndex: number): string {
     'Salada 2': ['Salada de Tomate', 'Salada de Cenoura', 'Salada de Beterraba', 'Salada de Pepino', 'Salada de Repolho'],
     'Suco 1': ['Suco de Laranja', 'Suco de Limão', 'Suco de Maracujá', 'Suco de Acerola', 'Suco de Goiaba'],
     'Suco 2': ['Suco de Uva', 'Suco de Abacaxi', 'Suco de Manga', 'Suco de Caju', 'Suco de Cajá'],
-    'Sobremesa': ['Fruta da Estação', 'Gelatina', 'Doce de Leite', 'Salada de Frutas', 'Pudim']
+    // Removido 'Fruta da Estação' por solicitação do cliente
+    'Sobremesa': ['Gelatina', 'Doce de Leite', 'Salada de Frutas', 'Pudim']
   };
 
   const options = recipeNames[key] || [category];
