@@ -93,10 +93,35 @@ class ShoppingListGeneratorFixed {
         console.log(`✅ Usando receitas_adaptadas: ${receitasAdaptadas.length} receitas`);
       }
 
-      // PASSO 2: Buscar ingredientes das receitas
-      const recipeIds = receitasAdaptadas
-        .map((r: any) => r.receita_id_legado)
-        .filter(Boolean);
+      // PASSO 2: Buscar ingredientes das receitas - NORMALIZAÇÃO DE IDs
+      const recipeIds = [];
+      
+      for (const receita of receitasAdaptadas) {
+        let recipeId = null;
+        
+        // Prioridade 1: receita_id_legado se for válido (>= 100)
+        if (receita.receita_id_legado && parseInt(receita.receita_id_legado) >= 100) {
+          recipeId = parseInt(receita.receita_id_legado);
+        }
+        // Prioridade 2: campo 'nome' se for numérico e >= 100
+        else if (receita.nome && !isNaN(parseInt(receita.nome)) && parseInt(receita.nome) >= 100) {
+          recipeId = parseInt(receita.nome);
+          console.log(`🔄 ID normalizado: ${receita.receita_id_legado} → ${recipeId} (via campo nome)`);
+        }
+        // Prioridade 3: outros campos possíveis
+        else if (receita.id && parseInt(receita.id) >= 100) {
+          recipeId = parseInt(receita.id);
+          console.log(`🔄 ID normalizado: ${receita.receita_id_legado} → ${recipeId} (via campo id)`);
+        }
+        
+        if (recipeId) {
+          recipeIds.push(recipeId);
+        } else {
+          console.warn(`⚠️ Receita inválida ignorada:`, receita);
+        }
+      }
+      
+      console.log(`🔍 IDs de receitas normalizados: [${recipeIds.join(', ')}]`);
 
       if (!recipeIds.length) {
         throw new Error('Nenhum ID de receita válido encontrado');
