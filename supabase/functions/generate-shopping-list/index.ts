@@ -165,7 +165,12 @@ class ShoppingListGeneratorFixed {
         }
       }
       
-      // PASSO 6: Agrupar por categoria
+      // PASSO 6: Tratativa de custo zero e agrupar por categoria
+      if (custoTotal === 0) {
+        console.warn('⚠️ Nenhum item encontrado no mercado. Usando orçamento previsto como custo real para evitar custo zerado.');
+        custoTotal = budgetPredicted || 0;
+      }
+      
       const listaAgrupada = this.agruparPorCategoria(listaCompras);
       
       // PASSO 7: Salvar no banco

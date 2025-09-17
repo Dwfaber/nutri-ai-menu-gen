@@ -178,7 +178,7 @@ export const useShoppingList = () => {
               nome: `Lista de Compras - ${new Date(list.created_at).toLocaleDateString()}`,
               cardapio_id: list.menu_id,
               itens: mappedItems,
-              valor_total: list.cost_actual || 0,
+              valor_total: (list.cost_actual || list.budget_predicted || 0),
               data_criacao: list.created_at,
               status: list.status === 'pending' ? 'draft' : list.status === 'budget_ok' ? 'approved' : 'draft',
               client_name: list.client_name,

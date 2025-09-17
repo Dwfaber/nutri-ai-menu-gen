@@ -331,7 +331,7 @@ const Compras = () => {
                           <span className={`font-medium ${
                             (list.cost_actual || 0) <= list.budget_predicted ? 'text-green-600' : 'text-red-600'
                           }`}>
-                            Custo: R$ {list.cost_actual?.toFixed(2) || '0.00'}
+                            Custo: R$ {((list.cost_actual && list.cost_actual > 0) ? list.cost_actual : list.budget_predicted).toFixed(2)}
                           </span>
                         </div>
                       </div>
