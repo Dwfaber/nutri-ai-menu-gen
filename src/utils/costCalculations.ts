@@ -96,6 +96,17 @@ export interface MenuResult {
     calculation_time_ms: number;
     precision_percentage: number;
   };
+
+  // New cardapio format for day-by-day display
+  cardapio?: Array<{
+    day: string;
+    recipes: Array<{
+      id: string | number;
+      name: string;
+      category: string;
+      cost: number;
+    }>;
+  }>;
 }
 
 // ========================================================

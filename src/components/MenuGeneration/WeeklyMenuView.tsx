@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { generateMenu, MenuResult, RecipeCost } from "@/utils/costCalculations";
 import MenuTable from "@/components/MenuTable/MenuTable";
+import { MenuDayCarousel } from "./MenuDayCarousel";
 import { Loader2 } from "lucide-react";
 
 export interface WeeklyMenuViewProps {
@@ -8,7 +9,7 @@ export interface WeeklyMenuViewProps {
   periodoDias?: number;
   refeicoesPorDia?: number;
   orcamentoPorRefeicao?: number;
-  menu?: MenuResult; // Pode receber menu já pronto
+  menu?: MenuResult | any; // Can receive any menu format (saved or generated)
 }
 
 const WeeklyMenuView: React.FC<WeeklyMenuViewProps> = ({
@@ -46,15 +47,47 @@ const WeeklyMenuView: React.FC<WeeklyMenuViewProps> = ({
 
   // Caso já receba menu pronto (ex: vindo de Cardapios.tsx)
   if (menu) {
-    const recipesArray = convertRecipesToArray(menu.receitas);
-    return (
-      <MenuTable
-        title={`Cardápio - ${menu.periodo}`}
-        weekPeriod={menu.periodo}
-        totalCost={menu.resumo_custos.custo_total_calculado}
-        recipes={recipesArray}
-      />
-    );
+    // Check if we have the new cardapio format or GeneratedMenu format from saved menus
+    const cardapio = (menu as any).cardapio || (menu as any).menu?.cardapio;
+    const recipes = (menu as any).recipes;
+    
+    if (cardapio && Array.isArray(cardapio)) {
+      return (
+        <MenuDayCarousel 
+          menu={{
+            clientName: menu.cliente || menu.clientName || 'Cliente',
+            weekPeriod: menu.periodo || menu.weekPeriod || 'Período',
+            cardapio: cardapio
+          }}
+        />
+      );
+    }
+    
+    // If we have recipes array from saved menu, convert to cardapio format
+    if (recipes && Array.isArray(recipes) && recipes.length > 0) {
+      return (
+        <MenuDayCarousel 
+          menu={{
+            clientName: menu.clientName || menu.cliente || 'Cliente',
+            weekPeriod: menu.weekPeriod || menu.periodo || 'Período',
+            recipes: recipes
+          }}
+        />
+      );
+    }
+    
+    // Fallback to old format if available
+    if (menu.receitas) {
+      const recipesArray = convertRecipesToArray(menu.receitas);
+      return (
+        <MenuTable
+          title={`Cardápio - ${menu.periodo}`}
+          weekPeriod={menu.periodo}
+          totalCost={menu.resumo_custos.custo_total_calculado}
+          recipes={recipesArray}
+        />
+      );
+    }
   }
 
   // Gera menu chamando Edge Function quando não recebe pronto
@@ -97,6 +130,20 @@ const WeeklyMenuView: React.FC<WeeklyMenuViewProps> = ({
     );
   }
 
+  // Check if we have the new cardapio format
+  if ((generatedMenu as any).cardapio && Array.isArray((generatedMenu as any).cardapio)) {
+    return (
+      <MenuDayCarousel 
+        menu={{
+          clientName: generatedMenu.cliente || 'Cliente',
+          weekPeriod: generatedMenu.periodo,
+          cardapio: (generatedMenu as any).cardapio
+        }}
+      />
+    );
+  }
+
+  // Fallback to old format
   const recipesArray = convertRecipesToArray(generatedMenu.receitas);
   return (
     <MenuTable

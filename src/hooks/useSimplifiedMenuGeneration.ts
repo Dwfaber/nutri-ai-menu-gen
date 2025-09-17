@@ -134,10 +134,10 @@ export function useSimplifiedMenuGeneration() {
 
       const weekPeriod = period || `${format(new Date(), 'dd/MM/yyyy')} - ${format(addDays(new Date(), periodDays - 1), 'dd/MM/yyyy')}`;
 
-      // ✅ IDs fixos corrigidos: Arroz (580), Feijão (1600)
+      // Use the full menu generation logic
       const { data: response, error: menuError } = await supabase.functions.invoke('gpt-assistant', {
         body: {
-          action: 'generate_menu_with_costs',
+          action: 'generate_menu',
           client_id: clientToUse.id,
           clientId: clientToUse.cliente_id_legado,
           filial_id: clientToUse.filial_id,

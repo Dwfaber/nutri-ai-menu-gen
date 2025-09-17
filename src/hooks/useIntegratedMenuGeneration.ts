@@ -50,21 +50,36 @@ export function useIntegratedMenuGeneration(): UseIntegratedMenuGenerationReturn
 
   const [savedMenus, setSavedMenus] = useState<GeneratedMenu[]>([]);
 
-  const mapRowToMenu = (row: any): GeneratedMenu => ({
-    id: row.id,
-    clientId: row.client_id,
-    clientName: row.client_name,
-    weekPeriod: row.week_period,
-    status: row.status,
-    totalCost: Number(row.total_cost || 0),
-    costPerMeal: Number(row.cost_per_meal || 0),
-    totalRecipes: Number(row.total_recipes || 0),
-    mealsPerDay: Number(row.meals_per_day || 50),
-    recipes: row.recipes || [],
-    createdAt: row.created_at,
-    menu: row.menu_data || null,
-    warnings: row.warnings || []
-  });
+  const mapRowToMenu = (row: any): GeneratedMenu => {
+    // If recipes is empty but we have receitas_adaptadas, convert them
+    let recipes = row.recipes || [];
+    if ((!recipes || recipes.length === 0) && row.receitas_adaptadas) {
+      recipes = Array.isArray(row.receitas_adaptadas) ? row.receitas_adaptadas.map((r: any, idx: number) => ({
+        id: r.receita_id || idx,
+        name: r.nome || r.name || 'Item',
+        category: r.categoria || r.category || 'Outros',
+        day: r.day || 'Segunda-feira',
+        cost: Number(r.custo_por_porcao || r.cost || 0),
+        servings: Number(r.porcoes_calculadas || r.servings || 1)
+      })) : [];
+    }
+
+    return {
+      id: row.id,
+      clientId: row.client_id,
+      clientName: row.client_name,
+      weekPeriod: row.week_period,
+      status: row.status,
+      totalCost: Number(row.total_cost || 0),
+      costPerMeal: Number(row.cost_per_meal || 0),
+      totalRecipes: Number(row.total_recipes || 0),
+      mealsPerDay: Number(row.meals_per_day || 50),
+      recipes,
+      createdAt: row.created_at,
+      menu: row.menu_data || null,
+      warnings: row.warnings || []
+    };
+  };
 
   const loadSavedMenus = useCallback(async () => {
     try {
