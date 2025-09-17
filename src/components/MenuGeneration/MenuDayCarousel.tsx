@@ -167,20 +167,20 @@ export function MenuDayCarousel({ menu }: MenuDayCarouselProps) {
                   {recipes.length > 0 ? (
                     recipes.map((recipe) => (
                       <div key={recipe.id} className="space-y-1">
-                        <h4 className="font-medium text-sm text-gray-800 leading-tight">
+                        <h4 className="font-medium text-base text-gray-800 leading-tight">
                           {recipe.name}
                         </h4>
-                        <p className="text-sm font-semibold text-green-600">
+                        <p className="text-base font-semibold text-green-600">
                           R$ {recipe.cost.toFixed(2)}
                         </p>
                       </div>
                     ))
                   ) : (
                     <div className="space-y-1">
-                      <h4 className="font-medium text-sm text-gray-500 leading-tight">
+                      <h4 className="font-medium text-base text-gray-500 leading-tight">
                         Não definido
                       </h4>
-                      <p className="text-sm font-semibold text-gray-400">
+                      <p className="text-base font-semibold text-gray-400">
                         R$ 0,00
                       </p>
                     </div>
