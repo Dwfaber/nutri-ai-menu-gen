@@ -244,6 +244,10 @@ export function useSimplifiedMenuGeneration() {
       // === Validação contra regras de negócio
       const businessRules = validateMenu(allRecipes);
 
+      // === Calcular custos totais das receitas geradas
+      const calculatedTotalCost = allRecipes.reduce((sum, recipe) => sum + (recipe.cost || 0), 0);
+      const calculatedCostPerMeal = calculatedTotalCost / (mealQuantity || 1);
+
       // === Resultado final
       const menu: GeneratedMenu = {
         id: crypto.randomUUID(),
@@ -251,8 +255,8 @@ export function useSimplifiedMenuGeneration() {
         clientName: clientToUse.nome_fantasia || clientToUse.nome_empresa,
         weekPeriod,
         status: 'pending_approval',
-        totalCost: menuResult.resumo_custos?.custo_total_calculado || 0,
-        costPerMeal: menuResult.resumo_custos?.custo_por_refeicao || 0,
+        totalCost: menuResult.resumo_custos?.custo_total_calculado || calculatedTotalCost,
+        costPerMeal: menuResult.resumo_custos?.custo_por_refeicao || calculatedCostPerMeal,
         totalRecipes: allRecipes.length,
         mealsPerDay: mealQuantity,
         recipes: allRecipes,

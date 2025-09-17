@@ -64,14 +64,25 @@ export function useIntegratedMenuGeneration(): UseIntegratedMenuGenerationReturn
       })) : [];
     }
 
+    // Calculate costs from recipes if total_cost is 0 or missing
+    let totalCost = Number(row.total_cost || 0);
+    let costPerMeal = Number(row.cost_per_meal || 0);
+    
+    if (totalCost === 0 && recipes && recipes.length > 0) {
+      totalCost = recipes.reduce((sum: number, recipe: any) => {
+        return sum + (Number(recipe.cost || recipe.custo || recipe.custo_por_refeicao || 0));
+      }, 0);
+      costPerMeal = totalCost / (Number(row.meals_per_day || 1));
+    }
+
     return {
       id: row.id,
       clientId: row.client_id,
       clientName: row.client_name,
       weekPeriod: row.week_period,
       status: row.status,
-      totalCost: Number(row.total_cost || 0),
-      costPerMeal: Number(row.cost_per_meal || 0),
+      totalCost,
+      costPerMeal,
       totalRecipes: Number(row.total_recipes || 0),
       mealsPerDay: Number(row.meals_per_day || 50),
       recipes,
