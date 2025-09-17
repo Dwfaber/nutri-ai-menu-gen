@@ -31,6 +31,7 @@ interface UseIntegratedMenuGenerationReturn {
   approveMenu: (menuId: string, approverName: string) => Promise<boolean>;
   rejectMenu: (menuId: string, reason: string) => Promise<boolean>;
   deleteGeneratedMenu: (menuId: string) => Promise<boolean>;
+  updateGeneratedMenu: (menuId: string, updates: Partial<GeneratedMenu>) => Promise<boolean>;
   // shopping list
   generateShoppingListFromMenu: (menu: GeneratedMenu) => Promise<void>;
   // validation
@@ -165,6 +166,29 @@ export function useIntegratedMenuGeneration(): UseIntegratedMenuGenerationReturn
     return !error;
   }, [loadSavedMenus]);
 
+  const updateGeneratedMenu = useCallback(async (menuId: string, updates: Partial<GeneratedMenu>) => {
+    try {
+      const { error } = await supabase
+        .from('generated_menus')
+        .update(updates)
+        .eq('id', menuId);
+      
+      if (!error) {
+        await loadSavedMenus();
+        // Update current generated menu if it's the same one being edited
+        if (generatedMenu?.id === menuId) {
+          const updatedMenu = { ...generatedMenu, ...updates };
+          // This would need to be implemented in useSimplifiedMenuGeneration
+          console.log('Menu updated:', updatedMenu);
+        }
+      }
+      return !error;
+    } catch (error) {
+      console.error('Error updating menu:', error);
+      return false;
+    }
+  }, [loadSavedMenus, generatedMenu]);
+
   const generateShoppingListFromMenu = useCallback(async (menu: GeneratedMenu) => {
     await generateShoppingList(menu.id, menu.clientName, menu.totalCost, menu.totalRecipes || 50);
   }, [generateShoppingList]);
@@ -178,6 +202,7 @@ export function useIntegratedMenuGeneration(): UseIntegratedMenuGenerationReturn
     approveMenu,
     rejectMenu,
     deleteGeneratedMenu,
+    updateGeneratedMenu,
     generateShoppingListFromMenu,
     violations,
     validateMenu,

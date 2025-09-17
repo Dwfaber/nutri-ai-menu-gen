@@ -12,6 +12,7 @@ import { useSelectedClient } from '@/contexts/SelectedClientContext';
 import WeeklyMenuView from "@/components/MenuGeneration/WeeklyMenuView";
 import { SimpleMenuForm, SimpleMenuFormData } from '@/components/MenuGeneration/SimpleMenuForm';
 import MenuValidationPanel from '@/components/MenuGeneration/MenuValidationPanel';
+import MenuApprovalPanel from '@/components/MenuGeneration/MenuApprovalPanel';
 import { testEdgeFunctionConnectivity, testMenuGeneration } from '@/utils/edgeFunctionTest';
 import { useToast } from '@/hooks/use-toast';
 
@@ -31,6 +32,7 @@ const IntegratedMenuGenerator = () => {
     approveMenu,
     rejectMenu,
     generateShoppingListFromMenu,
+    updateGeneratedMenu,
     clearGeneratedMenu,
     error,
     violations,
@@ -59,16 +61,48 @@ const IntegratedMenuGenerator = () => {
   const handleShowForm = () => setShowForm(true);
   const handleCancelForm = () => setShowForm(false);
 
-  const handleApprove = async () => {
-    if (generatedMenu && approverName.trim()) {
-      await approveMenu(generatedMenu.id, approverName);
+  const handleApprove = async (approverName: string, notes?: string) => {
+    if (generatedMenu) {
+      const success = await approveMenu(generatedMenu.id, approverName);
+      if (success) {
+        toast({
+          title: "✅ Cardápio Aprovado",
+          description: `Cardápio aprovado por ${approverName}`,
+          variant: "default"
+        });
+      }
     }
   };
 
-  const handleReject = async () => {
-    if (generatedMenu && rejectionReason.trim()) {
-      await rejectMenu(generatedMenu.id, rejectionReason);
-      setRejectionReason('');
+  const handleReject = async (reason: string) => {
+    if (generatedMenu) {
+      const success = await rejectMenu(generatedMenu.id, reason);
+      if (success) {
+        toast({
+          title: "❌ Cardápio Rejeitado", 
+          description: "Cardápio foi rejeitado",
+          variant: "destructive"
+        });
+      }
+    }
+  };
+
+  const handleEditMenu = async (editedMenu: Partial<any>) => {
+    if (generatedMenu) {
+      const success = await updateGeneratedMenu(generatedMenu.id, editedMenu);
+      if (success) {
+        toast({
+          title: "✏️ Cardápio Editado",
+          description: "Alterações salvas com sucesso",
+          variant: "default"
+        });
+      } else {
+        toast({
+          title: "❌ Erro ao Editar",
+          description: "Não foi possível salvar as alterações",
+          variant: "destructive"
+        });
+      }
     }
   };
 
@@ -276,6 +310,17 @@ const IntegratedMenuGenerator = () => {
             )}
 
             <Separator />
+
+            {/* Menu Approval Panel */}
+            <MenuApprovalPanel
+              menu={generatedMenu}
+              violations={violations}
+              hasUnapprovedViolations={violations.some((_, index) => !violations[index])}
+              onApprove={handleApprove}
+              onReject={handleReject}
+              onEdit={handleEditMenu}
+              onGenerateShoppingList={handleGenerateShoppingList}
+            />
           </CardContent>
         </Card>
       )}
