@@ -1865,21 +1865,22 @@ Deno.serve(async (req) => {
 
         if (!cardapio || principaisCount === 0 || acompanhamentosCount === 0) {
           const WEEK_DAYS = ['Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira'];
-          const CATEGORIES = ['PP1', 'PP2', 'Arroz Branco', 'Feijão', 'Guarnição', 'Salada 1', 'Salada 2', 'Suco 1', 'Suco 2', 'Sobremesa'];
+          // Usar categorias reais do banco, não hardcoded
+          const CATEGORIES = ['Prato Principal 1', 'Prato Principal 2', 'Arroz Branco', 'Feijão', 'Guarnição', 'Salada 1', 'Salada 2', 'Suco 1', 'Suco 2', 'Sobremesa'];
           const budget = menuRequest.orcamento_por_refeicao || 5.0;
 
-          // Definir percentuais realistas por categoria
+          // Definir percentuais realistas por categoria_descricao do banco
           const CATEGORY_PERCENTAGES = {
-            'PP1': 0.20,        // 20% do orçamento
-            'PP2': 0.20,        // 20% do orçamento  
-            'Arroz Branco': 0.12, // 12% do orçamento
-            'Feijão': 0.13,     // 13% do orçamento
-            'Guarnição': 0.15,  // 15% do orçamento
-            'Salada 1': 0.05,   // 5% do orçamento
-            'Salada 2': 0.05,   // 5% do orçamento
-            'Suco 1': 0.04,     // 4% do orçamento
-            'Suco 2': 0.03,     // 3% do orçamento
-            'Sobremesa': 0.03   // 3% do orçamento
+            'Prato Principal 1': 0.20,    // 20% do orçamento
+            'Prato Principal 2': 0.20,    // 20% do orçamento  
+            'Arroz Branco': 0.12,         // 12% do orçamento
+            'Feijão': 0.13,               // 13% do orçamento
+            'Guarnição': 0.15,            // 15% do orçamento
+            'Salada 1': 0.05,             // 5% do orçamento
+            'Salada 2': 0.05,             // 5% do orçamento
+            'Suco 1': 0.04,               // 4% do orçamento
+            'Suco 2': 0.03,               // 3% do orçamento
+            'Sobremesa': 0.03             // 3% do orçamento
           };
 
           cardapio = WEEK_DAYS.slice(0, menuRequest.periodo_dias).map((day, dayIdx) => {

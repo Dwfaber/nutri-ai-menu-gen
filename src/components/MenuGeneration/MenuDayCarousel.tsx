@@ -27,7 +27,7 @@ interface MenuDayCarouselProps {
 }
 
 const CATEGORY_ORDER = [
-  'PP1', 'PP2', 'Arroz Branco',
+  'Prato Principal 1', 'Prato Principal 2', 'Arroz Branco',
   'Feijão', 'Guarnição', 'Salada 1', 
   'Salada 2', 'Suco 1', 'Suco 2', 'Sobremesa'
 ];
