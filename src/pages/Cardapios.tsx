@@ -202,11 +202,14 @@ const Cardapios = () => {
                     </CardTitle>
                     <p className="text-sm text-muted-foreground">{menu.weekPeriod}</p>
                   </CardHeader>
-                  <CardContent className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm">Custo/refeição</p>
-                      <p className="font-semibold">R$ {Number(menu.costPerMeal || 0).toFixed(2)}</p>
-                    </div>
+                   <CardContent className="flex items-center justify-between">
+                     <div>
+                       <p className="text-sm">Custo total</p>
+                       <p className="font-semibold">R$ {Number(menu.totalCost || (menu.costPerMeal || 0) * (menu.mealsPerDay || 50)).toFixed(2)}</p>
+                       <p className="text-xs text-muted-foreground">
+                         R$ {Number(menu.costPerMeal || 0).toFixed(2)}/refeição
+                       </p>
+                     </div>
                     <div className="flex gap-2">
                       <Button size="icon" variant="outline" onClick={() => handleVisualizarCardapio(menu)}>
                         <Eye className="w-4 h-4" />
