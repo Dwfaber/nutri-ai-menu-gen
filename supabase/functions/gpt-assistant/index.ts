@@ -1865,45 +1865,85 @@ Deno.serve(async (req) => {
 
         if (!cardapio || principaisCount === 0 || acompanhamentosCount === 0) {
           const WEEK_DAYS = ['Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira'];
-          // Usar categorias reais do banco, não hardcoded
-          const CATEGORIES = ['Prato Principal 1', 'Prato Principal 2', 'Arroz Branco', 'Feijão', 'Guarnição', 'Salada 1', 'Salada 2', 'Suco 1', 'Suco 2', 'Sobremesa'];
+          // Categorias incluindo Base obrigatória
+          const CATEGORIES = ['Base', 'Prato Principal 1', 'Prato Principal 2', 'Arroz Branco', 'Feijão', 'Guarnição', 'Salada 1', 'Salada 2', 'Suco 1', 'Suco 2', 'Sobremesa'];
           const budget = menuRequest.orcamento_por_refeicao || 5.0;
+          
+          // Custo fixo da categoria Base (obrigatório em todos os cardápios)
+          const BASE_COST = 1.55;
+          const BASE_ITEMS = [
+            { name: 'ARROZ', cost: 0.64, category: 'Base' },
+            { name: 'CAFÉ CORTESIA', cost: 0.12, category: 'Base' },
+            { name: 'FEIJÃO CARIOCA', cost: 0.46, category: 'Base' },
+            { name: 'KIT DESCARTÁVEIS', cost: 0.16, category: 'Base' },
+            { name: 'KIT LIMPEZA', cost: 0.05, category: 'Base' },
+            { name: 'KIT TEMPERO DE MESA', cost: 0.09, category: 'Base' },
+            { name: 'MINI FILÃO PARA ACOMPANHAMENTO', cost: 0.06, category: 'Base' }
+          ];
 
-          // Definir percentuais realistas por categoria_descricao do banco
+          // Orçamento restante após descontar itens base
+          const remainingBudget = budget - BASE_COST;
+          
+          if (remainingBudget <= 0) {
+            throw new Error(`Orçamento insuficiente. Mínimo necessário: R$ ${BASE_COST.toFixed(2)} para itens base obrigatórios.`);
+          }
+
+          // Percentuais aplicados sobre o orçamento restante (após base)
           const CATEGORY_PERCENTAGES = {
-            'Prato Principal 1': 0.20,    // 20% do orçamento
-            'Prato Principal 2': 0.20,    // 20% do orçamento  
-            'Arroz Branco': 0.12,         // 12% do orçamento
-            'Feijão': 0.13,               // 13% do orçamento
-            'Guarnição': 0.15,            // 15% do orçamento
-            'Salada 1': 0.05,             // 5% do orçamento
-            'Salada 2': 0.05,             // 5% do orçamento
-            'Suco 1': 0.04,               // 4% do orçamento
-            'Suco 2': 0.03,               // 3% do orçamento
-            'Sobremesa': 0.03             // 3% do orçamento
+            'Base': BASE_COST,                // Custo fixo
+            'Prato Principal 1': 0.25,        // 25% do orçamento restante
+            'Prato Principal 2': 0.25,        // 25% do orçamento restante  
+            'Arroz Branco': 0.00,             // Já incluído na base
+            'Feijão': 0.00,                   // Já incluído na base
+            'Guarnição': 0.20,                // 20% do orçamento restante
+            'Salada 1': 0.08,                 // 8% do orçamento restante
+            'Salada 2': 0.08,                 // 8% do orçamento restante
+            'Suco 1': 0.07,                   // 7% do orçamento restante
+            'Suco 2': 0.05,                   // 5% do orçamento restante
+            'Sobremesa': 0.02                 // 2% do orçamento restante
           };
 
           cardapio = WEEK_DAYS.slice(0, menuRequest.periodo_dias).map((day, dayIdx) => {
-            const recipes = CATEGORIES.map((category, catIdx) => {
-              const basePercentage = CATEGORY_PERCENTAGES[category] || 0.10;
-              // Adicionar variação de ±20% para realismo
-              const variation = 0.8 + (Math.random() * 0.4); // 0.8 a 1.2
-              const cost = Number((budget * basePercentage * variation).toFixed(2));
+            const recipes = [];
+            
+            // Primeiro adicionar itens base obrigatórios
+            BASE_ITEMS.forEach((item, idx) => {
+              recipes.push({
+                id: `base-${dayIdx}-${idx}`,
+                name: item.name,
+                category: 'Base',
+                cost: item.cost
+              });
+            });
+            
+            // Depois adicionar outras categorias (exceto Base, Arroz Branco e Feijão)
+            CATEGORIES.filter(cat => cat !== 'Base' && cat !== 'Arroz Branco' && cat !== 'Feijão').forEach((category, catIdx) => {
+              const categoryBudget = remainingBudget * CATEGORY_PERCENTAGES[category];
+              // Adicionar variação de ±15% para realismo
+              const variation = 0.85 + (Math.random() * 0.3); // 0.85 a 1.15
+              const cost = Number((categoryBudget * variation).toFixed(2));
               
-              return {
+              recipes.push({
                 id: `${dayIdx}-${catIdx}`,
                 name: generateRecipeName(category, dayIdx),
                 category,
                 cost: Math.max(0.10, cost) // Mínimo de R$ 0,10 por categoria
-              };
+              });
             });
 
             // Garantir que o total não exceda o orçamento
-            const totalCost = recipes.reduce((sum, recipe) => sum + recipe.cost, 0);
+            const baseCost = BASE_COST;
+            const variableCost = recipes.filter(r => r.category !== 'Base').reduce((sum, recipe) => sum + recipe.cost, 0);
+            const totalCost = baseCost + variableCost;
+            
             if (totalCost > budget) {
-              const adjustmentFactor = budget / totalCost;
+              // Ajustar apenas os itens variáveis (não a base)
+              const excessCost = totalCost - budget;
+              const adjustmentFactor = Math.max(0.1, (variableCost - excessCost) / variableCost);
               recipes.forEach(recipe => {
-                recipe.cost = Number((recipe.cost * adjustmentFactor).toFixed(2));
+                if (recipe.category !== 'Base') {
+                  recipe.cost = Number((recipe.cost * adjustmentFactor).toFixed(2));
+                }
               });
             }
 

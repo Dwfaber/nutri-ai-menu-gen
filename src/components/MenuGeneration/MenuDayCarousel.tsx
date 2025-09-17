@@ -27,9 +27,9 @@ interface MenuDayCarouselProps {
 }
 
 const CATEGORY_ORDER = [
-  'Prato Principal 1', 'Prato Principal 2', 'Arroz Branco',
-  'Feijão', 'Guarnição', 'Salada 1', 
-  'Salada 2', 'Suco 1', 'Suco 2', 'Sobremesa'
+  'Base', 'Prato Principal 1', 'Prato Principal 2', 
+  'Guarnição', 'Salada 1', 'Salada 2', 
+  'Suco 1', 'Suco 2', 'Sobremesa'
 ];
 
 const WEEK_DAYS = [
@@ -85,28 +85,42 @@ export function MenuDayCarousel({ menu }: MenuDayCarouselProps) {
 
   // Group recipes by category for the current day and ensure all categories are present
   const recipesByCategory = React.useMemo(() => {
-    const grouped: { [key: string]: Recipe } = {};
+    const grouped: { [key: string]: Recipe[] } = {};
     
     // Initialize all categories
     CATEGORY_ORDER.forEach(category => {
-      grouped[category] = {
-        id: `empty-${category}`,
-        name: 'Não definido',
-        category,
-        cost: 0,
-        day: currentDay?.day || 'Segunda-feira'
-      };
+      grouped[category] = [];
     });
     
-    // Override with actual recipes
+    // Group actual recipes by category
     currentDay?.recipes?.forEach((recipe) => {
       const category = recipe.category || 'Outros';
-      if (CATEGORY_ORDER.includes(category)) {
-        grouped[category] = recipe;
+      if (!grouped[category]) {
+        grouped[category] = [];
       }
+      grouped[category].push(recipe);
     });
     
     return grouped;
+  }, [currentDay]);
+
+  // Calculate costs separately for Base (fixed) and Variable Menu
+  const { baseCost, variableCost, totalCost } = React.useMemo(() => {
+    if (!currentDay?.recipes) return { baseCost: 0, variableCost: 0, totalCost: 0 };
+    
+    const base = currentDay.recipes
+      .filter(recipe => recipe.category === 'Base')
+      .reduce((sum, recipe) => sum + (recipe.cost || 0), 0);
+    
+    const variable = currentDay.recipes
+      .filter(recipe => recipe.category !== 'Base')
+      .reduce((sum, recipe) => sum + (recipe.cost || 0), 0);
+    
+    return {
+      baseCost: base,
+      variableCost: variable,
+      totalCost: base + variable
+    };
   }, [currentDay]);
 
   return (
@@ -131,22 +145,55 @@ export function MenuDayCarousel({ menu }: MenuDayCarouselProps) {
       {/* Recipe Cards Grid */}
       <div className="grid grid-cols-3 gap-4">
         {CATEGORY_ORDER.map((category) => {
-          const recipe = recipesByCategory[category];
+          const recipes = recipesByCategory[category] || [];
+          const categoryTotal = recipes.reduce((sum, recipe) => sum + (recipe.cost || 0), 0);
+          const isBaseCategory = category === 'Base';
+          
           return (
-            <Card key={category} className="bg-gray-50 border border-gray-200 hover:shadow-md transition-shadow">
+            <Card key={category} className={`${isBaseCategory ? 'bg-amber-50 border-amber-200' : 'bg-gray-50 border-gray-200'} hover:shadow-md transition-shadow`}>
               <CardContent className="p-4 space-y-2">
-                <div className="text-xs font-medium text-orange-600 uppercase tracking-wide">
-                  {category}
+                <div className="flex items-center justify-between">
+                  <div className="text-xs font-medium text-orange-600 uppercase tracking-wide">
+                    {category}
+                  </div>
+                  {isBaseCategory && (
+                    <Badge variant="outline" className="text-xs bg-amber-100 text-amber-800 border-amber-300">
+                      Obrigatório
+                    </Badge>
+                  )}
                 </div>
                 
-                 <div className="space-y-1">
-                   <h4 className="font-medium text-sm text-gray-800 leading-tight min-h-[2.5rem] flex items-center">
-                     {recipe.name}
-                   </h4>
-                   <p className="text-sm font-semibold text-green-600">
-                     R$ {recipe.cost.toFixed(2)}
-                   </p>
-                 </div>
+                <div className="space-y-1">
+                  {recipes.length > 0 ? (
+                    recipes.map((recipe) => (
+                      <div key={recipe.id} className="space-y-1">
+                        <h4 className="font-medium text-sm text-gray-800 leading-tight">
+                          {recipe.name}
+                        </h4>
+                        <p className="text-sm font-semibold text-green-600">
+                          R$ {recipe.cost.toFixed(2)}
+                        </p>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="space-y-1">
+                      <h4 className="font-medium text-sm text-gray-500 leading-tight">
+                        Não definido
+                      </h4>
+                      <p className="text-sm font-semibold text-gray-400">
+                        R$ 0,00
+                      </p>
+                    </div>
+                  )}
+                  
+                  {recipes.length > 1 && (
+                    <div className="pt-2 border-t border-gray-200">
+                      <p className="text-xs font-semibold text-blue-600">
+                        Total: R$ {categoryTotal.toFixed(2)}
+                      </p>
+                    </div>
+                  )}
+                </div>
               </CardContent>
             </Card>
           );
@@ -156,15 +203,25 @@ export function MenuDayCarousel({ menu }: MenuDayCarouselProps) {
       {/* Budget Summary */}
       {currentDay && (
         <div className="bg-white rounded-lg p-4 border border-gray-200 mt-6">
-          <div className="flex justify-between items-center">
-            <span className="text-sm text-gray-600">Custo total da refeição:</span>
-            <span className="font-semibold text-lg text-green-600">
-              R$ {currentDay.recipes.reduce((sum, recipe) => sum + recipe.cost, 0).toFixed(2)}
-            </span>
-          </div>
-          <div className="flex justify-between items-center mt-1">
-            <span className="text-sm text-gray-600">Orçamento por refeição:</span>
-            <span className="text-sm text-gray-500">R$ 6,50</span>
+          <div className="space-y-2">
+            <div className="flex justify-between items-center text-sm">
+              <span className="text-amber-700 font-medium">Base (obrigatório):</span>
+              <span className="text-amber-700 font-semibold">R$ {baseCost.toFixed(2)}</span>
+            </div>
+            <div className="flex justify-between items-center text-sm">
+              <span className="text-gray-600">Menu variável:</span>
+              <span className="text-gray-600">R$ {variableCost.toFixed(2)}</span>
+            </div>
+            <div className="border-t pt-2 flex justify-between items-center">
+              <span className="text-sm text-gray-600">Custo total da refeição:</span>
+              <span className="font-semibold text-lg text-green-600">
+                R$ {totalCost.toFixed(2)}
+              </span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-sm text-gray-600">Orçamento por refeição:</span>
+              <span className="text-sm text-gray-500">R$ 6,50</span>
+            </div>
           </div>
         </div>
       )}
