@@ -124,7 +124,7 @@ export const useMenuBusinessRules = () => {
   // Validate protein variety rules
   const validateProteinVariety = (recipes: any[]): MenuViolation[] => {
     const violations: MenuViolation[] = [];
-    const days = ['Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira'];
+    const orderedDays = ['Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira'];
     
     // Group recipes by day
     const recipesByDay: { [key: string]: any[] } = {};
@@ -134,17 +134,26 @@ export const useMenuBusinessRules = () => {
       recipesByDay[day].push(recipe);
     });
 
+    // Consider only days that actually have recipes
+    const days = orderedDays.filter(d => (recipesByDay[d] && recipesByDay[d].length));
+
+    const isPrincipal = (r: any) => {
+      const raw = (r.codigo || r.categoria || r.category || '').toString();
+      const upper = raw.toUpperCase();
+      return upper === 'PP1' || upper === 'PP2' || raw === 'Prato Principal 1' || raw === 'Prato Principal 2';
+    };
+
     // Check consecutive days for same protein
-    for (let i = 0; i < days.length - 1; i++) {
+    for (let i = 0; i < Math.max(0, days.length - 1); i++) {
       const today = days[i];
       const tomorrow = days[i + 1];
       
       const todayProteins = (recipesByDay[today] || [])
-        .filter(r => (r.categoria || r.category) === 'Prato Principal 1' || (r.categoria || r.category) === 'Prato Principal 2')
+        .filter(r => isPrincipal(r))
         .map(r => classifyProtein(r.nome || r.name));
       
       const tomorrowProteins = (recipesByDay[tomorrow] || [])
-        .filter(r => (r.categoria || r.category) === 'Prato Principal 1' || (r.categoria || r.category) === 'Prato Principal 2')
+        .filter(r => isPrincipal(r))
         .map(r => classifyProtein(r.nome || r.name));
 
       // Check for consecutive same protein
@@ -165,7 +174,7 @@ export const useMenuBusinessRules = () => {
     days.forEach(day => {
       const dayRecipes = recipesByDay[day] || [];
       const redMeatCount = dayRecipes
-        .filter(r => (r.categoria || r.category) === 'Prato Principal 1' || (r.categoria || r.category) === 'Prato Principal 2')
+        .filter(r => isPrincipal(r))
         .map(r => classifyProtein(r.nome || r.name))
         .filter(p => p.isRedMeat).length;
 
@@ -175,7 +184,7 @@ export const useMenuBusinessRules = () => {
           message: `Mais de uma carne vermelha no mesmo dia: ${day}`,
           day,
           recipes: dayRecipes
-            .filter(r => ((r.categoria || r.category) === 'Prato Principal 1' || (r.categoria || r.category) === 'Prato Principal 2') && classifyProtein(r.nome || r.name).isRedMeat)
+            .filter(r => isPrincipal(r) && classifyProtein(r.nome || r.name).isRedMeat)
             .map(r => r.nome || r.name)
         });
       }
@@ -206,7 +215,7 @@ export const useMenuBusinessRules = () => {
   // Validate menu structure
   const validateMenuStructure = (recipes: any[]): MenuViolation[] => {
     const violations: MenuViolation[] = [];
-    const days = ['Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira'];
+    const orderedDays = ['Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira'];
     // Usar códigos fixos, iguais ao backend
     const requiredCodes = ['PP1','PP2','ARROZ','FEIJAO','SALADA1','SALADA2','SUCO1','SUCO2'];
     
@@ -218,10 +227,13 @@ export const useMenuBusinessRules = () => {
       recipesByDay[day].push(recipe);
     });
 
+    // Validate only days that actually have recipes
+    const days = orderedDays.filter(d => (recipesByDay[d] && recipesByDay[d].length));
+
     days.forEach(day => {
       const dayRecipes = recipesByDay[day] || [];
       // Priorizar código, fallback para categoria
-      const codesPresent = dayRecipes.map(r => r.codigo || r.categoria || r.category);
+      const codesPresent = dayRecipes.map(r => (r.codigo || r.categoria || r.category || '').toString().toUpperCase());
       
       const missing = requiredCodes.filter(cod => !codesPresent.includes(cod));
       
@@ -288,8 +300,14 @@ export const useMenuBusinessRules = () => {
 
     // Protein variety: avoid same protein as previous day
     if (previousDayRecipes.length > 0) {
+      const isPrincipal = (r: any) => {
+        const raw = (r.codigo || r.categoria || r.category || '').toString();
+        const upper = raw.toUpperCase();
+        return upper === 'PP1' || upper === 'PP2' || raw === 'Prato Principal 1' || raw === 'Prato Principal 2';
+      };
+
       const previousProteins = previousDayRecipes
-        .filter(r => (r.categoria || r.category) === 'Prato Principal 1' || (r.categoria || r.category) === 'Prato Principal 2')
+        .filter(r => isPrincipal(r))
         .map(r => classifyProtein(r.nome || r.name));
 
       filtered = filtered.filter(recipe => {

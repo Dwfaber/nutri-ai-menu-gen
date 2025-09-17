@@ -211,13 +211,29 @@ export function useSimplifiedMenuGeneration() {
           warnings.push(`⚠️ Custo fora da realidade: R$ ${custo.toFixed(2)}/porção`);
         }
 
+        const categoriaUI = mapCategory(r.nome, r.categoria || r.category);
+        const codigo = (() => {
+          const key = (categoriaUI || '').toUpperCase();
+          if (key === 'PP1' || key === 'PP2') return key;
+          if (key.includes('ARROZ')) return 'ARROZ';
+          if (key.includes('FEIJ')) return 'FEIJAO';
+          if (key.includes('SALADA 1')) return 'SALADA1';
+          if (key.includes('SALADA 2')) return 'SALADA2';
+          if (key.includes('SUCO 1')) return 'SUCO1';
+          if (key.includes('SUCO 2')) return 'SUCO2';
+          return undefined;
+        })();
+
+        const dayIndexBound = Math.max(1, Math.min(periodDays || 5, WEEK_DAYS.length));
+
         return {
           id: r.receita_id || r.receita_id_legado || r.id || idx,
           name: r.nome || r.name || 'Item',
-          category: mapCategory(r.nome, r.categoria || r.category),
+          category: categoriaUI,
+          codigo,
           cost: custo,
           warnings,
-          day: r.day || WEEK_DAYS[idx % 5],
+          day: r.day || (periodDays === 1 ? 'Dia Único' : WEEK_DAYS[idx % dayIndexBound]),
         };
       });
 

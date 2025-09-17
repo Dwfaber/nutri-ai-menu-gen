@@ -66,7 +66,15 @@ export function MenuDayCarousel({ menu }: MenuDayCarouselProps) {
       });
     }
 
-    // Create days structure
+    // Use only days that actually have recipes; fallback to default weekdays when empty
+    const daysWithRecipes = Object.keys(groupedByDay);
+    if (daysWithRecipes.length > 0) {
+      const ordered = WEEK_DAYS;
+      return daysWithRecipes
+        .sort((a, b) => ordered.indexOf(a) - ordered.indexOf(b))
+        .map(day => ({ day, recipes: groupedByDay[day] }));
+    }
+
     return WEEK_DAYS.map(day => ({
       day,
       recipes: groupedByDay[day] || []
@@ -98,11 +106,25 @@ export function MenuDayCarousel({ menu }: MenuDayCarouselProps) {
     
     // Group actual recipes by category
     currentDay?.recipes?.forEach((recipe) => {
-      const category = recipe.category || recipe.categoria || 'Outros';
-      if (!grouped[category]) {
-        grouped[category] = [];
+      const code = (recipe as any).codigo as string | undefined;
+      const rawCat = recipe.category || recipe.categoria || 'Outros';
+      const displayCat = code
+        ? (
+            code === 'PP1' ? 'Prato Principal 1' :
+            code === 'PP2' ? 'Prato Principal 2' :
+            code === 'ARROZ' ? 'Arroz Branco' :
+            code === 'FEIJAO' ? 'Feijão' :
+            code === 'SALADA1' ? 'Salada 1' :
+            code === 'SALADA2' ? 'Salada 2' :
+            code === 'SUCO1' ? 'Suco 1' :
+            code === 'SUCO2' ? 'Suco 2' : rawCat
+          )
+        : (rawCat === 'PP1' ? 'Prato Principal 1' : rawCat === 'PP2' ? 'Prato Principal 2' : rawCat);
+
+      if (!grouped[displayCat]) {
+        grouped[displayCat] = [];
       }
-      grouped[category].push(recipe);
+      grouped[displayCat].push(recipe);
     });
     
     return grouped;

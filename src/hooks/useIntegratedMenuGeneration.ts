@@ -109,7 +109,9 @@ export function useIntegratedMenuGeneration(): UseIntegratedMenuGenerationReturn
 
   const generateMenuWithFormData = useCallback(async (formData: SimpleMenuFormData) => {
     const periodLabel = `${formData.period.start} - ${formData.period.end}`;
-    const periodDays = formData.diasUteis ? 5 : 7;
+    // Determine number of days requested. If start === end, it's a single-day request.
+    const sameDay = formData?.period?.start && formData?.period?.end && (formData.period.start === formData.period.end);
+    const periodDays = sameDay ? 1 : (formData.diasUteis ? 5 : 7);
     const menu = await generateMenu(
       selectedClient,
       periodLabel,
