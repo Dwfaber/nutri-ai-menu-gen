@@ -241,17 +241,7 @@ export function useSimplifiedMenuGeneration() {
         mealsPerDay: mealQuantity,
         recipes: allRecipes,
         createdAt: new Date().toISOString(),
-        menu: {
-          calculated_with_cost_calculator: true,
-          business_rules: businessRules,
-          shopping_list: menuResult.lista_compras?.itens || [],
-          budget_adherence: menuResult.resumo_custos?.dentro_orcamento,
-          calculation_precision: menuResult.metadata?.precision_percentage,
-          savings_summary: {
-            economia_total: menuResult.resumo_custos?.economia_total,
-            economia_percentual: menuResult.resumo_custos?.economia_percentual,
-          }
-        },
+        menu: menuResult,
         warnings: [
           ...(menuResult.avisos || []),
           ...allRecipes.flatMap(r => r.warnings || [])

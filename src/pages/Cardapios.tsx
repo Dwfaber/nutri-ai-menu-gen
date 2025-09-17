@@ -247,7 +247,7 @@ const Cardapios = () => {
       <Dialog open={!!viewingMenu} onOpenChange={() => setViewingMenu(null)}>
         <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle>Visualizar Cardápio - {viewingMenu?.weekPeriod}</DialogTitle></DialogHeader>
-          {viewingMenu && <WeeklyMenuView menu={viewingMenu} />} {/* ✅ WeeklyMenuView agora importa certo */}
+          {viewingMenu && <WeeklyMenuView menu={viewingMenu?.menu || viewingMenu} />} {/* ✅ WeeklyMenuView agora importa certo */}
         </DialogContent>
       </Dialog>
     </div>

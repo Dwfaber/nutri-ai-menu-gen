@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { generateMenu, MenuResult } from "@/utils/costCalculations";
+import { generateMenu, MenuResult, RecipeCost } from "@/utils/costCalculations";
 import MenuTable from "@/components/MenuTable/MenuTable";
 import { Loader2 } from "lucide-react";
 
@@ -21,16 +21,38 @@ const WeeklyMenuView: React.FC<WeeklyMenuViewProps> = ({
   const [generatedMenu, setGeneratedMenu] = useState<MenuResult | null>(null);
   const [loading, setLoading] = useState(false);
 
+  // Converter receitas categorizadas para array simples
+  const convertRecipesToArray = (receitas: { fixas: RecipeCost[]; principais: RecipeCost[]; acompanhamentos: RecipeCost[] }) => {
+    const allRecipes = [
+      ...receitas.fixas || [],
+      ...receitas.principais || [], 
+      ...receitas.acompanhamentos || []
+    ];
+    
+    return allRecipes.map((recipe, index) => ({
+      id: recipe.receita_id?.toString() || index.toString(),
+      name: recipe.nome,
+      category: recipe.categoria || 'PP1',
+      day: 'Segunda-feira', // Default day - will be updated based on recipe position
+      cost: recipe.custo_total,
+      servings: recipe.porcoes_calculadas,
+      ingredients: recipe.ingredientes?.map(ing => ({
+        name: ing.nome,
+        quantity: ing.quantidade_necessaria,
+        unit: ing.unidade
+      })) || []
+    }));
+  };
+
   // Caso já receba menu pronto (ex: vindo de Cardapios.tsx)
   if (menu) {
+    const recipesArray = convertRecipesToArray(menu.receitas);
     return (
       <MenuTable
         title={`Cardápio - ${menu.periodo}`}
         weekPeriod={menu.periodo}
         totalCost={menu.resumo_custos.custo_total_calculado}
-        costPerServing={menu.resumo_custos.custo_por_refeicao}
-        totalServings={menu.total_refeicoes}
-        recipes={menu.receitas}
+        recipes={recipesArray}
       />
     );
   }
@@ -75,14 +97,13 @@ const WeeklyMenuView: React.FC<WeeklyMenuViewProps> = ({
     );
   }
 
+  const recipesArray = convertRecipesToArray(generatedMenu.receitas);
   return (
     <MenuTable
       title={`Cardápio - ${generatedMenu.periodo}`}
       weekPeriod={generatedMenu.periodo}
       totalCost={generatedMenu.resumo_custos.custo_total_calculado}
-      costPerServing={generatedMenu.resumo_custos.custo_por_refeicao}
-      totalServings={generatedMenu.total_refeicoes}
-      recipes={generatedMenu.receitas}
+      recipes={recipesArray}
     />
   );
 };

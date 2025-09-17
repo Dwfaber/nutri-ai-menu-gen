@@ -266,8 +266,8 @@ const IntegratedMenuGenerator = () => {
             )}
 
             {/* Visão semanal */}
-            {generatedMenu.recipes?.length > 0 ? (
-              <WeeklyMenuView menu={generatedMenu} />
+            {generatedMenu.menu ? (
+              <WeeklyMenuView menu={generatedMenu.menu} />
             ) : (
               <div className="p-8 text-center text-gray-500">
                 <ChefHat className="w-12 h-12 mx-auto mb-3 text-gray-300" />
