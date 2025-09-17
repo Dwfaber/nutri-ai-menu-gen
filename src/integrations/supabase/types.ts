@@ -888,6 +888,15 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      bulk_upsert_cleanup: {
+        Args: {
+          cleanup_days?: number
+          data_json: Json
+          target_table: string
+          unique_columns?: string[]
+        }
+        Returns: Json
+      }
       cleanup_old_product_versions: {
         Args: Record<PropertyKey, never>
         Returns: undefined

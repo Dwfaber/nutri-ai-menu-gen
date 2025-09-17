@@ -210,24 +210,32 @@ async function syncTable(supabaseClient: any, tableName: string, data: any[], sy
     batchSize: 100 
   };
 
-  console.log(`Syncing table ${tableName} with strategy: ${strategy.strategy}`);
+  console.log(`Syncing table ${tableName} with strategy: ${strategy.strategy}, records: ${data.length}`);
   
   // Normalizar dados antes de processar
   const normalizedData = normalizeData(tableName, data);
   console.log(`Data normalized for ${tableName}: ${data.length} -> ${normalizedData.length} records`);
+
+  // Use bulk optimization for large datasets (>= 1000 records) with upsert_cleanup strategy
+  const shouldUseBulkOptimization = normalizedData.length >= 1000 && strategy.strategy === 'upsert_cleanup';
+  
+  if (shouldUseBulkOptimization) {
+    console.log(`🚀 Using BULK OPTIMIZATION for ${normalizedData.length} records`);
+  }
 
   // Log início da sincronização
   const { data: logData } = await supabaseClient
     .from('sync_logs')
     .insert({
       tabela_destino: tableName,
-      operacao: `hybrid_sync_${strategy.strategy}`,
+      operacao: shouldUseBulkOptimization ? 'bulk_upsert_cleanup' : `hybrid_sync_${strategy.strategy}`,
       status: 'iniciado',
       detalhes: { 
-        strategy: strategy.strategy,
+        strategy: shouldUseBulkOptimization ? 'bulk_upsert_cleanup' : strategy.strategy,
         recordCount: data.length,
         normalizedRecords: normalizedData.length,
-        backup: strategy.backup
+        backup: strategy.backup,
+        bulkOptimization: shouldUseBulkOptimization
       }
     })
     .select()
@@ -249,25 +257,37 @@ async function syncTable(supabaseClient: any, tableName: string, data: any[], sy
     }
 
     let processedRecords = 0;
+    let insertedRecords = 0;
+    let updatedRecords = 0;
+    let cleanupRecords = 0;
 
-    // 2. Executar estratégia específica com dados normalizados
-    switch (strategy.strategy) {
-      case 'truncate_insert':
-        processedRecords = await truncateAndInsert(supabaseClient, tableName, normalizedData, strategy.batchSize);
-        break;
-      case 'upsert_cleanup':
-        processedRecords = await upsertWithCleanup(supabaseClient, tableName, normalizedData, strategy);
-        break;
-      case 'upsert':
-      default:
-        processedRecords = await upsertData(supabaseClient, tableName, normalizedData, strategy.batchSize, strategy.uniqueColumns);
-        break;
-    }
+    // 2. Execute strategy - use bulk optimization if applicable
+    if (shouldUseBulkOptimization) {
+      const result = await bulkUpsertCleanup(supabaseClient, tableName, normalizedData, strategy);
+      processedRecords = result.processedRecords;
+      insertedRecords = result.insertedRecords;
+      updatedRecords = result.updatedRecords;
+      cleanupRecords = result.cleanupRecords;
+    } else {
+      // Use existing strategies for smaller datasets
+      switch (strategy.strategy) {
+        case 'truncate_insert':
+          processedRecords = await truncateAndInsert(supabaseClient, tableName, normalizedData, strategy.batchSize);
+          break;
+        case 'upsert_cleanup':
+          processedRecords = await upsertWithCleanup(supabaseClient, tableName, normalizedData, strategy);
+          break;
+        case 'upsert':
+        default:
+          processedRecords = await upsertData(supabaseClient, tableName, normalizedData, strategy.batchSize, strategy.uniqueColumns);
+          break;
+      }
 
-    // 3. Cleanup de órfãos se configurado
-    if (strategy.cleanupOrphans) {
-      console.log(`Cleaning up orphans for ${tableName}...`);
-      await cleanupOrphans(supabaseClient, tableName, strategy.orphanDays);
+      // 3. Cleanup de órfãos se configurado (skip if bulk optimization already did it)
+      if (strategy.cleanupOrphans) {
+        console.log(`Cleaning up orphans for ${tableName}...`);
+        await cleanupOrphans(supabaseClient, tableName, strategy.orphanDays);
+      }
     }
 
     const executionTime = Date.now() - startTime;
@@ -281,11 +301,15 @@ async function syncTable(supabaseClient: any, tableName: string, data: any[], sy
           registros_processados: processedRecords,
           tempo_execucao_ms: executionTime,
           detalhes: { 
-            strategy: strategy.strategy,
+            strategy: shouldUseBulkOptimization ? 'bulk_upsert_cleanup' : strategy.strategy,
             recordCount: data.length,
             processedRecords,
+            insertedRecords,
+            updatedRecords,
+            cleanupRecords,
             backupId,
-            executionTime
+            executionTime,
+            bulkOptimization: shouldUseBulkOptimization
           }
         })
         .eq('id', logId);
@@ -295,11 +319,15 @@ async function syncTable(supabaseClient: any, tableName: string, data: any[], sy
       JSON.stringify({
         success: true,
         tableName,
-        strategy: strategy.strategy,
+        strategy: shouldUseBulkOptimization ? 'bulk_upsert_cleanup' : strategy.strategy,
         processedRecords,
+        insertedRecords,
+        updatedRecords,
+        cleanupRecords,
         totalRecords: data.length,
         executionTime: `${executionTime}ms`,
-        backupId
+        backupId,
+        bulkOptimization: shouldUseBulkOptimization
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
@@ -327,11 +355,12 @@ async function syncTable(supabaseClient: any, tableName: string, data: any[], sy
           erro_msg: error.message,
           tempo_execucao_ms: Date.now() - startTime,
           detalhes: {
-            strategy: strategy.strategy,
+            strategy: shouldUseBulkOptimization ? 'bulk_upsert_cleanup' : strategy.strategy,
             recordCount: data.length,
             normalizedRecords: normalizedData.length,
             backupId,
             rollbackAttempted: !!backupId,
+            bulkOptimization: shouldUseBulkOptimization,
             erro_msg_completo: error.stack || error.toString(),
             sample_original_data: data.slice(0, 2),
             sample_normalized_data: normalizedData.slice(0, 2)
@@ -379,6 +408,47 @@ async function truncateAndInsert(supabaseClient: any, tableName: string, data: a
   }
 
   return processedRecords;
+}
+
+// New optimized bulk upsert function for large datasets
+async function bulkUpsertCleanup(supabaseClient: any, tableName: string, data: any[], strategy: any) {
+  console.log(`🚀 BULK UPSERT CLEANUP strategy for ${tableName} - ${data.length} records`);
+  
+  try {
+    const uniqueColumns = strategy.uniqueColumns || ['solicitacao_id', 'produto_base_id'];
+    const cleanupDays = strategy.orphanDays || 30;
+    
+    // Call the optimized PostgreSQL function
+    const { data: result, error } = await supabaseClient.rpc('bulk_upsert_cleanup', {
+      target_table: tableName,
+      data_json: data,
+      unique_columns: uniqueColumns,
+      cleanup_days: cleanupDays
+    });
+
+    if (error) {
+      console.error(`Bulk upsert cleanup error for ${tableName}:`, error);
+      throw new Error(`Bulk upsert cleanup failed: ${error.message}`);
+    }
+
+    console.log(`✅ Bulk upsert cleanup completed for ${tableName}:`, result);
+    return {
+      processedRecords: result.processed_records || 0,
+      insertedRecords: result.inserted_records || 0,
+      updatedRecords: result.updated_records || 0,
+      cleanupRecords: result.cleanup_records || 0
+    };
+    
+  } catch (error) {
+    console.error(`Bulk optimization failed, falling back to standard upsert for ${tableName}:`, error);
+    // Fallback to standard upsert method
+    return {
+      processedRecords: await upsertData(supabaseClient, tableName, data, strategy.batchSize, strategy.uniqueColumns),
+      insertedRecords: 0,
+      updatedRecords: 0,
+      cleanupRecords: 0
+    };
+  }
 }
 
 async function upsertWithCleanup(supabaseClient: any, tableName: string, data: any[], strategy: any) {
