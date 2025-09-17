@@ -1959,6 +1959,35 @@ Deno.serve(async (req) => {
         
         const enhancedResult = { ...(menuResult as any), cardapio };
         
+        // Calculate and populate real costs from the cardapio data
+        if (cardapio && Array.isArray(cardapio)) {
+          const dayTotals = cardapio.map((dayData: any) => {
+            if (dayData.recipes && Array.isArray(dayData.recipes)) {
+              return dayData.recipes.reduce((daySum: number, receita: any) => {
+                const cost = Number(receita.cost || receita.custo || receita.custo_por_refeicao || 0);
+                return daySum + cost;
+              }, 0);
+            }
+            return 0;
+          });
+          
+          const costPerMeal = dayTotals.length > 0 ? dayTotals.reduce((sum: number, day: number) => sum + day, 0) / dayTotals.length : 0;
+          const totalCostCalculated = costPerMeal * mealQuantity * periodDays;
+          
+          // Update result with calculated costs
+          enhancedResult.resumo_custos = {
+            ...enhancedResult.resumo_custos,
+            custo_por_refeicao: costPerMeal,
+            custo_total_calculado: totalCostCalculated
+          };
+          
+          console.log('💰 Custos recalculados do cardápio:', {
+            dayTotals,
+            costPerMeal: costPerMeal.toFixed(2),
+            totalCostCalculated: totalCostCalculated.toFixed(2)
+          });
+        }
+        
         console.log('✅ Menu gerado com CostCalculator:', {
           totalCost: (enhancedResult as any).resumo_custos?.custo_total_calculado,
           recipes: enhancedResult?.receitas?.fixas?.length + enhancedResult?.receitas?.principais?.length + enhancedResult?.receitas?.acompanhamentos?.length || 0,

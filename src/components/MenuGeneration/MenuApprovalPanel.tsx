@@ -75,6 +75,42 @@ const MenuApprovalPanel: React.FC<MenuApprovalPanelProps> = ({
     setNutritionistNotes('');
   };
 
+  // Calculate display values with fallback from cardapio
+  const getDisplayValues = () => {
+    let totalCostDisplay = menu.totalCost || 0;
+    let costPerMealDisplay = menu.costPerMeal || 0;
+
+    // If costs are zero, calculate from menu.menu?.cardapio
+    if (totalCostDisplay === 0 && menu.menu?.cardapio) {
+      const cardapio = menu.menu.cardapio;
+      if (Array.isArray(cardapio)) {
+        // Calculate daily totals from each day's recipes
+        const dayTotals = cardapio.map((day: any) => {
+          if (day.receitas && Array.isArray(day.receitas)) {
+            return day.receitas.reduce((daySum: number, receita: any) => {
+              const cost = Number(receita.cost || receita.custo || receita.custo_por_refeicao || 0);
+              return daySum + cost;
+            }, 0);
+          }
+          return 0;
+        });
+        
+        costPerMealDisplay = dayTotals.length > 0 ? dayTotals.reduce((sum, day) => sum + day, 0) / dayTotals.length : 0;
+        totalCostDisplay = costPerMealDisplay * (menu.mealsPerDay || 50);
+        
+        console.log('💰 Cost fallback from cardapio applied:', {
+          dayTotals,
+          costPerMealDisplay: costPerMealDisplay.toFixed(2),
+          totalCostDisplay: totalCostDisplay.toFixed(2)
+        });
+      }
+    }
+
+    return { totalCostDisplay, costPerMealDisplay };
+  };
+
+  const { totalCostDisplay, costPerMealDisplay } = getDisplayValues();
+
   const getStatusBadge = () => {
     switch (menu.status) {
       case 'approved':
@@ -108,12 +144,12 @@ const MenuApprovalPanel: React.FC<MenuApprovalPanelProps> = ({
           <div className="text-center">
             <DollarSign className="w-5 h-5 mx-auto mb-1 text-green-600" />
             <p className="text-xs text-gray-600">Custo Total</p>
-            <p className="font-semibold text-sm">R$ {menu.totalCost.toFixed(2)}</p>
+            <p className="font-semibold text-sm">R$ {totalCostDisplay.toFixed(2)}</p>
           </div>
           <div className="text-center">
             <DollarSign className="w-5 h-5 mx-auto mb-1 text-blue-600" />
             <p className="text-xs text-gray-600">Por Refeição</p>
-            <p className="font-semibold text-sm">R$ {menu.costPerMeal.toFixed(2)}</p>
+            <p className="font-semibold text-sm">R$ {costPerMealDisplay.toFixed(2)}</p>
           </div>
           <div className="text-center">
             <Clock className="w-5 h-5 mx-auto mb-1 text-purple-600" />
