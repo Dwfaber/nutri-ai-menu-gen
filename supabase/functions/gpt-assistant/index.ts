@@ -1239,8 +1239,8 @@ Deno.serve(async (req) => {
               receita = {
                 id: catConfig.codigo === 'SUCO1' ? 3001 : 3002,
                 nome: catConfig.codigo === 'SUCO1' ? 'Suco Natural Laranja' : 'Suco Natural Limão',
-                custo_por_refeicao: 1.20,
-                custo_total: 1.20 * mealQuantity
+                custo_por_refeicao: 0.05,
+                custo_total: 0.05 * mealQuantity
               };
             }
           } else if (catConfig.codigo === 'GUARNICAO') {

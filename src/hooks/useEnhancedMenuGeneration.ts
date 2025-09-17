@@ -306,8 +306,8 @@ export const useEnhancedMenuGeneration = () => {
     
     if (availableJuices.length === 0) {
       return [
-        { id: 3001, nome: 'Suco Natural Laranja', cost: 0.31 },
-        { id: 3002, nome: 'Suco Natural Limão', cost: 0.24 }
+        { id: 3001, nome: 'Suco Natural Laranja', cost: 0.05 },
+        { id: 3002, nome: 'Suco Natural Limão', cost: 0.06 }
       ];
     }
 
@@ -334,8 +334,8 @@ export const useEnhancedMenuGeneration = () => {
     const suco2 = shuffled.length > 1 ? shuffled[1] : shuffled[0];
 
     return [
-      { id: suco1.produto_base_id, nome: suco1.nome, cost: 0.31 },
-      { id: suco2.produto_base_id, nome: suco2.nome, cost: 0.24 }
+      { id: suco1.produto_base_id, nome: suco1.nome, cost: 0.05 },
+      { id: suco2.produto_base_id, nome: suco2.nome, cost: 0.06 }
     ];
   };
 
