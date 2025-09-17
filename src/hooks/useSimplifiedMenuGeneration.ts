@@ -78,6 +78,18 @@ export function useSimplifiedMenuGeneration() {
 
   const saveMenuToDatabase = async (menu: GeneratedMenu): Promise<string | null> => {
     try {
+      // Prepare receitas_adaptadas format for shopping list compatibility
+      const receitasAdaptadas = menu.recipes?.map(recipe => ({
+        receita_id_legado: recipe.id,
+        nome: recipe.name,
+        categoria: recipe.category,
+        custo_por_porcao: recipe.cost || 0,
+        porcoes_calculadas: menu.mealsPerDay || 50
+      })) || [];
+
+      // Prepare receitas_ids as backup fallback
+      const receitasIds = menu.recipes?.map(recipe => recipe.id).filter(Boolean) || [];
+
       const { data, error } = await supabase
         .from('generated_menus')
         .insert({
@@ -90,6 +102,8 @@ export function useSimplifiedMenuGeneration() {
           total_recipes: menu.totalRecipes,
           meals_per_day: menu.mealsPerDay || 50,
           recipes: menu.recipes,
+          receitas_adaptadas: receitasAdaptadas,
+          receitas_ids: receitasIds,
           menu_data: menu.menu,
           warnings: menu.warnings
         })
