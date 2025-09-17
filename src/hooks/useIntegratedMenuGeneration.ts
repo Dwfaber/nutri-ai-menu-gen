@@ -190,7 +190,7 @@ export function useIntegratedMenuGeneration(): UseIntegratedMenuGenerationReturn
   }, [loadSavedMenus, generatedMenu]);
 
   const generateShoppingListFromMenu = useCallback(async (menu: GeneratedMenu) => {
-    await generateShoppingList(menu.id, menu.clientName, menu.totalCost, menu.totalRecipes || 50);
+    await generateShoppingList(menu.id, menu.clientName, menu.totalCost, menu.mealsPerDay || 50);
   }, [generateShoppingList]);
 
   return {
