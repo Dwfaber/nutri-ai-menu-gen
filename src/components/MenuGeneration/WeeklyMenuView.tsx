@@ -53,26 +53,34 @@ const WeeklyMenuView: React.FC<WeeklyMenuViewProps> = ({
     
     if (cardapio && Array.isArray(cardapio)) {
       return (
-        <MenuDayCarousel 
-          menu={{
-            clientName: menu.cliente || menu.clientName || 'Cliente',
-            weekPeriod: menu.periodo || menu.weekPeriod || 'Período',
-            cardapio: cardapio
-          }}
-        />
+        <div className="min-h-screen bg-gray-100 py-8">
+          <div className="container mx-auto px-4">
+            <MenuDayCarousel 
+              menu={{
+                clientName: menu.cliente || menu.clientName || 'Cliente',
+                weekPeriod: menu.periodo || menu.weekPeriod || 'Período',
+                cardapio: cardapio
+              }}
+            />
+          </div>
+        </div>
       );
     }
     
     // If we have recipes array from saved menu, convert to cardapio format
     if (recipes && Array.isArray(recipes) && recipes.length > 0) {
       return (
-        <MenuDayCarousel 
-          menu={{
-            clientName: menu.clientName || menu.cliente || 'Cliente',
-            weekPeriod: menu.weekPeriod || menu.periodo || 'Período',
-            recipes: recipes
-          }}
-        />
+        <div className="min-h-screen bg-gray-100 py-8">
+          <div className="container mx-auto px-4">
+            <MenuDayCarousel 
+              menu={{
+                clientName: menu.clientName || menu.cliente || 'Cliente',
+                weekPeriod: menu.weekPeriod || menu.periodo || 'Período',
+                recipes: recipes
+              }}
+            />
+          </div>
+        </div>
       );
     }
     
@@ -133,13 +141,17 @@ const WeeklyMenuView: React.FC<WeeklyMenuViewProps> = ({
   // Check if we have the new cardapio format
   if ((generatedMenu as any).cardapio && Array.isArray((generatedMenu as any).cardapio)) {
     return (
-      <MenuDayCarousel 
-        menu={{
-          clientName: generatedMenu.cliente || 'Cliente',
-          weekPeriod: generatedMenu.periodo,
-          cardapio: (generatedMenu as any).cardapio
-        }}
-      />
+      <div className="min-h-screen bg-gray-100 py-8">
+        <div className="container mx-auto px-4">
+          <MenuDayCarousel 
+            menu={{
+              clientName: generatedMenu.cliente || 'Cliente',
+              weekPeriod: generatedMenu.periodo,
+              cardapio: (generatedMenu as any).cardapio
+            }}
+          />
+        </div>
+      </div>
     );
   }
 
