@@ -8,6 +8,22 @@ import { CheckCircle, Clock, Code, Database, Cpu, GitBranch, Zap, Bug, Plus, Cal
 export default function Updates() {
   const recentUpdates = [
     {
+      date: "17/09/2025",
+      title: "Sistema de Listas de Compras Corrigido",
+      description: "Correção completa de listas vazias e normalização de IDs de receitas",
+      type: "bug-fix",
+      impact: "crítico",
+      details: [
+        "Normalização automática de IDs de receitas inválidos",
+        "Correção de mapeamento receita_id_legado → nome quando necessário",
+        "Criação de itens placeholder quando produtos não estão no mercado",
+        "Distribuição proporcional de orçamento entre ingredientes estimados",
+        "Botão 'Corrigir Itens' para regenerar listas vazias",
+        "Indicadores visuais de disponibilidade e notas explicativas",
+        "Suporte para atualização de listas existentes via existingListId"
+      ]
+    },
+    {
       date: "07/09/2025",
       title: "Fase 1 - Sistema de Proteínas Categorizadas",
       description: "Nova estrutura baseada em tabelas para classificação automática de proteínas",
@@ -95,6 +111,12 @@ export default function Updates() {
   const completeHistory = {
     backend: [
       {
+        date: "17/09/2025",
+        title: "Edge Function Generate-Shopping-List Corrigida",
+        description: "Normalização de IDs e correção de listas vazias",
+        status: "concluído"
+      },
+      {
         date: "07/09/2025",
         title: "Tabela de Proteínas Categorizadas",
         description: "Migração de 371 receitas para estrutura categorizada",
@@ -138,6 +160,12 @@ export default function Updates() {
       }
     ],
     frontend: [
+      {
+        date: "17/09/2025",
+        title: "Interface de Listas de Compras Aprimorada",
+        description: "Botão 'Corrigir Itens' e indicadores de disponibilidade",
+        status: "concluído"
+      },
       {
         date: "07/09/2025",
         title: "Hook de Configuração de Proteínas",
