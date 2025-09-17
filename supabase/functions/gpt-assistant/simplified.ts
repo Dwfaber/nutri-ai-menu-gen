@@ -64,6 +64,22 @@ FORMATO JSON OBRIGATÓRIO:
   ]
 }
 
+CATEGORIAS DISPONÍVEIS CONFIRMADAS:
+- Prato Principal 1: 307 receitas (proteína principal)
+- Prato Principal 2: 266 receitas (proteína secundária)
+- Guarnição: 140 receitas (acompanhamentos)
+- Salada: 86 receitas (verduras e legumes)
+- Sobremesa: 176 receitas
+
+REGRAS DE VARIEDADE INTELIGENTE:
+- Alternar tipos de proteína: bovina, suína, frango, peixe, vegetariana
+- Máximo 3 carnes vermelhas na semana (bovina + suína)
+- Mínimo 1 peixe na semana
+- Segunda-feira: receitas simples, sem preparo avançado
+- Sexta-feira: receita especial ou "prato show"
+- Variedade nas guarnições: batatas, cereais, massas, legumes, raízes
+- Saladas balanceadas: verduras/folhas + legumes cozidos
+
 IMPORTANTE: Retorne EXCLUSIVAMENTE o JSON válido, sem texto adicional ou explicações.
 `;
 
@@ -77,7 +93,10 @@ IMPORTANTE: Retorne EXCLUSIVAMENTE o JSON válido, sem texto adicional ou explic
       body: JSON.stringify({
         model: 'gpt-4o',
         messages: [
-          { role: 'system', content: 'Você é um chef especialista. Responda sempre em JSON válido.' },
+          { 
+            role: 'system', 
+            content: 'Você é um chef especialista em cardápios institucionais. Foque na variedade semanal, custo-benefício e adequação nutricional. Responda sempre em JSON válido.' 
+          },
           { role: 'user', content: prompt }
         ],
         max_tokens: 4000,

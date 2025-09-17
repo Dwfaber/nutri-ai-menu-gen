@@ -44,28 +44,44 @@ export const useMenuBusinessRules = () => {
     return mapeamento[dia] || dia;
   };
 
-  // Classify protein type from recipe name
+  // Enhanced protein classification with expanded keywords and patterns
   const classifyProtein = (recipeName: string): ProteinClassification => {
     const name = recipeName.toLowerCase();
     
-    if (name.includes('frango') || name.includes('ave') || name.includes('galinha')) {
+    // Frango/Aves - Expanded keywords
+    const frangoKeywords = ['frango', 'ave', 'galinha', 'peito', 'coxa', 'asa', 'chester', 'escondidinho de frango', 'strogonoff de frango'];
+    if (frangoKeywords.some(keyword => name.includes(keyword))) {
       return { type: 'frango', isRedMeat: false };
     }
     
-    if (name.includes('boi') || name.includes('bife') || name.includes('carne') || name.includes('acém') || name.includes('músculo')) {
+    // Carne Bovina - Expanded keywords
+    const bovinaKeywords = ['boi', 'bife', 'carne', 'acém', 'músculo', 'alcatra', 'patinho', 'coxão', 'maminha', 'picanha', 'costela', 'cupim', 'rabada', 'cozido', 'panelada', 'strogonoff de carne', 'iscas', 'bifão', 'moída'];
+    if (bovinaKeywords.some(keyword => name.includes(keyword))) {
       return { type: 'bovina', isRedMeat: true };
     }
     
-    if (name.includes('porco') || name.includes('lombo') || name.includes('copa') || name.includes('suíno')) {
+    // Carne Suína - Expanded keywords
+    const suinaKeywords = ['porco', 'lombo', 'copa', 'suíno', 'pernil', 'bisteca', 'costela de porco', 'bacon', 'linguiça', 'salsicha', 'presunto'];
+    if (suinaKeywords.some(keyword => name.includes(keyword))) {
       return { type: 'suina', isRedMeat: true };
     }
     
-    if (name.includes('peixe') || name.includes('tilápia') || name.includes('salmão') || name.includes('bacalhau')) {
+    // Peixe - Expanded keywords
+    const peixeKeywords = ['peixe', 'tilápia', 'salmão', 'bacalhau', 'sardinha', 'pescada', 'merluza', 'cação', 'dourado', 'robalo', 'corvina', 'filé de peixe'];
+    if (peixeKeywords.some(keyword => name.includes(keyword))) {
       return { type: 'peixe', isRedMeat: false };
     }
     
-    if (name.includes('vegetal') || name.includes('soja') || name.includes('tofu') || name.includes('grão')) {
+    // Vegetariana - Expanded keywords
+    const vegetarianaKeywords = ['vegetal', 'soja', 'tofu', 'grão', 'lentilha', 'grão-de-bico', 'ervilha', 'quinoa', 'proteína de soja', 'hambúrguer de soja', 'vegetariano', 'vegano'];
+    if (vegetarianaKeywords.some(keyword => name.includes(keyword))) {
       return { type: 'vegetariana', isRedMeat: false };
+    }
+    
+    // Ovos - New category
+    const ovoKeywords = ['ovo', 'omelete', 'fritada', 'mexido', 'ovo cozido', 'ovo frito'];
+    if (ovoKeywords.some(keyword => name.includes(keyword))) {
+      return { type: 'outras', isRedMeat: false }; // Could be expanded to 'ovo' type if needed
     }
     
     return { type: 'outras', isRedMeat: false };
@@ -82,43 +98,71 @@ export const useMenuBusinessRules = () => {
     return advanceKeywords.some(keyword => name.includes(keyword));
   };
 
-  // Categorize salad type with enhanced intelligence based on available vegetables
+  // Enhanced salad categorization with better ingredient mapping
   const categorizeSalad = (recipeName: string): 'verduras_folhas' | 'legumes' | 'mista' => {
     const name = recipeName.toLowerCase();
     
-    // Verduras de folhas (expandido com base nos produtos disponíveis)
+    // Verduras de folhas - Expanded with seasonal varieties
     const folhosas = [
       'alface', 'rúcula', 'agrião', 'espinafre', 'couve', 'acelga', 
-      'almeirão', 'chicória', 'endívia', 'mostarda', 'taioba', 'repolho'
+      'almeirão', 'chicória', 'endívia', 'mostarda', 'taioba', 'repolho',
+      'escarola', 'catalonha', 'bertalha', 'ora-pro-nóbis', 'folhas verdes'
     ];
     
-    // Legumes (expandido com produtos identificados)
-    const legumes = [
-      'tomate', 'cenoura', 'beterraba', 'abobrinha', 'pepino', 'cebola',
-      'pimentão', 'rabanete', 'nabo', 'chuchu', 'quiabo', 'berinjela',
-      'abóbora', 'mandioca', 'batata', 'inhame', 'mandioquinha', 'brócolis'
+    // Legumes cozidos e crus - Better categorization
+    const legumesCrus = [
+      'tomate', 'pepino', 'rabanete', 'cebola roxa', 'pimentão cru'
     ];
     
-    // Aromáticas e temperos
+    const legumesCozidos = [
+      'cenoura', 'beterraba', 'abobrinha', 'chuchu', 'quiabo', 'berinjela',
+      'abóbora', 'brócolis', 'couve-flor', 'vagem', 'ervilha torta'
+    ];
+    
+    // Raízes e tubérculos
+    const raizes = [
+      'mandioca', 'batata', 'batata doce', 'inhame', 'mandioquinha',
+      'nabo', 'rabanete', 'beterraba'
+    ];
+    
+    // Aromáticas e temperos frescos
     const aromaticas = [
-      'salsa', 'cebolinha', 'coentro', 'manjericão', 'orégano', 'tomilho'
+      'salsa', 'cebolinha', 'coentro', 'manjericão', 'orégano', 'tomilho',
+      'hortelã', 'alecrim', 'salsão', 'aipo'
     ];
     
+    // Identificar componentes
     const hasFolhosas = folhosas.some(item => name.includes(item));
-    const hasLegumes = legumes.some(item => name.includes(item));
+    const hasLegumesCrus = legumesCrus.some(item => name.includes(item));
+    const hasLegumesCozidos = legumesCozidos.some(item => name.includes(item));
+    const hasRaizes = raizes.some(item => name.includes(item));
     const hasAromaticas = aromaticas.some(item => name.includes(item));
     
+    // Padrões específicos de saladas identificados
+    if (name.includes('salada verde') || name.includes('mix de folhas')) return 'verduras_folhas';
+    if (name.includes('legumes refogados') || name.includes('legumes cozidos')) return 'legumes';
+    if (name.includes('salada mista') || name.includes('salada completa')) return 'mista';
+    
     // Lógica melhorada de categorização
-    if (hasFolhosas && hasLegumes) return 'mista';
-    if (hasFolhosas || hasAromaticas) return 'verduras_folhas';
-    if (hasLegumes) return 'legumes';
+    const componentCount = [hasFolhosas, hasLegumesCrus, hasLegumesCozidos, hasRaizes].filter(Boolean).length;
     
-    // Padrões específicos para saladas
-    if (name.includes('salada verde') || name.includes('folhas')) return 'verduras_folhas';
-    if (name.includes('legumes') || name.includes('raízes')) return 'legumes';
+    if (componentCount >= 2 || (hasFolhosas && (hasLegumesCrus || hasLegumesCozidos))) {
+      return 'mista'; // Salada com múltiplos componentes
+    }
     
-    // Default para mista se não conseguir classificar especificamente
-    return 'mista';
+    if (hasFolhosas || hasAromaticas) {
+      return 'verduras_folhas'; // Predominantemente folhas verdes
+    }
+    
+    if (hasLegumesCrus || hasLegumesCozidos || hasRaizes) {
+      return 'legumes'; // Predominantemente legumes/raízes
+    }
+    
+    // Default inteligente baseado no nome
+    if (name.includes('verde') || name.includes('folha')) return 'verduras_folhas';
+    if (name.includes('cozid') || name.includes('refogad')) return 'legumes';
+    
+    return 'mista'; // Default mais conservador
   };
 
   // Validate protein variety rules
