@@ -97,6 +97,7 @@ export type Database = {
           solicitacao_id: number | null
           solicitacao_produto_categoria_id: number | null
           solicitacao_produto_listagem_id: number
+          sync_at: string
           unidade: string | null
         }
         Insert: {
@@ -115,6 +116,7 @@ export type Database = {
           solicitacao_id?: number | null
           solicitacao_produto_categoria_id?: number | null
           solicitacao_produto_listagem_id?: number
+          sync_at?: string
           unidade?: string | null
         }
         Update: {
@@ -133,6 +135,7 @@ export type Database = {
           solicitacao_id?: number | null
           solicitacao_produto_categoria_id?: number | null
           solicitacao_produto_listagem_id?: number
+          sync_at?: string
           unidade?: string | null
         }
         Relationships: []
