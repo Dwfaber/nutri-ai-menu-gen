@@ -2013,7 +2013,12 @@ Deno.serve(async (req) => {
 
 // Helper function to generate recipe names
 function generateRecipeName(category: string, dayIndex: number): string {
-  const recipeNames = {
+  // Normalize known aliases
+  const key = category === 'Prato Principal 1' ? 'PP1'
+            : category === 'Prato Principal 2' ? 'PP2'
+            : category;
+
+  const recipeNames: Record<string, string[]> = {
     'PP1': ['Frango Grelhado', 'Carne Moída', 'Peixe Assado', 'Frango Ensopado', 'Bife Acebolado'],
     'PP2': ['Omelete', 'Frango Desfiado', 'Carne de Panela', 'Peixe Grelhado', 'Frango Xadrez'],
     'Arroz Branco': ['Arroz Branco'],
@@ -2026,6 +2031,6 @@ function generateRecipeName(category: string, dayIndex: number): string {
     'Sobremesa': ['Fruta da Estação', 'Gelatina', 'Doce de Leite', 'Salada de Frutas', 'Pudim']
   };
 
-  const options = recipeNames[category] || [category];
+  const options = recipeNames[key] || [category];
   return options[dayIndex % options.length];
 }
