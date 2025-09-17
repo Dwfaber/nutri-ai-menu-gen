@@ -6,9 +6,13 @@ import { ChevronLeft, ChevronRight } from 'lucide-react';
 
 interface Recipe {
   id: string | number;
-  name: string;
-  category: string;
-  cost: number;
+  name?: string;
+  nome?: string; // Portuguese version
+  category?: string;
+  categoria?: string; // Portuguese version
+  cost?: number;
+  custo?: number; // Portuguese version
+  custo_por_refeicao?: number; // Portuguese version
   day?: string;
 }
 
@@ -94,7 +98,7 @@ export function MenuDayCarousel({ menu }: MenuDayCarouselProps) {
     
     // Group actual recipes by category
     currentDay?.recipes?.forEach((recipe) => {
-      const category = recipe.category || 'Outros';
+      const category = recipe.category || recipe.categoria || 'Outros';
       if (!grouped[category]) {
         grouped[category] = [];
       }
@@ -109,12 +113,12 @@ export function MenuDayCarousel({ menu }: MenuDayCarouselProps) {
     if (!currentDay?.recipes) return { baseCost: 0, variableCost: 0, totalCost: 0 };
     
     const base = currentDay.recipes
-      .filter(recipe => recipe.category === 'Base')
-      .reduce((sum, recipe) => sum + (recipe.cost || 0), 0);
+      .filter(recipe => (recipe.category || recipe.categoria) === 'Base')
+      .reduce((sum, recipe) => sum + (recipe.cost || recipe.custo || recipe.custo_por_refeicao || 0), 0);
     
     const variable = currentDay.recipes
-      .filter(recipe => recipe.category !== 'Base')
-      .reduce((sum, recipe) => sum + (recipe.cost || 0), 0);
+      .filter(recipe => (recipe.category || recipe.categoria) !== 'Base')
+      .reduce((sum, recipe) => sum + (recipe.cost || recipe.custo || recipe.custo_por_refeicao || 0), 0);
     
     return {
       baseCost: base,
@@ -146,7 +150,7 @@ export function MenuDayCarousel({ menu }: MenuDayCarouselProps) {
       <div className="grid grid-cols-3 gap-4">
         {CATEGORY_ORDER.map((category) => {
           const recipes = recipesByCategory[category] || [];
-          const categoryTotal = recipes.reduce((sum, recipe) => sum + (recipe.cost || 0), 0);
+          const categoryTotal = recipes.reduce((sum, recipe) => sum + (recipe.cost || recipe.custo || recipe.custo_por_refeicao || 0), 0);
           const isBaseCategory = category === 'Base';
           
           return (
@@ -168,10 +172,10 @@ export function MenuDayCarousel({ menu }: MenuDayCarouselProps) {
                     recipes.map((recipe) => (
                       <div key={recipe.id} className="space-y-1">
                         <h4 className="font-medium text-base text-gray-800 leading-tight">
-                          {recipe.name}
+                          {recipe.name || recipe.nome || 'Nome não definido'}
                         </h4>
                         <p className="text-base font-semibold text-green-600">
-                          R$ {recipe.cost.toFixed(2)}
+                          R$ {(recipe.cost || recipe.custo || recipe.custo_por_refeicao || 0).toFixed(2)}
                         </p>
                       </div>
                     ))
