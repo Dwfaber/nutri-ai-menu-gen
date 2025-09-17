@@ -1708,9 +1708,15 @@ Deno.serve(async (req) => {
       const mealQuantity = requestData.mealQuantity || 50;
       const budgetPerMeal = requestData.budgetPerMeal || 5.0;
 
+      // Helper function to generate week days based on period
+      const generateWeekDays = (days: number): string[] => {
+        const allDays = ['Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado', 'Domingo'];
+        return allDays.slice(0, days);
+      };
+
       try {
         // Generate basic menu structure with categories
-        const WEEK_DAYS = ['Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira'];
+        const WEEK_DAYS = generateWeekDays(periodDays);
         const CATEGORIES = ['PP1', 'PP2', 'Arroz Branco', 'Feijão', 'Guarnição', 'Salada 1', 'Salada 2', 'Suco 1', 'Suco 2', 'Sobremesa'];
         
         const cardapio = WEEK_DAYS.slice(0, periodDays).map((day, dayIdx) => ({
@@ -1855,6 +1861,12 @@ Deno.serve(async (req) => {
 
       console.log('📊 MenuRequest para CostCalculator:', JSON.stringify(menuRequest, null, 2));
 
+      // Helper function to generate week days based on period
+      const generateWeekDays = (days: number): string[] => {
+        const allDays = ['Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado', 'Domingo'];
+        return allDays.slice(0, days);
+      };
+
       try {
         const menuResult = await generateMenu(menuRequest);
         
@@ -1864,7 +1876,7 @@ Deno.serve(async (req) => {
         const acompanhamentosCount = menuResult?.receitas?.acompanhamentos?.length || 0;
 
         if (!cardapio || principaisCount === 0 || acompanhamentosCount === 0) {
-          const WEEK_DAYS = ['Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira'];
+          const WEEK_DAYS = generateWeekDays(menuRequest.periodo_dias || 5);
           // Categorias incluindo Base obrigatória
           const CATEGORIES = ['Base', 'Prato Principal 1', 'Prato Principal 2', 'Arroz Branco', 'Feijão', 'Guarnição', 'Salada 1', 'Salada 2', 'Suco 1', 'Suco 2', 'Sobremesa'];
           const budget = menuRequest.orcamento_por_refeicao || 5.0;
