@@ -1858,25 +1858,62 @@ Deno.serve(async (req) => {
       try {
         const menuResult = await generateMenu(menuRequest);
         
-        // Fallback: if principais/acompanhamentos vierem vazios, gerar estrutura visual completa
+        // Criar estrutura de cardápio com custos realistas por categoria
         let cardapio = (menuResult as any).cardapio;
         const principaisCount = menuResult?.receitas?.principais?.length || 0;
         const acompanhamentosCount = menuResult?.receitas?.acompanhamentos?.length || 0;
 
-        if (!cardapio && (principaisCount === 0 || acompanhamentosCount === 0)) {
+        if (!cardapio || principaisCount === 0 || acompanhamentosCount === 0) {
           const WEEK_DAYS = ['Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira'];
           const CATEGORIES = ['PP1', 'PP2', 'Arroz Branco', 'Feijão', 'Guarnição', 'Salada 1', 'Salada 2', 'Suco 1', 'Suco 2', 'Sobremesa'];
           const budget = menuRequest.orcamento_por_refeicao || 5.0;
 
-          cardapio = WEEK_DAYS.slice(0, menuRequest.periodo_dias).map((day, dayIdx) => ({
-            day,
-            recipes: CATEGORIES.map((category, catIdx) => ({
-              id: `${dayIdx}-${catIdx}`,
-              name: generateRecipeName(category, dayIdx),
-              category,
-              cost: Number((Math.random() * budget * 0.8 + budget * 0.2).toFixed(2))
-            }))
-          }));
+          // Definir percentuais realistas por categoria
+          const CATEGORY_PERCENTAGES = {
+            'PP1': 0.20,        // 20% do orçamento
+            'PP2': 0.20,        // 20% do orçamento  
+            'Arroz Branco': 0.12, // 12% do orçamento
+            'Feijão': 0.13,     // 13% do orçamento
+            'Guarnição': 0.15,  // 15% do orçamento
+            'Salada 1': 0.05,   // 5% do orçamento
+            'Salada 2': 0.05,   // 5% do orçamento
+            'Suco 1': 0.04,     // 4% do orçamento
+            'Suco 2': 0.03,     // 3% do orçamento
+            'Sobremesa': 0.03   // 3% do orçamento
+          };
+
+          cardapio = WEEK_DAYS.slice(0, menuRequest.periodo_dias).map((day, dayIdx) => {
+            const recipes = CATEGORIES.map((category, catIdx) => {
+              const basePercentage = CATEGORY_PERCENTAGES[category] || 0.10;
+              // Adicionar variação de ±20% para realismo
+              const variation = 0.8 + (Math.random() * 0.4); // 0.8 a 1.2
+              const cost = Number((budget * basePercentage * variation).toFixed(2));
+              
+              return {
+                id: `${dayIdx}-${catIdx}`,
+                name: generateRecipeName(category, dayIdx),
+                category,
+                cost: Math.max(0.10, cost) // Mínimo de R$ 0,10 por categoria
+              };
+            });
+
+            // Garantir que o total não exceda o orçamento
+            const totalCost = recipes.reduce((sum, recipe) => sum + recipe.cost, 0);
+            if (totalCost > budget) {
+              const adjustmentFactor = budget / totalCost;
+              recipes.forEach(recipe => {
+                recipe.cost = Number((recipe.cost * adjustmentFactor).toFixed(2));
+              });
+            }
+
+            console.log(`💰 Custos para ${day}:`, {
+              total: recipes.reduce((sum, r) => sum + r.cost, 0).toFixed(2),
+              budget: budget.toFixed(2),
+              recipes: recipes.map(r => `${r.category}: R$ ${r.cost.toFixed(2)}`)
+            });
+
+            return { day, recipes };
+          });
         }
         
         const enhancedResult = { ...(menuResult as any), cardapio };

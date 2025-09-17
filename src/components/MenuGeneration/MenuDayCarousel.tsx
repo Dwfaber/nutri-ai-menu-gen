@@ -139,19 +139,35 @@ export function MenuDayCarousel({ menu }: MenuDayCarouselProps) {
                   {category}
                 </div>
                 
-                <div className="space-y-1">
-                  <h4 className="font-medium text-sm text-gray-800 leading-tight min-h-[2.5rem] flex items-center">
-                    {recipe.name}
-                  </h4>
-                  <p className="text-sm font-semibold text-gray-700">
-                    R$ {recipe.cost.toFixed(2)}
-                  </p>
-                </div>
+                 <div className="space-y-1">
+                   <h4 className="font-medium text-sm text-gray-800 leading-tight min-h-[2.5rem] flex items-center">
+                     {recipe.name}
+                   </h4>
+                   <p className="text-sm font-semibold text-green-600">
+                     R$ {recipe.cost.toFixed(2)}
+                   </p>
+                 </div>
               </CardContent>
             </Card>
           );
         })}
       </div>
+
+      {/* Budget Summary */}
+      {currentDay && (
+        <div className="bg-white rounded-lg p-4 border border-gray-200 mt-6">
+          <div className="flex justify-between items-center">
+            <span className="text-sm text-gray-600">Custo total da refeição:</span>
+            <span className="font-semibold text-lg text-green-600">
+              R$ {currentDay.recipes.reduce((sum, recipe) => sum + recipe.cost, 0).toFixed(2)}
+            </span>
+          </div>
+          <div className="flex justify-between items-center mt-1">
+            <span className="text-sm text-gray-600">Orçamento por refeição:</span>
+            <span className="text-sm text-gray-500">R$ 6,50</span>
+          </div>
+        </div>
+      )}
 
       {/* Navigation Dots */}
       <div className="flex justify-center gap-2 pt-4">
