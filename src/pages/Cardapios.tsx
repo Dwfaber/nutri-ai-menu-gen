@@ -50,11 +50,24 @@ const Cardapios = () => {
 
   const getBudgetStatus = (menu: GeneratedMenu) => {
     const client = clients.find(c => c.id === menu.clientId);
-    if (!client || !menu.totalCost) return 'unknown';
+    if (!client) return 'unknown';
+    
+    // Calculate cost from recipes if menu.costPerMeal is 0
+    let costPerMeal = menu.costPerMeal || 0;
+    if (costPerMeal === 0 && menu.recipes && menu.recipes.length > 0) {
+      const totalCost = menu.recipes.reduce((sum: number, recipe: any) => {
+        return sum + (Number(recipe.cost || recipe.custo || recipe.custo_por_refeicao || 0));
+      }, 0);
+      costPerMeal = totalCost / (menu.mealsPerDay || 50);
+    }
+    
+    if (costPerMeal === 0) return 'unknown';
     
     const defaultMealsPerDay = menu.mealsPerDay || 50; 
-    const totalDailyCost = menu.costPerMeal * defaultMealsPerDay;
+    const totalDailyCost = costPerMeal * defaultMealsPerDay;
     const clientDailyBudget = (client.custo_medio_diario || 0) * defaultMealsPerDay;
+    
+    if (clientDailyBudget === 0) return 'unknown';
     
     const budgetPercentage = (totalDailyCost / clientDailyBudget) * 100;
     if (budgetPercentage <= 90) return 'good';

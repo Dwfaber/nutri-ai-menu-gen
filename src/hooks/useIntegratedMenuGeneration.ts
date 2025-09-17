@@ -190,7 +190,15 @@ export function useIntegratedMenuGeneration(): UseIntegratedMenuGenerationReturn
   }, [loadSavedMenus, generatedMenu]);
 
   const generateShoppingListFromMenu = useCallback(async (menu: GeneratedMenu) => {
-    await generateShoppingList(menu.id, menu.clientName, menu.totalCost, menu.mealsPerDay || 50);
+    // Calculate budget fallback from recipes if totalCost is 0
+    let budgetPredicted = menu.totalCost || 0;
+    if (budgetPredicted === 0 && menu.recipes && menu.recipes.length > 0) {
+      budgetPredicted = menu.recipes.reduce((sum: number, recipe: any) => {
+        return sum + (Number(recipe.cost || recipe.custo || recipe.custo_por_refeicao || 0));
+      }, 0);
+    }
+    
+    await generateShoppingList(menu.id, menu.clientName, budgetPredicted, menu.mealsPerDay || 50);
   }, [generateShoppingList]);
 
   return {
