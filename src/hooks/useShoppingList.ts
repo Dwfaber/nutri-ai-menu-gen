@@ -41,6 +41,7 @@ export interface ShoppingItem {
   fornecedor?: string;
   observacoes?: string;
   receita_origem: string[];
+  available?: boolean;
 }
 
 export interface ShoppingList {
@@ -170,7 +171,8 @@ export const useShoppingList = () => {
               valor_total: item.total_price,
               fornecedor: (item as any).supplier || '',
               observacoes: (item as any).notes || '',
-              receita_origem: []
+              receita_origem: [],
+              available: item.available !== undefined ? item.available : true
             }));
 
             mappedLists.push({
@@ -440,20 +442,20 @@ export const useShoppingList = () => {
     const list = lists.find(l => l.id === listId);
     if (!list) return [];
 
-    // Convert ShoppingItem to ShoppingListItem format
-    return list.itens.map(item => ({
-      id: item.id,
-      product_id_legado: item.produto_id,
-      product_name: item.produto_nome,
-      category: item.categoria,
-      quantity: item.quantidade_necessaria,
-      unit: item.unidade,
-      unit_price: item.preco_unitario,
-      total_price: item.valor_total,
-      available: true,
-      supplier: item.fornecedor,
-      notes: item.observacoes
-    }));
+      // Convert ShoppingItem to ShoppingListItem format
+      return list.itens.map(item => ({
+        id: item.id,
+        product_id_legado: item.produto_id,
+        product_name: item.produto_nome,
+        category: item.categoria,
+        quantity: item.quantidade_necessaria,
+        unit: item.unidade,
+        unit_price: item.preco_unitario,
+        total_price: item.valor_total,
+        available: item.available !== undefined ? item.available : true,
+        supplier: item.fornecedor,
+        notes: item.observacoes
+      }));
   };
 
   const exportToCSV = (items: ShoppingListItem[], clientName: string) => {
@@ -483,6 +485,61 @@ export const useShoppingList = () => {
     await generateShoppingList(menuId, clientName, totalCost, servingsPerDay);
   };
 
+  const regenerateListItems = async (listId: string): Promise<boolean> => {
+    setIsLoading(true);
+    
+    try {
+      // Buscar dados da lista existente
+      const existingList = lists.find(l => l.id === listId);
+      if (!existingList) {
+        throw new Error('Lista não encontrada');
+      }
+      
+      const result = await withRetry(async () => {
+        const { data, error } = await supabase.functions.invoke('generate-shopping-list', {
+          body: { 
+            menuId: existingList.cardapio_id,
+            clientName: existingList.client_name,
+            budgetPredicted: existingList.budget_predicted,
+            servingsPerDay: 50,
+            existingListId: listId
+          }
+        });
+
+        if (error) throw error;
+        return data;
+      });
+
+      if (!result.success) {
+        throw new Error(result.error || 'Erro na regeneração da lista');
+      }
+
+      // Recarregar listas
+      await loadShoppingLists();
+
+      showToast(
+        "Itens Regenerados!",
+        "Itens da lista foram regeados com sucesso!"
+      );
+
+      return true;
+
+    } catch (error) {
+      console.error('Erro ao regenerar itens da lista:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Erro na regeneração';
+      
+      showToast(
+        "Erro na Regeneração",
+        errorMessage,
+        "destructive"
+      );
+
+      return false;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   return {
     lists,
     currentList,
@@ -497,6 +554,7 @@ export const useShoppingList = () => {
     exportToCSV,
     updateItemQuantity,
     createFromMenu,
-    loadShoppingLists
+    loadShoppingLists,
+    regenerateListItems
   };
 };

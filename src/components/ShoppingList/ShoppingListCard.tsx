@@ -93,6 +93,9 @@ const ShoppingListCard = ({ category, items, onUpdateQuantity }: ShoppingListCar
                   <p className="text-sm text-gray-600">
                     Código: {item.product_id_legado}
                   </p>
+                  {item.notes && (
+                    <p className="text-xs text-amber-600 mt-1 italic">{item.notes}</p>
+                  )}
                   <div className="flex items-center space-x-4 mt-1">
                     {editingItem === item.id ? (
                       <div className="flex items-center space-x-2">

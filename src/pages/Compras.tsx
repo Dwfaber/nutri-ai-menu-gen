@@ -37,7 +37,8 @@ const Compras = () => {
     exportToCSV, 
     updateItemQuantity,
     loadShoppingLists,
-    deleteShoppingList
+    deleteShoppingList,
+    regenerateListItems
   } = useShoppingList();
   
   const { config: optimizationConfig, lastResults: optimizationResults } = useOptimization();
@@ -115,6 +116,15 @@ const Compras = () => {
       }
     }
   }, [deleteShoppingList, selectedList?.id]);
+
+  const handleRegenerateItems = useCallback(async (listId: string) => {
+    const success = await regenerateListItems(listId);
+    if (success && selectedList?.id === listId) {
+      // Recarregar itens da lista selecionada
+      const updatedItems = await getShoppingListItems(listId);
+      setListItems(updatedItems);
+    }
+  }, [regenerateListItems, selectedList?.id, getShoppingListItems]);
 
   const getStatusBadge = (status: ShoppingListStatus) => {
     switch (status) {
@@ -397,7 +407,17 @@ const Compras = () => {
                 Object.keys(groupedByCategory).length === 0 ? (
                   <Card>
                     <CardContent className="p-8 text-center text-gray-500">
-                      <p>Nenhum item encontrado para esta lista</p>
+                      <Package className="w-12 h-12 mx-auto mb-4 text-gray-300" />
+                      <p className="text-lg font-medium mb-2">Nenhum item encontrado</p>
+                      <p className="text-sm mb-4">Esta lista não possui itens. Você pode tentar regenerar os itens.</p>
+                      <Button 
+                        onClick={() => handleRegenerateItems(selectedList.id)}
+                        variant="outline"
+                        disabled={isLoadingLists}
+                      >
+                        <Settings className="w-4 h-4 mr-2" />
+                        Corrigir Itens
+                      </Button>
                     </CardContent>
                   </Card>
                 ) : (

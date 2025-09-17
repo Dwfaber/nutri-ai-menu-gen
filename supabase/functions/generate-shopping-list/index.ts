@@ -30,7 +30,7 @@ class ShoppingListGeneratorFixed {
 
   constructor(private supabase: any) {}
 
-  async gerarListaComprasCorrigida(menuId: string, clientName: string, budgetPredicted: number, servingsPerDay: number) {
+  async gerarListaComprasCorrigida(menuId: string, clientName: string, budgetPredicted: number, servingsPerDay: number, existingListId?: string) {
     console.log(`🛒 === GERAÇÃO DE LISTA CORRIGIDA ===`);
     console.log(`📋 Menu ID: ${menuId}`);
     console.log(`👤 Cliente: ${clientName}`);
@@ -156,60 +156,126 @@ class ShoppingListGeneratorFixed {
           
           console.log(`✅ ${resultado.item.nome_ingrediente}: ${resultado.item.quantidade_comprar} ${resultado.item.unidade} = R$ ${resultado.item.custo_total_compra}`);
         } else {
+          // Criar item placeholder
+          const itemPlaceholder = {
+            produto_base_id: ingrediente.produto_base_id,
+            nome_ingrediente: ingrediente.nome,
+            produto_mercado: 'Produto não encontrado no mercado',
+            quantidade_necessaria: ingrediente.quantidade_total.toFixed(3),
+            quantidade_comprar: ingrediente.quantidade_total.toFixed(3),
+            unidade: ingrediente.unidade_padrao,
+            preco_unitario: '0.00',
+            custo_total_compra: '0.00',
+            sobra: '0.000',
+            percentual_sobra: '0.0',
+            em_promocao: false,
+            economia_promocao: '0.00',
+            receitas_usando: Array.from(ingrediente.receitas),
+            categoria_estimada: this.estimarCategoria(ingrediente.nome),
+            available: false,
+            notes: 'Estimado - sem preço no mercado'
+          };
+          
+          listaCompras.push(itemPlaceholder);
+          
           ingredientesNaoEncontrados.push({
             nome: ingrediente.nome,
             quantidade: `${ingrediente.quantidade_total.toFixed(3)} ${ingrediente.unidade_padrao}`,
             receitas: Array.from(ingrediente.receitas)
           });
-          console.log(`❌ ${ingrediente.nome}: não encontrado no mercado`);
+          console.log(`❌ ${ingrediente.nome}: criado placeholder`);
         }
       }
       
       // PASSO 6: Tratativa de custo zero e agrupar por categoria
-      if (custoTotal === 0) {
-        console.warn('⚠️ Nenhum item encontrado no mercado. Usando orçamento previsto como custo real para evitar custo zerado.');
-        custoTotal = budgetPredicted || 0;
+      if (custoTotal === 0 && budgetPredicted > 0) {
+        console.warn('⚠️ Nenhum item encontrado no mercado. Distribuindo orçamento previsto entre os itens.');
+        
+        // Distribuir budgetPredicted proporcionalmente entre os itens
+        const totalItems = listaCompras.length;
+        if (totalItems > 0) {
+          const costPerItem = budgetPredicted / totalItems;
+          listaCompras.forEach(item => {
+            item.custo_total_compra = costPerItem.toFixed(2);
+            item.preco_unitario = (costPerItem / parseFloat(item.quantidade_comprar)).toFixed(2);
+          });
+          custoTotal = budgetPredicted;
+        }
       }
       
       const listaAgrupada = this.agruparPorCategoria(listaCompras);
       
       // PASSO 7: Salvar no banco
-      const { data: shoppingList, error: listError } = await this.supabase
-        .from('shopping_lists')
-        .insert({
-          menu_id: menuId,
-          client_name: clientName,
-          budget_predicted: budgetPredicted || 0,
-          cost_actual: custoTotal,
-          status: 'generated'
-        })
-        .select()
-        .single();
+      let shoppingList;
+      
+      if (existingListId) {
+        // Atualizar lista existente
+        const { data, error: updateError } = await this.supabase
+          .from('shopping_lists')
+          .update({
+            cost_actual: custoTotal,
+            status: 'generated'
+          })
+          .eq('id', existingListId)
+          .select()
+          .single();
+          
+        if (updateError || !data) {
+          console.error('Erro ao atualizar lista:', updateError);
+          throw new Error('Erro ao atualizar lista de compras');
+        }
+        
+        shoppingList = data;
+        
+        // Apagar itens antigos
+        await this.supabase
+          .from('shopping_list_items')
+          .delete()
+          .eq('shopping_list_id', existingListId);
+          
+        console.log(`🔄 Lista atualizada: ${existingListId}`);
+      } else {
+        // Criar nova lista
+        const { data, error: listError } = await this.supabase
+          .from('shopping_lists')
+          .insert({
+            menu_id: menuId,
+            client_name: clientName,
+            budget_predicted: budgetPredicted || 0,
+            cost_actual: custoTotal,
+            status: 'generated'
+          })
+          .select()
+          .single();
 
-      if (listError || !shoppingList) {
-        console.error('Erro ao salvar lista:', listError);
-        throw new Error('Erro ao salvar lista de compras');
+        if (listError || !data) {
+          console.error('Erro ao salvar lista:', listError);
+          throw new Error('Erro ao salvar lista de compras');
+        }
+        
+        shoppingList = data;
       }
 
-      // Salvar itens
-      if (listaCompras.length > 0) {
-        const itemsToInsert = listaCompras.map(item => {
-          console.log('🔍 Mapeando item:', item);
-          return {
-            shopping_list_id: shoppingList.id,
-            product_id_legado: item.produto_base_id?.toString() || 'unknown',
-            product_name: item.nome_ingrediente || 'Produto sem nome',
-            category: item.categoria_estimada || 'DIVERSOS',
-            quantity: parseFloat(item.quantidade_comprar) || 0,
-            unit: item.unidade || 'UN',
-            unit_price: parseFloat(item.preco_unitario) || 0,
-            total_price: parseFloat(item.custo_total_compra) || 0,
-            promocao: Boolean(item.em_promocao),
-            optimized: true,
-            available: true
-          };
-        });
+      // Salvar itens (sempre inserir, mesmo placeholders)
+      const itemsToInsert = listaCompras.map(item => {
+        console.log('🔍 Mapeando item:', item);
+        return {
+          shopping_list_id: shoppingList.id,
+          product_id_legado: item.produto_base_id?.toString() || 'unknown',
+          product_name: item.nome_ingrediente || 'Produto sem nome',
+          category: item.categoria_estimada || 'DIVERSOS',
+          quantity: parseFloat(item.quantidade_comprar) || 0,
+          unit: item.unidade || 'UN',
+          unit_price: parseFloat(item.preco_unitario) || 0,
+          total_price: parseFloat(item.custo_total_compra) || 0,
+          promocao: Boolean(item.em_promocao),
+          optimized: true,
+          available: item.available !== undefined ? item.available : true,
+          notes: item.notes || null
+        };
+      });
 
+      if (itemsToInsert.length > 0) {
         const { error: itemsError } = await this.supabase
           .from('shopping_list_items')
           .insert(itemsToInsert);
@@ -446,7 +512,7 @@ serve(async (req) => {
     );
 
     // PARSE DA REQUISIÇÃO
-    const { menuId, clientName, budgetPredicted = 0, servingsPerDay = 50 } = await req.json();
+    const { menuId, clientName, budgetPredicted = 0, servingsPerDay = 50, existingListId } = await req.json();
 
     // Validação de entrada
     if (!menuId || !clientName) {
@@ -459,7 +525,7 @@ serve(async (req) => {
 
     // USAR A NOVA CLASSE CORRIGIDA
     const generator = new ShoppingListGeneratorFixed(supabase);
-    const resultado = await generator.gerarListaComprasCorrigida(menuId, clientName, budgetPredicted, servingsPerDay);
+    const resultado = await generator.gerarListaComprasCorrigida(menuId, clientName, budgetPredicted, servingsPerDay, existingListId);
     
     return new Response(
       JSON.stringify(resultado),
