@@ -6,15 +6,15 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
-import { useShoppingList, ShoppingList, ShoppingListItem } from '../hooks/useShoppingList';
-import ShoppingListCard from '../components/ShoppingList/ShoppingListCard';
-import AdaptationPanel from '../components/LegacyAdaptation/AdaptationPanel';
-import { ProductRequestManager } from '../components/ProductRequests/ProductRequestManager';
-import OptimizationSettings from '../components/Optimization/OptimizationSettings';
-import OptimizationAnalysis from '../components/Optimization/OptimizationAnalysis';
-import OptimizationResults from '../components/Optimization/OptimizationResults';
-import { useOptimization } from '../hooks/useOptimization';
-import { useMarketProducts } from '../hooks/useMarketProducts';
+import { useShoppingList, ShoppingList, ShoppingListItem } from '@/hooks/useShoppingList';
+import ShoppingListCard from '@/components/ShoppingList/ShoppingListCard';
+import AdaptationPanel from '@/components/LegacyAdaptation/AdaptationPanel';
+import { ProductRequestManager } from '@/components/ProductRequests/ProductRequestManager';
+import OptimizationSettings from '@/components/Optimization/OptimizationSettings';
+import OptimizationAnalysis from '@/components/Optimization/OptimizationAnalysis';
+import OptimizationResults from '@/components/Optimization/OptimizationResults';
+import { useOptimization } from '@/hooks/useOptimization';
+import { useMarketProducts } from '@/hooks/useMarketProducts';
 import { useSelectedClient } from '@/contexts/SelectedClientContext';
 
 // Define valid status types for shopping lists

@@ -1,7 +1,7 @@
 
 import { useState, useCallback } from 'react';
 import { OptimizationConfig, OptimizationResult, OptimizationRequest } from '@/types/optimization';
-import { useToast } from '@/components/ui/use-toast';
+import { useToast } from '@/hooks/use-toast';
 
 const DEFAULT_CONFIG: OptimizationConfig = {
   prioridade_promocao: 'alta',

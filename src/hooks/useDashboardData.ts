@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import { supabase } from '../integrations/supabase/client';
-import { useToast } from '@/components/ui/use-toast';
+import { supabase } from '@/integrations/supabase/client';
+import { useToast } from '@/hooks/use-toast';
 import { calculateCostMetrics, getUniqueClientsCount, calculateContractMealCost } from '@/utils/costCalculations';
 import { ClientCostDetails } from '@/types/clientCosts';
 

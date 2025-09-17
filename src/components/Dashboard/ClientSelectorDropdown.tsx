@@ -16,8 +16,6 @@ const ClientSelectorDropdown = () => {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
 
   // Debug logs
-  console.log('🔍 ClientSelectorDropdown - clients recebidos:', clients.length);
-  console.log('📋 Primeiros 3 clientes:', clients.slice(0, 3));
 
   // Memoize valid clients with relaxed validation
   const validClients = useMemo(() => {

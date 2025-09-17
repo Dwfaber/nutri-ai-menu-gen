@@ -7,15 +7,15 @@ import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
-import { useToast } from '@/components/ui/use-toast';
-import { useShoppingList } from '../hooks/useShoppingList';
-import { useClientContracts } from '../hooks/useClientContracts';
+import { useToast } from '@/hooks/use-toast';
+import { useShoppingList } from '@/hooks/useShoppingList';
+import { useClientContracts } from '@/hooks/useClientContracts';
 import { useSelectedClient } from '@/contexts/SelectedClientContext';
-import { useIntegratedMenuGeneration, GeneratedMenu } from '../hooks/useIntegratedMenuGeneration';
-import { useJuiceConfiguration } from '../hooks/useJuiceConfiguration';
-import SyncMonitor from '../components/SyncMonitor/SyncMonitor';
-import IntegratedMenuGenerator from '../components/MenuGeneration/IntegratedMenuGenerator';
-import WeeklyMenuView from '../components/MenuGeneration/WeeklyMenuView'; // ✅ CORRIGIDO (default export, sem {})
+import { useIntegratedMenuGeneration, GeneratedMenu } from '@/hooks/useIntegratedMenuGeneration';
+import { useJuiceConfiguration } from '@/hooks/useJuiceConfiguration';
+import SyncMonitor from '@/components/SyncMonitor/SyncMonitor';
+import IntegratedMenuGenerator from '@/components/MenuGeneration/IntegratedMenuGenerator';
+import WeeklyMenuView from '@/components/MenuGeneration/WeeklyMenuView';
 
 const Cardapios = () => {
   const [searchTerm, setSearchTerm] = useState('');

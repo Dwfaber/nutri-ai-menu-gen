@@ -1,7 +1,7 @@
 
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { useToast } from '@/components/ui/use-toast';
+import { useToast } from '@/hooks/use-toast';
 import { 
   ClientCostDetails, 
   ClientWithCosts, 
@@ -61,7 +61,7 @@ export const ClientContractsProvider = ({ children }: { children: ReactNode }) =
       setIsLoading(true);
       setError(null);
 
-      console.log('🔄 Iniciando carregamento de clientes...', { searchTerm, limit });
+      // Loading clients with optional search
 
       // Buscar dados otimizados da tabela custos_filiais
       let query = supabase
@@ -108,21 +108,13 @@ export const ClientContractsProvider = ({ children }: { children: ReactNode }) =
         throw fetchError;
       }
 
-      console.log('📊 Dados retornados da query:', { 
-        totalRecords: data?.length || 0,
-        firstRecord: data?.[0],
-        hasNomeFantasia: data?.filter(item => item.nome_fantasia).length || 0,
-        hasFilialId: data?.filter(item => item.filial_id !== null).length || 0
-      });
+      // Data fetched successfully
 
       // Transform data to match ContractClient interface - with null safety
       const transformedData: ContractClient[] = (data || [])
         .filter(item => {
-          // Relaxar validação - aceitar se tem nome_fantasia OU qualquer ID
+          // Filter out invalid clients
           const isValid = item.nome_fantasia || item.cliente_id_legado || item.id;
-          if (!isValid) {
-            console.log('❌ Cliente rejeitado por falta de identificadores:', item);
-          }
           return isValid;
         })
         .map(item => {

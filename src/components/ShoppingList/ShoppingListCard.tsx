@@ -1,6 +1,6 @@
 
 import { useState } from 'react';
-import { ShoppingListItem } from '../../hooks/useShoppingList';
+import { ShoppingListItem } from '@/hooks/useShoppingList';
 import { ChevronDown, ChevronUp, Package, Edit3, Check, X } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
