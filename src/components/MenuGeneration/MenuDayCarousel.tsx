@@ -110,13 +110,13 @@ export function MenuDayCarousel({ menu }: MenuDayCarouselProps) {
       grouped[category] = [];
     });
     
-    // Bean variations mapping
+    // Bean variations mapping (exactly as they appear in the database)
     const BEAN_VARIATIONS = {
-      'FEIJÃO (SÓ CARIOCA)': ['feijão carioca', 'feijao carioca'],
-      'FEIJÃO PRETO': ['feijão preto', 'feijao preto'],
-      'FEIJÃO MULATINHO': ['feijão mulatinho', 'feijao mulatinho'],
-      'FEIJÃO FRADINHO': ['feijão fradinho', 'feijao fradinho'],
-      'FEIJÃO DE CORDA': ['feijão de corda', 'feijao de corda']
+      'FEIJÃO (SÓ CARIOCA)': ['feijão (só carioca)', 'feijao so carioca'],
+      'FEIJÃO MIX (CARIOCA + BANDINHA)': ['feijão mix (carioca + bandinha)', 'feijao mix carioca bandinha'],
+      'FEIJÃO MIX (CARIOCA + BANDINHA) 50%': ['feijão mix (carioca + bandinha) 50%', 'feijao mix 50%'],
+      'FEIJÃO MIX COM CALABRESA (CARIOCA + BANDINHA)': ['feijão mix com calabresa', 'feijao mix calabresa'],
+      'FEIJÃO MIX COM CALABRESA (CARIOCA + BANDINHA) 50%': ['feijão mix com calabresa 50%', 'feijao mix calabresa 50%']
     };
     
     // Helper function to determine if a recipe should be categorized as Base
@@ -158,23 +158,19 @@ export function MenuDayCarousel({ menu }: MenuDayCarouselProps) {
       return null;
     };
     
-    // Track bean variants across the entire weekly menu
-    const weeklyBeanVariants = new Set<string>();
-    menuDays.forEach(day => {
-      const dayRecipes = day.receitas || day.recipes || [];
-      dayRecipes.forEach(recipe => {
-        const name = recipe.name || recipe.nome || '';
-        const variant = detectBeanVariant(name);
-        if (variant) {
-          weeklyBeanVariants.add(variant);
-        }
-      });
-    });
+    // Detect bean variant for current day only
+    const currentDayRecipes = currentDay?.receitas || currentDay?.recipes || [];
+    let currentDayBeanVariant = 'FEIJÃO (SÓ CARIOCA)'; // Default
     
-    // Select the bean variant for this weekly menu (only one per week)
-    const selectedBeanVariant = weeklyBeanVariants.size > 0 
-      ? Array.from(weeklyBeanVariants)[0] 
-      : 'FEIJÃO (SÓ CARIOCA)'; // Default variant
+    // Check if current day already has a bean variant
+    for (const recipe of currentDayRecipes) {
+      const name = recipe.name || recipe.nome || '';
+      const variant = detectBeanVariant(name);
+      if (variant) {
+        currentDayBeanVariant = variant;
+        break; // Use the first bean found for this day
+      }
+    }
     
     // Group actual recipes by category
     currentDay?.receitas?.forEach((receita) => {
@@ -252,7 +248,7 @@ export function MenuDayCarousel({ menu }: MenuDayCarouselProps) {
     // Always complete Base category with required items
     const baseRequired = [
       { name: 'ARROZ BRANCO', cost: 2.50 },
-      { name: selectedBeanVariant, cost: 2.20 },
+      { name: currentDayBeanVariant, cost: 2.20 },
       { name: 'CAFÉ COMPLEMENTAR', cost: 1.00 },
       { name: 'KIT DESCARTÁVEL', cost: 0.50 },
       { name: 'KIT LIMPEZA', cost: 0.30 },
