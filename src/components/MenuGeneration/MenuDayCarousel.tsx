@@ -262,15 +262,26 @@ export function MenuDayCarousel({ menu }: MenuDayCarouselProps) {
       grouped[displayCat].push(recipe);
     });
     
+    // Bean cost mapping based on variation
+    const beanCostMap: { [key: string]: number } = {
+      'FEIJÃO CARIOCA': 0.12,     // 0.24 ÷ 2
+      'FEIJÃO PRETO': 0.15,       // 0.30 ÷ 2  
+      'FEIJÃO BRANCO': 0.06,      // 0.12 ÷ 2
+      'FEIJÃO FRADINHO': 0.06     // 0.12 ÷ 2
+    };
+    
+    // Get bean cost based on current variation, default to 0.12 if not found
+    const currentBeanCost = beanCostMap[currentDayBeanVariant] || 0.12;
+    
     // Always complete Base category with required items using slot-based deduplication
     const baseRequired = [
-      { name: 'ARROZ BRANCO', cost: 2.50, slot: 'rice' },
-      { name: currentDayBeanVariant, cost: 2.20, slot: 'bean' },
-      { name: 'CAFÉ COMPLEMENTAR', cost: 1.00, slot: 'coffee' },
-      { name: 'KIT DESCARTÁVEL', cost: 0.50, slot: 'disposable_kit' },
-      { name: 'KIT LIMPEZA', cost: 0.30, slot: 'cleaning_kit' },
-      { name: 'KIT TEMPEROS MESA', cost: 0.25, slot: 'seasoning_kit' },
-      { name: 'PÃO FRANCÊS MINI', cost: 0.80, slot: 'bread' }
+      { name: 'ARROZ BRANCO', cost: 0.32, slot: 'rice' },         // 0.64 ÷ 2
+      { name: currentDayBeanVariant, cost: currentBeanCost, slot: 'bean' },
+      { name: 'CAFÉ COMPLEMENTAR', cost: 0.34, slot: 'coffee' },   // 0.67 ÷ 2
+      { name: 'KIT DESCARTÁVEL', cost: 0.08, slot: 'disposable_kit' }, // 0.16 ÷ 2
+      { name: 'KIT LIMPEZA', cost: 0.03, slot: 'cleaning_kit' },   // 0.05 ÷ 2
+      { name: 'KIT TEMPEROS MESA', cost: 0.05, slot: 'seasoning_kit' }, // 0.09 ÷ 2
+      { name: 'PÃO FRANCÊS MINI', cost: 0.03, slot: 'bread' }      // 0.06 ÷ 2
     ];
 
     // Get existing base items and deduplicate by slot
