@@ -68,8 +68,27 @@ const WeeklyMenuView: React.FC<WeeklyMenuViewProps> = ({
       );
     }
     
+    // Support validated menu format: top-level cardapio_semanal
+    const validatedWeekly = (menu as any).cardapio_semanal;
+    if (validatedWeekly && Array.isArray(validatedWeekly)) {
+      console.log('Found validated cardapio_semanal format:', validatedWeekly);
+      return (
+        <div className="min-h-screen bg-gray-100 py-8">
+          <div className="container mx-auto px-4">
+            <MenuDayCarousel 
+              menu={{
+                clientName: menu.client_name || menu.clientName || menu.cliente || 'Cliente',
+                weekPeriod: menu.week_period || menu.weekPeriod || menu.periodo || 'Período',
+                cardapio: validatedWeekly
+              }}
+            />
+          </div>
+        </div>
+      );
+    }
+    
     // Check if we have the new cardapio format or GeneratedMenu format
-    const cardapio = (menu as any).cardapio || (menu as any).menu?.cardapio;
+    const cardapio = (menu as any).cardapio || (menu as any).menu?.cardapio || (menu as any).menu_data?.cardapio;
     const recipes = (menu as any).recipes;
     
     if (cardapio && Array.isArray(cardapio)) {
