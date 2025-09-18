@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { useRealTimeCosts } from '@/hooks/useRealTimeCosts';
 
 interface Recipe {
   id: string | number;
@@ -49,6 +50,7 @@ const WEEK_DAYS = [
 
 export function MenuDayCarousel({ menu }: MenuDayCarouselProps) {
   const [currentDayIndex, setCurrentDayIndex] = useState(0);
+  const { calculateRecipeCost, getCachedCost } = useRealTimeCosts();
 
   // Convert flat recipes array to daily structure if needed
   const menuDays: MenuDay[] = React.useMemo(() => {
@@ -351,7 +353,7 @@ export function MenuDayCarousel({ menu }: MenuDayCarouselProps) {
           id: 'juice-injected-suco1',
           name: juiceName,
           category: 'SUCO1',
-          cost: 0.05
+          cost: 0.05 // Will be calculated dynamically
         }];
       }
     }
@@ -364,7 +366,7 @@ export function MenuDayCarousel({ menu }: MenuDayCarouselProps) {
           id: 'juice-injected-suco2',
           name: juiceName,
           category: 'SUCO2',
-          cost: 0.05
+          cost: 0.05 // Will be calculated dynamically
         }];
       }
     }
@@ -372,24 +374,67 @@ export function MenuDayCarousel({ menu }: MenuDayCarouselProps) {
     return grouped;
   }, [currentDay]);
 
+  // Calculate real-time costs for recipes
+  const [realCosts, setRealCosts] = useState<Record<string, number>>({});
+  
+  // Load real costs for visible recipes
+  useEffect(() => {
+    const loadCosts = async () => {
+      const allRecipes = Object.values(recipesByCategory).flat();
+      const mealsPerDay = 50; // Default, could be from menu config
+      
+      for (const recipe of allRecipes) {
+        const recipeId = recipe.id?.toString() || '';
+        if (recipeId && !realCosts[recipeId]) {
+          // First try cache
+          const cachedCost = getCachedCost(recipeId, mealsPerDay);
+          if (cachedCost !== null) {
+            setRealCosts(prev => ({ ...prev, [recipeId]: cachedCost }));
+          } else {
+            // Calculate if not cached
+            const result = await calculateRecipeCost(recipeId, mealsPerDay);
+            if (result) {
+              setRealCosts(prev => ({ ...prev, [recipeId]: result.custo_por_porcao }));
+            }
+          }
+        }
+      }
+    };
+    
+    loadCosts();
+  }, [recipesByCategory, calculateRecipeCost, getCachedCost, realCosts]);
+
+  // Get real cost for a recipe
+  const getRealCost = (recipe: any): number => {
+    const recipeId = recipe.id?.toString() || '';
+    const realCost = realCosts[recipeId];
+    
+    if (realCost !== undefined) {
+      return realCost;
+    }
+    
+    // Fallback to original cost logic
+    return recipe.cost || recipe.custo || recipe.custo_por_refeicao || 0;
+  };
+
   // Calculate costs separately for Base (fixed) and Variable Menu
-  const { baseCost, variableCost, totalCost } = React.useMemo(() => {
+  const { baseCost, variableCost, totalCost } = useMemo(() => {
     // Include injected base items in cost calculation
     const baseItems = recipesByCategory['Base'] || [];
-    const base = baseItems.reduce((sum, recipe) => sum + (recipe.cost || recipe.custo || recipe.custo_por_refeicao || 0), 0);
+    const base = baseItems.reduce((sum, recipe) => sum + getRealCost(recipe), 0);
     
     const allVariableRecipes = CATEGORY_ORDER
       .filter(cat => cat !== 'Base')
       .flatMap(cat => recipesByCategory[cat] || []);
     
-    const variable = allVariableRecipes.reduce((sum, recipe) => sum + (recipe.cost || recipe.custo || recipe.custo_por_refeicao || 0), 0);
+    const variable = allVariableRecipes.reduce((sum, recipe) => sum + getRealCost(recipe), 0);
     
     return {
       baseCost: base,
       variableCost: variable,
       totalCost: base + variable
     };
-  }, [recipesByCategory]);
+  }, [recipesByCategory, realCosts]);
 
   return (
     <div className="w-full max-w-4xl mx-auto bg-white rounded-lg shadow-sm border p-6 space-y-6">
@@ -414,7 +459,7 @@ export function MenuDayCarousel({ menu }: MenuDayCarouselProps) {
       <div className="grid grid-cols-3 gap-4">
         {CATEGORY_ORDER.map((category) => {
           const recipes = recipesByCategory[category] || [];
-          const categoryTotal = recipes.reduce((sum, recipe) => sum + (recipe.cost || recipe.custo || recipe.custo_por_refeicao || 0), 0);
+          const categoryTotal = recipes.reduce((sum, recipe) => sum + getRealCost(recipe), 0);
           const isBaseCategory = category === 'Base';
           
           return (
@@ -439,7 +484,7 @@ export function MenuDayCarousel({ menu }: MenuDayCarouselProps) {
                           {recipe.name || recipe.nome || 'Nome não definido'}
                         </h4>
                         <p className="text-base font-semibold text-green-600">
-                          R$ {(recipe.cost || recipe.custo || recipe.custo_por_refeicao || 0).toFixed(2)}
+                          R$ {getRealCost(recipe).toFixed(2)}
                         </p>
                       </div>
                     ))
