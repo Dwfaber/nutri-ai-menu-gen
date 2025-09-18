@@ -93,25 +93,66 @@ class ShoppingListGeneratorFixed {
         console.log(`✅ Usando receitas_adaptadas: ${receitasAdaptadas.length} receitas`);
       }
 
-      // PASSO 2: Buscar ingredientes das receitas - NORMALIZAÇÃO DE IDs
+      // PASSO 2: Buscar ingredientes das receitas - NORMALIZAÇÃO DE IDs APRIMORADA
       const recipeIds = [];
       
       for (const receita of receitasAdaptadas) {
         let recipeId = null;
         
-        // Prioridade 1: receita_id_legado se for válido (>= 100)
-        if (receita.receita_id_legado && parseInt(receita.receita_id_legado) >= 100) {
-          recipeId = parseInt(receita.receita_id_legado);
+        console.log(`🔍 Processando receita:`, {
+          receita_id_legado: receita.receita_id_legado,
+          nome: receita.nome,
+          id: receita.id,
+          full_object: receita
+        });
+        
+        // Prioridade 1: receita_id_legado (string ou number)
+        if (receita.receita_id_legado) {
+          const legadoId = parseInt(receita.receita_id_legado);
+          if (!isNaN(legadoId) && legadoId >= 1) {
+            recipeId = legadoId;
+            console.log(`✅ ID via receita_id_legado: ${recipeId}`);
+          }
         }
-        // Prioridade 2: campo 'nome' se for numérico e >= 100
-        else if (receita.nome && !isNaN(parseInt(receita.nome)) && parseInt(receita.nome) >= 100) {
-          recipeId = parseInt(receita.nome);
-          console.log(`🔄 ID normalizado: ${receita.receita_id_legado} → ${recipeId} (via campo nome)`);
+        
+        // Prioridade 2: campo 'nome' se for numérico
+        if (!recipeId && receita.nome && !isNaN(parseInt(receita.nome))) {
+          const nomeId = parseInt(receita.nome);
+          if (nomeId >= 1) {
+            recipeId = nomeId;
+            console.log(`🔄 ID normalizado: ${receita.receita_id_legado} → ${recipeId} (via campo nome)`);
+          }
         }
-        // Prioridade 3: outros campos possíveis
-        else if (receita.id && parseInt(receita.id) >= 100) {
-          recipeId = parseInt(receita.id);
-          console.log(`🔄 ID normalizado: ${receita.receita_id_legado} → ${recipeId} (via campo id)`);
+        
+        // Prioridade 3: campo 'id' 
+        if (!recipeId && receita.id && !isNaN(parseInt(receita.id))) {
+          const idField = parseInt(receita.id);
+          if (idField >= 1) {
+            recipeId = idField;
+            console.log(`🔄 ID normalizado: ${receita.receita_id_legado} → ${recipeId} (via campo id)`);
+          }
+        }
+        
+        // Buscar pelo nome da receita como último recurso
+        if (!recipeId && receita.nome && typeof receita.nome === 'string') {
+          console.log(`🔍 Tentando buscar receita pelo nome: "${receita.nome}"`);
+          
+          // Fazer busca na tabela de receitas pelo nome
+          try {
+            const { data: receitaEncontrada } = await this.supabase
+              .from('receitas_legado')
+              .select('receita_id_legado')
+              .ilike('nome_receita', `%${receita.nome}%`)
+              .limit(1)
+              .maybeSingle();
+              
+            if (receitaEncontrada?.receita_id_legado) {
+              recipeId = parseInt(receitaEncontrada.receita_id_legado);
+              console.log(`🎯 ID encontrado via nome: ${recipeId} para "${receita.nome}"`);
+            }
+          } catch (error) {
+            console.warn(`⚠️ Erro ao buscar receita por nome:`, error);
+          }
         }
         
         if (recipeId) {
@@ -197,8 +238,7 @@ class ShoppingListGeneratorFixed {
             economia_promocao: '0.00',
             receitas_usando: Array.from(ingrediente.receitas),
             categoria_estimada: this.estimarCategoria(ingrediente.nome),
-            available: false,
-            notes: 'Estimado - sem preço no mercado'
+            available: false
           };
           
           listaCompras.push(itemPlaceholder);
@@ -295,21 +335,32 @@ class ShoppingListGeneratorFixed {
           total_price: parseFloat(item.custo_total_compra) || 0,
           promocao: Boolean(item.em_promocao),
           optimized: true,
-          available: item.available !== undefined ? item.available : true,
-          notes: item.notes || null
+          available: item.available !== undefined ? item.available : true
         };
       });
 
       if (itemsToInsert.length > 0) {
-        const { error: itemsError } = await this.supabase
-          .from('shopping_list_items')
-          .insert(itemsToInsert);
+        console.log(`💾 Tentando salvar ${itemsToInsert.length} itens...`);
+        console.log('🔍 Exemplo do primeiro item:', itemsToInsert[0]);
+        
+        try {
+          const { data: insertedItems, error: itemsError } = await this.supabase
+            .from('shopping_list_items')
+            .insert(itemsToInsert)
+            .select();
 
-        if (itemsError) {
-          console.error('Erro ao salvar itens:', itemsError);
-        } else {
-          console.log(`💾 ${itemsToInsert.length} itens salvos no banco`);
+          if (itemsError) {
+            console.error('❌ Erro ao salvar itens:', itemsError);
+            throw new Error(`Erro ao salvar itens: ${itemsError.message}`);
+          } else {
+            console.log(`✅ ${insertedItems?.length || itemsToInsert.length} itens salvos com sucesso no banco`);
+          }
+        } catch (error) {
+          console.error('❌ Exceção ao salvar itens:', error);
+          throw error;
         }
+      } else {
+        console.log('⚠️ Nenhum item para salvar');
       }
       
       const resultado = {
