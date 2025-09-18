@@ -51,7 +51,22 @@ export const useMenuAI = () => {
 
     } catch (err) {
       console.error('Error generating menu:', err);
-      const errorMessage = err instanceof Error ? err.message : 'Erro ao gerar cardápio. Tente novamente.';
+      
+      // Enhanced error handling with more specific messages
+      let errorMessage = 'Erro ao gerar cardápio. Tente novamente.';
+      
+      if (err instanceof Error) {
+        if (err.message.includes('timeout')) {
+          errorMessage = 'Timeout: O servidor demorou muito para responder. Tente novamente em alguns minutos.';
+        } else if (err.message.includes('Failed to send a request')) {
+          errorMessage = 'Falha na conexão com o servidor. Verifique sua conexão e tente novamente.';
+        } else if (err.message.includes('Edge Function')) {
+          errorMessage = 'Erro interno do servidor. Nossa equipe foi notificada.';
+        } else {
+          errorMessage = err.message;
+        }
+      }
+      
       setError(errorMessage);
       
       toast({
