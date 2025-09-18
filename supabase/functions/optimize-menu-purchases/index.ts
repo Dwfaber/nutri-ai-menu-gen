@@ -116,7 +116,7 @@ async function aggregateIngredients(supabase: any, menuDays: MenuDay[]): Promise
       const { data: ingredientes } = await supabase
         .from('receita_ingredientes')
         .select('*')
-        .eq('receita_id_legado', recipe.receita_id);
+        .eq('receita_id_legado', String(recipe.receita_id));
 
       if (!ingredientes || ingredientes.length === 0) {
         console.log(`⚠️ Nenhum ingrediente encontrado para receita ${recipe.receita_id}`);

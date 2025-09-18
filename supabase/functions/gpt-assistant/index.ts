@@ -583,7 +583,7 @@ Deno.serve(async (req) => {
         const { data: ingredients, error } = await supabase
           .from('receita_ingredientes')
           .select('*')
-          .eq('receita_id_legado', recipeId)
+          .eq('receita_id_legado', String(recipeId))
           .limit(20);
         
         if (error || !ingredients || ingredients.length === 0) {

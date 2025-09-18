@@ -28,7 +28,7 @@ async function calculateFallbackCost(receitaId: string, mealQuantity: number = 5
     const { data: ingredientes } = await supabase
       .from('receita_ingredientes')
       .select('*')
-      .eq('receita_id_legado', receitaId);
+      .eq('receita_id_legado', String(receitaId));
     
     if (!ingredientes || ingredientes.length === 0) {
       console.warn(`⚠️ Nenhum ingrediente encontrado para receita ${receitaId} no fallback`);

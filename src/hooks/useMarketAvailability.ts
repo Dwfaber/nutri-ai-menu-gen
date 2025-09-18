@@ -179,7 +179,7 @@ export const useMarketAvailability = () => {
       const { data: recipeData, error: recipeError } = await supabase
         .from('receitas_legado')
         .select('quantidade_refeicoes, porcoes')
-        .eq('receita_id_legado', receitaId)
+        .eq('receita_id_legado', String(receitaId))
         .single();
         
       if (recipeError || !recipeData) {
@@ -196,7 +196,7 @@ export const useMarketAvailability = () => {
       const { data: ingredients, error: ingredientsError } = await supabase
         .from('receita_ingredientes')
         .select('produto_base_id, quantidade, unidade, nome, produto_base_descricao, quantidade_refeicoes, categoria_descricao')
-        .eq('receita_id_legado', receitaId);
+        .eq('receita_id_legado', String(receitaId));
         
       if (ingredientsError || !ingredients?.length) {
         console.error('Ingredients not found:', ingredientsError);
@@ -241,7 +241,7 @@ export const useMarketAvailability = () => {
       const { data: ingredientsData, error } = await supabase
         .from('receita_ingredientes')
         .select('produto_base_id, quantidade, unidade, nome, quantidade_refeicoes, categoria_descricao')
-        .eq('receita_id_legado', receitaId)
+        .eq('receita_id_legado', String(receitaId))
         .not('produto_base_id', 'is', null);
 
       if (error) throw error;

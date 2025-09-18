@@ -259,7 +259,7 @@ async function calculateRecipeCost(supabase: any, receitaId: string, mealQuantit
   const { data: receita, error: receitaError } = await supabase
     .from('receitas_legado')
     .select('*')
-    .eq('receita_id_legado', receitaId)
+    .eq('receita_id_legado', String(receitaId))
     .maybeSingle();
   
   if (receitaError) {
@@ -270,7 +270,7 @@ async function calculateRecipeCost(supabase: any, receitaId: string, mealQuantit
   const { data: ingredientes, error: ingredientesError } = await supabase
     .from('receita_ingredientes')
     .select('*')
-    .eq('receita_id_legado', receitaId);
+    .eq('receita_id_legado', String(receitaId));
   
   if (ingredientesError) {
     console.error(`❌ Erro ao buscar ingredientes para receita ${receitaId}:`, ingredientesError);
