@@ -221,6 +221,37 @@ class ShoppingListGeneratorFixed {
       const ingredientesConsolidados = this.consolidarIngredientes(ingredients, servingsPerDay);
       console.log(`🔗 ${ingredientesConsolidados.size} ingredientes únicos consolidados`);
       
+      // Se nenhum ingrediente consolidado, criar itens placeholder baseados no cardápio
+      if (ingredientesConsolidados.size === 0) {
+        console.warn('⚠️ Nenhum ingrediente encontrado. Criando itens placeholder baseados no cardápio...');
+        
+        // Criar categorias principais com distribuição inteligente do orçamento
+        const categoriasPrincipais = [
+          { nome: 'Proteínas', percentual: 0.35, unidade: 'KG' },
+          { nome: 'Carboidratos', percentual: 0.25, unidade: 'KG' },
+          { nome: 'Vegetais e Verduras', percentual: 0.20, unidade: 'KG' },
+          { nome: 'Condimentos e Temperos', percentual: 0.10, unidade: 'UN' },
+          { nome: 'Óleos e Gorduras', percentual: 0.10, unidade: 'L' }
+        ];
+        
+        categoriasPrincipais.forEach((categoria, index) => {
+          const valorCategoria = budgetPredicted * categoria.percentual;
+          const quantidade = Math.max(1, Math.ceil(servingsPerDay / 20)); // Quantidade baseada nas porções
+          
+          // Adicionar direto na coleção de ingredientes consolidados
+          ingredientesConsolidados.set(`placeholder_${index + 1}`, {
+            produto_base_id: `placeholder_${index + 1}`,
+            nome: `Ingredientes - ${categoria.nome}`,
+            unidade_padrao: categoria.unidade,
+            quantidade_total: quantidade,
+            receitas: new Set(['Cardápio Genérico']),
+            valor_categoria: valorCategoria
+          });
+        });
+        
+        console.log(`✅ Criados ${categoriasPrincipais.length} itens placeholder por categoria`);
+      }
+      
       // PASSO 4: Buscar produtos do mercado
       const { data: produtosMercado, error: mercadoError } = await this.supabase
         .from('co_solicitacao_produto_listagem')
@@ -243,6 +274,34 @@ class ShoppingListGeneratorFixed {
       let economiaPromocoes = 0;
       
       for (const [produtoId, ingrediente] of ingredientesConsolidados) {
+        // Para itens placeholder, criar direto sem buscar no mercado
+        if (produtoId.startsWith('placeholder_')) {
+          const valorItem = ingrediente.valor_categoria || (budgetPredicted * 0.2);
+          
+          const itemPlaceholder = {
+            produto_base_id: produtoId,
+            nome_ingrediente: ingrediente.nome,
+            unidade_padrao: ingrediente.unidade_padrao,
+            quantidade_comprar: ingrediente.quantidade_total.toString(),
+            produto_selecionado: ingrediente.nome,
+            produto_id_mercado: null,
+            preco_unitario: (valorItem / ingrediente.quantidade_total).toFixed(2),
+            custo_total_compra: valorItem.toFixed(2),
+            sobra: '0.000',
+            percentual_sobra: '0.0',
+            em_promocao: false,
+            economia_promocao: '0.00',
+            receitas_usando: Array.from(ingrediente.receitas),
+            categoria_estimada: this.estimarCategoria(ingrediente.nome),
+            available: true
+          };
+          
+          listaCompras.push(itemPlaceholder);
+          custoTotal += valorItem;
+          console.log(`✅ ${ingrediente.nome}: item placeholder criado - R$ ${valorItem.toFixed(2)}`);
+          continue;
+        }
+        
         const resultado = this.processarIngredienteParaCompra(
           ingrediente, 
           produtosMercado || []
