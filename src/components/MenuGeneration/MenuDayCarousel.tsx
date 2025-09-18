@@ -36,7 +36,7 @@ interface MenuDayCarouselProps {
 const CATEGORY_ORDER = [
   'Base', 'Prato Principal 1', 'Prato Principal 2', 
   'Guarnição', 'Salada 1', 'Salada 2', 
-  'Sucos', 'Sobremesa'
+  'SUCO1', 'SUCO2', 'Sobremesa'
 ];
 
 const WEEK_DAYS = [
@@ -341,7 +341,7 @@ export function MenuDayCarousel({ menu }: MenuDayCarouselProps) {
           existingJuices.push({
             id: `juice-injected-${i}`,
             name: juiceName,
-            category: 'Sucos',
+            category: i === 0 ? 'SUCO1' : 'SUCO2',
             cost: 0.05
           });
         }
