@@ -44,8 +44,8 @@ let contadorProteinas = {
 const ESTRUTURA_CARDAPIO = {
   PP1: { categoria: 'Prato Principal 1', budget_percent: 22 },
   PP2: { categoria: 'Prato Principal 2', budget_percent: 18 },
-  ARROZ: { categoria: 'Arroz Branco', budget_percent: 12, receita_id: 580 },
-  FEIJAO: { categoria: 'Feijão', budget_percent: 12, receita_id: 1600 },
+  ARROZ: { categoria: 'Arroz Branco', budget_percent: 12 },
+  FEIJAO: { categoria: 'Feijão', budget_percent: 12 },
   GUARNICAO: { categoria: 'Guarnição', budget_percent: 10 },
   SALADA1: { categoria: 'Salada 1', budget_percent: 8 },
   SALADA2: { categoria: 'Salada 2', budget_percent: 8 },
@@ -245,6 +245,48 @@ Deno.serve(async (req) => {
     );
 
     // ========== FUNÇÕES DE CATEGORIA - NOVA ESTRUTURA ==========
+    
+    // CORREÇÃO: Buscar apenas receitas que têm ingredientes associados
+    async function buscarReceitasComIngredientes(categoria: string): Promise<any[]> {
+      try {
+        // Buscar receitas que têm ingredientes na tabela receita_ingredientes
+        const { data: receitasComIngredientes, error } = await supabase
+          .from('receita_ingredientes')
+          .select(`
+            receita_id_legado,
+            nome,
+            categoria_descricao,
+            produto_base_id
+          `)
+          .eq('categoria_descricao', categoria)
+          .not('produto_base_id', 'is', null)
+          .order('receita_id_legado');
+
+        if (error) {
+          console.error(`❌ Erro ao buscar receitas para ${categoria}:`, error);
+          return [];
+        }
+
+        // Agrupar por receita_id_legado para evitar duplicatas
+        const receitasUnicas = new Map();
+        receitasComIngredientes?.forEach(r => {
+          if (!receitasUnicas.has(r.receita_id_legado)) {
+            receitasUnicas.set(r.receita_id_legado, {
+              produto_base_id: r.receita_id_legado,
+              nome: r.nome,
+              categoria_descricao: r.categoria_descricao
+            });
+          }
+        });
+
+        const receitas = Array.from(receitasUnicas.values());
+        console.log(`✅ ${categoria}: ${receitas.length} receitas com ingredientes encontradas`);
+        return receitas;
+      } catch (error) {
+        console.error(`❌ Erro ao buscar receitas com ingredientes para ${categoria}:`, error);
+        return [];
+      }
+    }
     
     // Helpers específicos para cada categoria (seguindo padrão do escolherSucosDia)
     // REFATORADO: Sistema de rotação usando pools separados por categoria_descricao

@@ -67,5 +67,11 @@ verify_jwt = false
 [functions.sync-legacy-produtos-base]
 verify_jwt = false
 
+[functions.generate-shopping-list]
+verify_jwt = false
+
+[functions.validate-recipes-with-ingredients]
+verify_jwt = false
+
 [edge-runtime]
 inspector_port = 8083

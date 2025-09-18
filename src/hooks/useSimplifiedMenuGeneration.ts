@@ -148,18 +148,16 @@ export function useSimplifiedMenuGeneration() {
 
       const weekPeriod = period || `${format(new Date(), 'dd/MM/yyyy')} - ${format(addDays(new Date(), periodDays - 1), 'dd/MM/yyyy')}`;
 
-      // Use the cost-calculator path that returns menuResult consistently
-      const { data: response, error: menuError } = await supabase.functions.invoke('gpt-assistant', {
+      // CORREÇÃO: Usar apenas receitas que têm ingredientes - Nova Edge Function
+      const { data: response, error: menuError } = await supabase.functions.invoke('validate-recipes-with-ingredients', {
         body: {
-          action: 'generate_menu_with_costs',
+          action: 'generate_validated_menu',
           client_id: clientToUse.id,
           clientId: clientToUse.cliente_id_legado,
           filial_id: clientToUse.filial_id,
-          filialIdLegado: clientToUse.filial_id,
           mealQuantity: mealQuantity,
           periodDays: periodDays,
           budgetPerMeal: budgetPerMeal || clientToUse.custo_maximo_refeicao,
-          receitas_fixas: [580, 1600],
           selectedRecipes: selectedRecipes,
           client_data: clientToUse
         }
@@ -173,26 +171,27 @@ export function useSimplifiedMenuGeneration() {
         throw new Error(response?.error || 'Falha na geração do cardápio');
       }
 
-      const menuResult = response.menuResult;
-      console.log('✅ MenuResult recebido:', {
-        custoTotal: menuResult.resumo_custos?.custo_total_calculado,
-        custoPorRefeicao: menuResult.resumo_custos?.custo_por_refeicao,
-        receitasFixas: menuResult.receitas?.fixas?.length,
-        receitasPrincipais: menuResult.receitas?.principais?.length,
+      const cardapioValidado = response.cardapio;
+      console.log('✅ Cardápio Validado recebido:', {
+        diasSemana: cardapioValidado.cardapio_semanal?.length || 0,
+        categoriasComReceitas: cardapioValidado.resumo?.categorias_com_receitas || 0,
+        totalCategorias: cardapioValidado.resumo?.total_categorias || 0
       });
 
-      // === Flatten receitas
-      const allRecipesRaw = [
-        ...(menuResult?.receitas?.fixas || []),
-        ...(menuResult?.receitas?.principais || []),
-        ...(menuResult?.receitas?.acompanhamentos || []),
-      ];
+      // === Flatten receitas do cardápio semanal
+      const allRecipesRaw: any[] = [];
+      cardapioValidado.cardapio_semanal?.forEach((dia: any) => {
+        dia.receitas?.forEach((receita: any) => {
+          allRecipesRaw.push({
+            ...receita,
+            dia: dia.dia
+          });
+        });
+      });
 
       console.log('📊 Receitas encontradas:', {
-        fixas: menuResult?.receitas?.fixas?.length || 0,
-        principais: menuResult?.receitas?.principais?.length || 0,
-        acompanhamentos: menuResult?.receitas?.acompanhamentos?.length || 0,
-        total: allRecipesRaw.length
+        total: allRecipesRaw.length,
+        porDia: cardapioValidado.cardapio_semanal?.map((d: any) => `${d.dia}: ${d.receitas?.length || 0}`).join(', ')
       });
 
       // === Categorias para UI
@@ -218,17 +217,23 @@ export function useSimplifiedMenuGeneration() {
 
       // === Normalização de receitas
       const allRecipes = allRecipesRaw.map((r: any, idx: number) => {
-        const custo = Number(r.custo_por_porcao ?? r.custo_total ?? r.cost ?? 0);
+        const custo = Number(r.cost ?? 0);
         const warnings: string[] = [];
+
+        // Verificar se é receita de fallback (sem ingredientes)
+        if (r.warning) {
+          warnings.push(r.warning);
+        }
 
         if (custo > (budgetPerMeal || clientToUse.custo_maximo_refeicao) * 5) {
           warnings.push(`⚠️ Custo fora da realidade: R$ ${custo.toFixed(2)}/porção`);
         }
 
-        const categoriaUI = mapCategory(r.nome, r.categoria || r.category);
+        const categoriaUI = r.category || 'Outros';
         const codigo = (() => {
           const key = (categoriaUI || '').toUpperCase();
-          if (key === 'PP1' || key === 'PP2') return key;
+          if (key.includes('PRINCIPAL 1')) return 'PP1';
+          if (key.includes('PRINCIPAL 2')) return 'PP2';
           if (key.includes('ARROZ')) return 'ARROZ';
           if (key.includes('FEIJ')) return 'FEIJAO';
           if (key.includes('SALADA 1')) return 'SALADA1';
@@ -238,16 +243,14 @@ export function useSimplifiedMenuGeneration() {
           return undefined;
         })();
 
-        const dayIndexBound = Math.max(1, Math.min(periodDays || 5, WEEK_DAYS.length));
-
         return {
-          id: r.receita_id || r.receita_id_legado || r.id || idx,
-          name: r.nome || r.name || 'Item',
+          id: r.id || idx,
+          name: r.name || 'Item',
           category: categoriaUI,
           codigo,
           cost: custo,
           warnings,
-          day: r.day || (periodDays === 1 ? 'Dia Único' : WEEK_DAYS[idx % dayIndexBound]),
+          day: r.dia || r.day || 'Dia Único',
         };
       });
 
@@ -269,18 +272,17 @@ export function useSimplifiedMenuGeneration() {
         clientName: clientToUse.nome_fantasia || clientToUse.nome_empresa,
         weekPeriod,
         status: 'pending_approval',
-        totalCost: menuResult.resumo_custos?.custo_total_calculado || calculatedTotalCost,
-        costPerMeal: menuResult.resumo_custos?.custo_por_refeicao || calculatedCostPerMeal,
+        totalCost: calculatedTotalCost,
+        costPerMeal: calculatedCostPerMeal,
         totalRecipes: allRecipes.length,
         mealsPerDay: mealQuantity,
         recipes: allRecipes,
         createdAt: new Date().toISOString(),
-        menu: menuResult,
+        menu: cardapioValidado,
         warnings: [
-          ...(menuResult.avisos || []),
           ...allRecipes.flatMap(r => r.warnings || [])
         ],
-        juiceMenu: menuResult.cardapio_sucos || null
+        juiceMenu: null
       };
 
       // === Salvar no banco
@@ -290,8 +292,8 @@ export function useSimplifiedMenuGeneration() {
         setGeneratedMenu(menu);
 
         toast({
-          title: "Cardápio Gerado com CostCalculator!",
-          description: `${allRecipes.length} receitas. Custo: R$ ${(menu.totalCost || 0).toFixed(2)} total`,
+          title: "Cardápio Gerado com Receitas Validadas!",
+          description: `${allRecipes.length} receitas com ingredientes. Custo: R$ ${(menu.totalCost || 0).toFixed(2)} total`,
         });
 
         return menu;
