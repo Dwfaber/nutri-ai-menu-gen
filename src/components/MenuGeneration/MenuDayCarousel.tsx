@@ -4,6 +4,8 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { useRealTimeCosts } from '@/hooks/useRealTimeCosts';
+import { useJuiceConfiguration } from '@/hooks/useJuiceConfiguration';
+import { useSelectedClient } from '@/contexts/SelectedClientContext';
 
 interface Recipe {
   id: string | number;
@@ -16,6 +18,7 @@ interface Recipe {
   custo?: number; // Portuguese version
   custo_por_refeicao?: number; // Portuguese version
   day?: string;
+  produto_base_id?: number; // Base product ID for cost calculation
 }
 
 interface MenuDay {
@@ -51,6 +54,8 @@ const WEEK_DAYS = [
 export function MenuDayCarousel({ menu }: MenuDayCarouselProps) {
   const [currentDayIndex, setCurrentDayIndex] = useState(0);
   const { calculateRecipeCost, getCachedCost } = useRealTimeCosts();
+  const { availableJuices } = useJuiceConfiguration();
+  const { selectedClient } = useSelectedClient();
 
   // Convert flat recipes array to daily structure if needed
   const menuDays: MenuDay[] = React.useMemo(() => {
@@ -327,45 +332,138 @@ export function MenuDayCarousel({ menu }: MenuDayCarouselProps) {
 
     grouped['Base'] = deduplicatedBaseItems;
 
-    // Always inject juices if missing (1 juice per category)
+    // Smart juice injection based on client configuration and business rules
     const existingSuco1 = grouped['SUCO1'] || [];
     const existingSuco2 = grouped['SUCO2'] || [];
     const allExistingJuices = [...existingSuco1, ...existingSuco2];
     const juiceNames = allExistingJuices.map(j => normalizeString(j.name || j.nome || ''));
     
-    // Juice pools by preference (Pro Mix preferred)
-    const juicePools = {
-      proMix: ['SUCO PRO MIX LARANJA', 'SUCO PRO MIX UVA', 'SUCO PRO MIX MARACUJÁ', 'SUCO PRO MIX MANGA'],
-      vita: ['SUCO VITA LARANJA', 'SUCO VITA UVA', 'SUCO VITA ABACAXI', 'SUCO VITA PÊSSEGO'],
-      diet: ['SUCO DIET LARANJA', 'SUCO DIET UVA', 'SUCO DIET LIMÃO'],
-      natural: ['SUCO NATURAL LARANJA', 'SUCO NATURAL LIMÃO', 'SUCO NATURAL MARACUJÁ']
-    };
-
-    // Select two distinct juices (prefer Pro Mix)
-    const availableJuices = [...juicePools.proMix, ...juicePools.vita];
+    // Group available juices by type from database
+    const juicesByType = useMemo(() => {
+      const types: { [key: string]: typeof availableJuices } = {
+        pro_mix: [],
+        vita_suco: [],
+        diet: [],
+        natural: []
+      };
+      
+      availableJuices.forEach(juice => {
+        if (types[juice.tipo]) {
+          types[juice.tipo].push(juice);
+        }
+      });
+      
+      return types;
+    }, [availableJuices]);
     
-    // Inject juice in SUCO1 if missing
-    if (existingSuco1.length === 0 && availableJuices.length > 0) {
-      const juiceName = availableJuices[0];
-      if (!juiceNames.includes(normalizeString(juiceName))) {
-        grouped['SUCO1'] = [{
-          id: 'juice-injected-suco1',
-          name: juiceName,
-          category: 'SUCO1'
-        }];
+    // Get client juice configuration
+    const clientJuiceConfig = selectedClient ? {
+      use_pro_mix: selectedClient.use_pro_mix || false,
+      use_pro_vita: selectedClient.use_pro_vita || false,
+      use_suco_diet: selectedClient.use_suco_diet || false,
+      use_suco_natural: selectedClient.use_suco_natural || false
+    } : {
+      // Default configuration if no client selected
+      use_pro_mix: false,
+      use_pro_vita: false,
+      use_suco_diet: false,
+      use_suco_natural: true
+    };
+    
+    // Select juices based on configuration and business rules
+    const selectJuices = () => {
+      const selectedJuices: { suco1?: any, suco2?: any } = {};
+      
+      // BUSINESS RULE: If diet is enabled, one juice must be diet and other non-diet
+      if (clientJuiceConfig.use_suco_diet && juicesByType.diet.length > 0) {
+        // SUCO1 = Diet juice
+        const dietJuices = juicesByType.diet.filter(j => !juiceNames.includes(normalizeString(j.nome)));
+        if (dietJuices.length > 0) {
+          const randomDiet = dietJuices[Math.floor(Math.random() * dietJuices.length)];
+          selectedJuices.suco1 = randomDiet;
+        }
+        
+        // SUCO2 = Non-diet juice (priority: Pro Mix > Vita > Natural)
+        const nonDietTypes = ['pro_mix', 'vita_suco', 'natural'];
+        for (const type of nonDietTypes) {
+          if (
+            (type === 'pro_mix' && clientJuiceConfig.use_pro_mix) ||
+            (type === 'vita_suco' && clientJuiceConfig.use_pro_vita) ||
+            (type === 'natural' && clientJuiceConfig.use_suco_natural)
+          ) {
+            const typeJuices = juicesByType[type].filter(j => !juiceNames.includes(normalizeString(j.nome)));
+            if (typeJuices.length > 0) {
+              const randomJuice = typeJuices[Math.floor(Math.random() * typeJuices.length)];
+              selectedJuices.suco2 = randomJuice;
+              break;
+            }
+          }
+        }
+        
+        // Fallback: if no non-diet found, use natural as default
+        if (!selectedJuices.suco2 && juicesByType.natural.length > 0) {
+          const naturalJuices = juicesByType.natural.filter(j => !juiceNames.includes(normalizeString(j.nome)));
+          if (naturalJuices.length > 0) {
+            selectedJuices.suco2 = naturalJuices[0];
+          }
+        }
+      } else {
+        // Normal selection (no diet restriction)
+        const enabledTypes = [];
+        if (clientJuiceConfig.use_pro_mix) enabledTypes.push('pro_mix');
+        if (clientJuiceConfig.use_pro_vita) enabledTypes.push('vita_suco');
+        if (clientJuiceConfig.use_suco_natural) enabledTypes.push('natural');
+        
+        // If no types enabled, use natural as default
+        if (enabledTypes.length === 0) {
+          enabledTypes.push('natural');
+        }
+        
+        // Collect all available juices from enabled types
+        const allEnabledJuices = enabledTypes.flatMap(type => juicesByType[type])
+          .filter(j => !juiceNames.includes(normalizeString(j.nome)));
+        
+        // Select two different juices
+        if (allEnabledJuices.length >= 2) {
+          const shuffled = [...allEnabledJuices].sort(() => Math.random() - 0.5);
+          selectedJuices.suco1 = shuffled[0];
+          selectedJuices.suco2 = shuffled[1];
+        } else if (allEnabledJuices.length === 1) {
+          selectedJuices.suco1 = allEnabledJuices[0];
+          // Find a different juice as fallback
+          const fallbackJuices = availableJuices.filter(j => 
+            j.produto_base_id !== selectedJuices.suco1.produto_base_id &&
+            !juiceNames.includes(normalizeString(j.nome))
+          );
+          if (fallbackJuices.length > 0) {
+            selectedJuices.suco2 = fallbackJuices[0];
+          }
+        }
       }
+      
+      return selectedJuices;
+    };
+    
+    const selectedJuices = selectJuices();
+    
+    // Inject SUCO1 if missing
+    if (existingSuco1.length === 0 && selectedJuices.suco1) {
+      grouped['SUCO1'] = [{
+        id: `juice-${selectedJuices.suco1.produto_base_id}`,
+        name: selectedJuices.suco1.nome,
+        category: 'SUCO1',
+        produto_base_id: selectedJuices.suco1.produto_base_id
+      }];
     }
     
-    // Inject juice in SUCO2 if missing
-    if (existingSuco2.length === 0 && availableJuices.length > 1) {
-      const juiceName = availableJuices[1];
-      if (!juiceNames.includes(normalizeString(juiceName))) {
-        grouped['SUCO2'] = [{
-          id: 'juice-injected-suco2',
-          name: juiceName,
-          category: 'SUCO2'
-        }];
-      }
+    // Inject SUCO2 if missing
+    if (existingSuco2.length === 0 && selectedJuices.suco2) {
+      grouped['SUCO2'] = [{
+        id: `juice-${selectedJuices.suco2.produto_base_id}`,
+        name: selectedJuices.suco2.nome,
+        category: 'SUCO2',
+        produto_base_id: selectedJuices.suco2.produto_base_id
+      }];
     }
     
     return grouped;
@@ -382,16 +480,21 @@ export function MenuDayCarousel({ menu }: MenuDayCarouselProps) {
       
       for (const recipe of allRecipes) {
         const recipeId = recipe.id?.toString() || '';
-        if (recipeId && !realCosts[recipeId]) {
+        const produtoBaseId = recipe.produto_base_id?.toString() || '';
+        
+        // For injected juices, use produto_base_id; for regular recipes, use recipe ID
+        const idToUse = produtoBaseId || recipeId;
+        
+        if (idToUse && !realCosts[idToUse]) {
           // First try cache
-          const cachedCost = getCachedCost(recipeId, mealsPerDay);
+          const cachedCost = getCachedCost(idToUse, mealsPerDay);
           if (cachedCost !== null) {
-            setRealCosts(prev => ({ ...prev, [recipeId]: cachedCost }));
+            setRealCosts(prev => ({ ...prev, [idToUse]: cachedCost }));
           } else {
             // Calculate if not cached
-            const result = await calculateRecipeCost(recipeId, mealsPerDay);
+            const result = await calculateRecipeCost(idToUse, mealsPerDay);
             if (result) {
-              setRealCosts(prev => ({ ...prev, [recipeId]: result.custo_por_porcao }));
+              setRealCosts(prev => ({ ...prev, [idToUse]: result.custo_por_porcao }));
             }
           }
         }
@@ -404,7 +507,10 @@ export function MenuDayCarousel({ menu }: MenuDayCarouselProps) {
   // Get real cost for a recipe
   const getRealCost = (recipe: any): number => {
     const recipeId = recipe.id?.toString() || '';
-    const realCost = realCosts[recipeId];
+    const produtoBaseId = recipe.produto_base_id?.toString() || '';
+    
+    // Try recipe ID first, then produto_base_id
+    const realCost = realCosts[recipeId] || realCosts[produtoBaseId];
     
     if (realCost !== undefined) {
       return realCost;
