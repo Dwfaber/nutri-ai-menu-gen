@@ -63,7 +63,7 @@ export const ClientContractsProvider = ({ children }: { children: ReactNode }) =
 
       // Loading clients with optional search
 
-      // Buscar dados otimizados da tabela custos_filiais
+      // Buscar dados otimizados da tabela custos_filiais com configurações de sucos
       let query = supabase
         .from('custos_filiais')
         .select(`
@@ -85,7 +85,15 @@ export const ClientContractsProvider = ({ children }: { children: ReactNode }) =
           QtdeRefeicoesUsarMediaValidarSimNao,
           PorcentagemLimiteAcimaMedia,
           created_at,
-          updated_at
+          updated_at,
+          contratos_corporativos!inner(
+            use_pro_mix,
+            use_pro_vita,
+            use_suco_diet,
+            use_suco_natural,
+            protein_grams_pp1,
+            protein_grams_pp2
+          )
         `);
 
       // Estratégia diferente para busca vs. carregamento inicial
@@ -118,6 +126,10 @@ export const ClientContractsProvider = ({ children }: { children: ReactNode }) =
           return isValid;
         })
         .map(item => {
+          const juiceConfig = Array.isArray(item.contratos_corporativos) 
+            ? item.contratos_corporativos[0] 
+            : item.contratos_corporativos;
+
           const client = {
             id: item.id,
             filial_id: item.filial_id !== null ? item.filial_id : 0, // Garantir que seja número
@@ -138,7 +150,15 @@ export const ClientContractsProvider = ({ children }: { children: ReactNode }) =
             usa_validacao_media: Boolean(item.QtdeRefeicoesUsarMediaValidarSimNao),
             limite_percentual_acima_media: Number(item.PorcentagemLimiteAcimaMedia || 0),
             created_at: item.created_at || new Date().toISOString(),
-            updated_at: item.updated_at || new Date().toISOString()
+            updated_at: item.updated_at || new Date().toISOString(),
+            // Configurações de sucos do contrato corporativo
+            use_pro_mix: juiceConfig?.use_pro_mix || false,
+            use_pro_vita: juiceConfig?.use_pro_vita || false,
+            use_suco_diet: juiceConfig?.use_suco_diet || false,
+            use_suco_natural: juiceConfig?.use_suco_natural || true, // Default para natural
+            // Configurações de proteínas
+            protein_grams_pp1: juiceConfig?.protein_grams_pp1 || 100,
+            protein_grams_pp2: juiceConfig?.protein_grams_pp2 || 90
           };
           
           console.log('✅ Cliente transformado:', { 
@@ -230,7 +250,17 @@ export const ClientContractsProvider = ({ children }: { children: ReactNode }) =
     try {
       const { data, error } = await supabase
         .from('custos_filiais')
-        .select('*')
+        .select(`
+          *,
+          contratos_corporativos!inner(
+            use_pro_mix,
+            use_pro_vita,
+            use_suco_diet,
+            use_suco_natural,
+            protein_grams_pp1,
+            protein_grams_pp2
+          )
+        `)
         .eq('id', clientId)
         .single();
 
@@ -239,6 +269,10 @@ export const ClientContractsProvider = ({ children }: { children: ReactNode }) =
       }
 
       if (!data) return null;
+
+      const juiceConfig = Array.isArray(data.contratos_corporativos) 
+        ? data.contratos_corporativos[0] 
+        : data.contratos_corporativos;
 
       // Transform single record to match ContractClient interface usando dados reais
       return {
@@ -261,7 +295,15 @@ export const ClientContractsProvider = ({ children }: { children: ReactNode }) =
         usa_validacao_media: !!data.QtdeRefeicoesUsarMediaValidarSimNao,
         limite_percentual_acima_media: Number(data.PorcentagemLimiteAcimaMedia || 0),
         created_at: data.created_at || new Date().toISOString(),
-        updated_at: data.updated_at || new Date().toISOString()
+        updated_at: data.updated_at || new Date().toISOString(),
+        // Configurações de sucos do contrato corporativo
+        use_pro_mix: juiceConfig?.use_pro_mix || false,
+        use_pro_vita: juiceConfig?.use_pro_vita || false,
+        use_suco_diet: juiceConfig?.use_suco_diet || false,
+        use_suco_natural: juiceConfig?.use_suco_natural || true,
+        // Configurações de proteínas
+        protein_grams_pp1: juiceConfig?.protein_grams_pp1 || 100,
+        protein_grams_pp2: juiceConfig?.protein_grams_pp2 || 90
       };
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Erro ao buscar contrato do cliente';
