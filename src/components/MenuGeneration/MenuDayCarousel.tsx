@@ -331,7 +331,7 @@ export function MenuDayCarousel({ menu }: MenuDayCarouselProps) {
             id: `juice-injected-${i}`,
             name: juiceName,
             category: 'Sucos',
-            cost: 3.50
+            cost: 0.05
           });
         }
       }
