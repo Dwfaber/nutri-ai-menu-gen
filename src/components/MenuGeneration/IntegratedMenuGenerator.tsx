@@ -64,11 +64,16 @@ const IntegratedMenuGenerator = () => {
   }, [generatedMenu?.recipes]);
 
   const handleGenerateMenu = async (formData: SimpleMenuFormData) => {
+    console.log('🎯 Iniciando geração de cardápio...');
     const menu = await generateMenuWithFormData(formData);
     setShowForm(false);
     
+    console.log('📝 Cardápio gerado:', menu);
+    
     // Automaticamente executar otimização de compras após gerar o cardápio
     if (menu?.menu && Array.isArray(menu.menu)) {
+      console.log('🔄 Iniciando otimização automática...');
+      
       const menuDays = menu.menu.map((day: any) => ({
         date: day.data,
         recipes: Object.entries(day.refeicoes || {}).flatMap(([slot, receitas]) => 
@@ -86,8 +91,10 @@ const IntegratedMenuGenerator = () => {
         ), 0
       );
 
+      console.log('📊 Menu para otimização:', { menuDays, totalMeals });
       await optimizeMenuPurchases(menuDays, totalMeals);
       setShowOptimization(true);
+      console.log('✅ Otimização concluída');
     }
   };
 
