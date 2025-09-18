@@ -285,13 +285,13 @@ export function MenuDayCarousel({ menu }: MenuDayCarouselProps) {
     
     // Always complete Base category with required items using slot-based deduplication
     const baseRequired = [
-      { name: 'ARROZ BRANCO', cost: 0.32, slot: 'rice' },         // 0.64 ÷ 2
-      { name: currentDayBeanVariant, cost: currentBeanCost, slot: 'bean' },
-      { name: 'CAFÉ COMPLEMENTAR', cost: 0.34, slot: 'coffee' },   // 0.67 ÷ 2
-      { name: 'KIT DESCARTÁVEL', cost: 0.08, slot: 'disposable_kit' }, // 0.16 ÷ 2
-      { name: 'KIT LIMPEZA', cost: 0.03, slot: 'cleaning_kit' },   // 0.05 ÷ 2
-      { name: 'KIT TEMPEROS MESA', cost: 0.05, slot: 'seasoning_kit' }, // 0.09 ÷ 2
-      { name: 'PÃO FRANCÊS MINI', cost: 0.03, slot: 'bread' }      // 0.06 ÷ 2
+      { name: 'ARROZ BRANCO', slot: 'rice' },
+      { name: currentDayBeanVariant, slot: 'bean' },
+      { name: 'CAFÉ COMPLEMENTAR', slot: 'coffee' },
+      { name: 'KIT DESCARTÁVEL', slot: 'disposable_kit' },
+      { name: 'KIT LIMPEZA', slot: 'cleaning_kit' },
+      { name: 'KIT TEMPEROS MESA', slot: 'seasoning_kit' },
+      { name: 'PÃO FRANCÊS MINI', slot: 'bread' }
     ];
 
     // Get existing base items and deduplicate by slot
@@ -319,8 +319,7 @@ export function MenuDayCarousel({ menu }: MenuDayCarouselProps) {
         deduplicatedBaseItems.push({
           id: `base-injected-${index}`,
           name: requiredItem.name,
-          category: 'Base',
-          cost: requiredItem.cost
+          category: 'Base'
         });
         slotOccupied.add(requiredItem.slot);
       }
@@ -352,8 +351,7 @@ export function MenuDayCarousel({ menu }: MenuDayCarouselProps) {
         grouped['SUCO1'] = [{
           id: 'juice-injected-suco1',
           name: juiceName,
-          category: 'SUCO1',
-          cost: 0.05 // Will be calculated dynamically
+          category: 'SUCO1'
         }];
       }
     }
@@ -365,8 +363,7 @@ export function MenuDayCarousel({ menu }: MenuDayCarouselProps) {
         grouped['SUCO2'] = [{
           id: 'juice-injected-suco2',
           name: juiceName,
-          category: 'SUCO2',
-          cost: 0.05 // Will be calculated dynamically
+          category: 'SUCO2'
         }];
       }
     }
