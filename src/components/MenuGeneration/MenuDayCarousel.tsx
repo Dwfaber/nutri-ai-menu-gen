@@ -315,8 +315,7 @@ export function MenuDayCarousel({ menu, optimizationResult }: MenuDayCarouselPro
       { name: 'CAFÉ COMPLEMENTAR', slot: 'coffee' },
       { name: 'KIT DESCARTÁVEL', slot: 'disposable_kit' },
       { name: 'KIT LIMPEZA', slot: 'cleaning_kit' },
-      { name: 'KIT TEMPEROS MESA', slot: 'seasoning_kit' },
-      { name: 'PÃO FRANCÊS MINI', slot: 'bread' }
+      { name: 'KIT TEMPEROS MESA', slot: 'seasoning_kit' }
     ];
 
     // Get existing base items and deduplicate by slot
@@ -585,8 +584,7 @@ export function MenuDayCarousel({ menu, optimizationResult }: MenuDayCarouselPro
       'CAFÉ COMPLEMENTAR': 0.15,
       'KIT DESCARTÁVEL': 0.30,
       'KIT LIMPEZA': 0.25,
-      'KIT TEMPEROS MESA': 0.20,
-      'PÃO FRANCÊS MINI': 0.35
+      'KIT TEMPEROS MESA': 0.20
     };
     
     if (hardcodedOptimizedCosts[recipeName]) {
