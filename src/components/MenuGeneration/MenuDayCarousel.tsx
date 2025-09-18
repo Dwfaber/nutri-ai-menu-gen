@@ -107,6 +107,15 @@ export function MenuDayCarousel({ menu }: MenuDayCarouselProps) {
       grouped[category] = [];
     });
     
+    // Bean variations mapping
+    const BEAN_VARIATIONS = {
+      'FEIJÃO (SÓ CARIOCA)': ['feijão carioca', 'feijao carioca'],
+      'FEIJÃO PRETO': ['feijão preto', 'feijao preto'],
+      'FEIJÃO MULATINHO': ['feijão mulatinho', 'feijao mulatinho'],
+      'FEIJÃO FRADINHO': ['feijão fradinho', 'feijao fradinho'],
+      'FEIJÃO DE CORDA': ['feijão de corda', 'feijao de corda']
+    };
+    
     // Helper function to determine if a recipe should be categorized as Base
     const isBaseProduct = (name: string, code?: string, category?: string) => {
       const normalizedName = name.toLowerCase();
@@ -134,6 +143,35 @@ export function MenuDayCarousel({ menu }: MenuDayCarouselProps) {
         normalizedName.includes('acompanhamento')
       );
     };
+    
+    // Helper function to detect bean variant
+    const detectBeanVariant = (name: string) => {
+      const normalizedName = name.toLowerCase();
+      for (const [variant, patterns] of Object.entries(BEAN_VARIATIONS)) {
+        if (patterns.some(pattern => normalizedName.includes(pattern))) {
+          return variant;
+        }
+      }
+      return null;
+    };
+    
+    // Track bean variants across the entire weekly menu
+    const weeklyBeanVariants = new Set<string>();
+    menuDays.forEach(day => {
+      const dayRecipes = day.receitas || day.recipes || [];
+      dayRecipes.forEach(recipe => {
+        const name = recipe.name || recipe.nome || '';
+        const variant = detectBeanVariant(name);
+        if (variant) {
+          weeklyBeanVariants.add(variant);
+        }
+      });
+    });
+    
+    // Select the bean variant for this weekly menu (only one per week)
+    const selectedBeanVariant = weeklyBeanVariants.size > 0 
+      ? Array.from(weeklyBeanVariants)[0] 
+      : 'FEIJÃO (SÓ CARIOCA)'; // Default variant
     
     // Group actual recipes by category
     currentDay?.receitas?.forEach((receita) => {
@@ -204,60 +242,92 @@ export function MenuDayCarousel({ menu }: MenuDayCarouselProps) {
       grouped[displayCat].push(recipe);
     });
     
+    // Inject missing base items if Base category is empty
+    if (grouped['Base'].length === 0) {
+      const baseItems = [
+        {
+          id: 'base-arroz',
+          name: 'ARROZ BRANCO',
+          cost: 0.65,
+          category: 'Base'
+        },
+        {
+          id: 'base-feijao',
+          name: selectedBeanVariant,
+          cost: 0.85,
+          category: 'Base'
+        },
+        {
+          id: 'base-cafe',
+          name: 'CAFÉ CORTESIA',
+          cost: 0.15,
+          category: 'Base'
+        },
+        {
+          id: 'base-kit-descartaveis',
+          name: 'KIT DESCARTÁVEIS',
+          cost: 0.40,
+          category: 'Base'
+        },
+        {
+          id: 'base-kit-limpeza',
+          name: 'KIT LIMPEZA',
+          cost: 0.25,
+          category: 'Base'
+        },
+        {
+          id: 'base-kit-tempero',
+          name: 'KIT TEMPERO DE MESA',
+          cost: 0.10,
+          category: 'Base'
+        },
+        {
+          id: 'base-mini-filao',
+          name: 'MINI FILÃO',
+          cost: 0.30,
+          category: 'Base'
+        }
+      ];
+      
+      grouped['Base'] = baseItems;
+    } else {
+      // If there are base items but no bean, inject the selected bean variant
+      const hasBeanInBase = grouped['Base'].some(item => {
+        const name = item.name || item.nome || '';
+        return detectBeanVariant(name) !== null;
+      });
+      
+      if (!hasBeanInBase) {
+        grouped['Base'].push({
+          id: 'base-feijao-injected',
+          name: selectedBeanVariant,
+          cost: 0.85,
+          category: 'Base'
+        });
+      }
+    }
+    
     return grouped;
   }, [currentDay]);
 
   // Calculate costs separately for Base (fixed) and Variable Menu
   const { baseCost, variableCost, totalCost } = React.useMemo(() => {
-    const allRecipes = currentDay?.receitas || currentDay?.recipes || [];
-    if (!allRecipes || allRecipes.length === 0) return { baseCost: 0, variableCost: 0, totalCost: 0 };
+    // Include injected base items in cost calculation
+    const baseItems = recipesByCategory['Base'] || [];
+    const base = baseItems.reduce((sum, recipe) => sum + (recipe.cost || recipe.custo || recipe.custo_por_refeicao || 0), 0);
     
-    // Use the same logic as the categorization to identify base products
-    const isBaseProduct = (name: string, code?: string, category?: string) => {
-      const normalizedName = name.toLowerCase();
-      
-      if (category?.toLowerCase() === 'base') return true;
-      if (code && ['ARROZ', 'FEIJAO', 'CAFE', 'KIT'].some(baseCode => code.includes(baseCode))) return true;
-      
-      return (
-        normalizedName.includes('arroz') ||
-        normalizedName.includes('feijão') ||
-        normalizedName.includes('feijao') ||
-        normalizedName.includes('café cortesia') ||
-        normalizedName.includes('cafe cortesia') ||
-        normalizedName.includes('kit descartáveis') ||
-        normalizedName.includes('kit descartaveis') ||
-        normalizedName.includes('kit limpeza') ||
-        normalizedName.includes('kit tempero') ||
-        normalizedName.includes('tempero de mesa') ||
-        normalizedName.includes('mini filão') ||
-        normalizedName.includes('mini filao') ||
-        normalizedName.includes('acompanhamento')
-      );
-    };
+    const allVariableRecipes = CATEGORY_ORDER
+      .filter(cat => cat !== 'Base')
+      .flatMap(cat => recipesByCategory[cat] || []);
     
-    const base = allRecipes
-      .filter(recipe => isBaseProduct(
-        recipe.name || recipe.nome || '', 
-        (recipe as any).codigo, 
-        recipe.category || recipe.categoria
-      ))
-      .reduce((sum, recipe) => sum + (recipe.cost || recipe.custo || recipe.custo_por_refeicao || 0), 0);
-    
-    const variable = allRecipes
-      .filter(recipe => !isBaseProduct(
-        recipe.name || recipe.nome || '', 
-        (recipe as any).codigo, 
-        recipe.category || recipe.categoria
-      ))
-      .reduce((sum, recipe) => sum + (recipe.cost || recipe.custo || recipe.custo_por_refeicao || 0), 0);
+    const variable = allVariableRecipes.reduce((sum, recipe) => sum + (recipe.cost || recipe.custo || recipe.custo_por_refeicao || 0), 0);
     
     return {
       baseCost: base,
       variableCost: variable,
       totalCost: base + variable
     };
-  }, [currentDay]);
+  }, [recipesByCategory]);
 
   return (
     <div className="w-full max-w-4xl mx-auto bg-white rounded-lg shadow-sm border p-6 space-y-6">
