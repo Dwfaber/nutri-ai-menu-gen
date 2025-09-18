@@ -6,9 +6,12 @@ import { Separator } from '@/components/ui/separator';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { ChefHat, Calendar, CheckCircle, XCircle, ShoppingCart, DollarSign, Users, Plus, Wifi, WifiOff } from 'lucide-react';
+import { ChefHat, Calendar, CheckCircle, XCircle, ShoppingCart, DollarSign, Users, Plus, Wifi, WifiOff, Calculator, Package } from 'lucide-react';
 import { useIntegratedMenuGeneration } from '@/hooks/useIntegratedMenuGeneration';
 import { useSelectedClient } from '@/contexts/SelectedClientContext';
+import { useMenuOptimization } from '@/hooks/useMenuOptimization';
+import { OptimizedPurchasesSummary } from '@/components/Optimization/OptimizedPurchasesSummary';
+import { OptimizedPurchasesTable } from '@/components/Optimization/OptimizedPurchasesTable';
 import WeeklyMenuView from "@/components/MenuGeneration/WeeklyMenuView";
 import { SimpleMenuForm, SimpleMenuFormData } from '@/components/MenuGeneration/SimpleMenuForm';
 import MenuValidationPanel from '@/components/MenuGeneration/MenuValidationPanel';
@@ -22,9 +25,16 @@ const IntegratedMenuGenerator = () => {
   const [rejectionReason, setRejectionReason] = useState('');
   const [isTesting, setIsTesting] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<'unknown' | 'healthy' | 'error'>('unknown');
+  const [showOptimization, setShowOptimization] = useState(false);
   
   const { toast } = useToast();
   const { selectedClient } = useSelectedClient();
+  const { 
+    isOptimizing, 
+    optimizationResult, 
+    optimizeMenuPurchases, 
+    resetOptimization 
+  } = useMenuOptimization();
   const {
     isGenerating,
     generatedMenu,
@@ -109,6 +119,31 @@ const IntegratedMenuGenerator = () => {
   const handleGenerateShoppingList = async () => {
     if (generatedMenu) {
       await generateShoppingListFromMenu(generatedMenu);
+    }
+  };
+
+  const handleOptimizePurchases = async () => {
+    if (!generatedMenu?.menu) return;
+
+    // Converter menu para formato esperado pela otimização
+    const menuDays = generatedMenu.menu.map((day: any) => ({
+      date: day.data,
+      recipes: Object.entries(day.refeicoes || {}).flatMap(([slot, receitas]) => 
+        (Array.isArray(receitas) ? receitas : [receitas]).map((receita: any) => ({
+          receita_id: receita.receita_id || receita.id || 'unknown',
+          nome: receita.nome || receita.receita || 'Receita sem nome',
+          meals_quantity: generatedMenu.mealsPerDay || 50
+        }))
+      )
+    }));
+
+    const totalMeals = menuDays.length * (generatedMenu.mealsPerDay || 50);
+
+    try {
+      await optimizeMenuPurchases(menuDays, totalMeals);
+      setShowOptimization(true);
+    } catch (error) {
+      console.error('Erro na otimização:', error);
     }
   };
 
@@ -310,6 +345,37 @@ const IntegratedMenuGenerator = () => {
             )}
 
             <Separator />
+
+            {/* Otimização de Compras */}
+            <Card className="bg-primary/5 border-primary/20">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Calculator className="h-5 w-5 text-primary" />
+                  Sistema de Otimização de Compras
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm text-muted-foreground mb-4">
+                  Analisa embalagens, distribui sobras entre dias e calcula custos otimizados por período.
+                </p>
+                <Button 
+                  onClick={handleOptimizePurchases}
+                  disabled={isOptimizing}
+                  className="w-full"
+                >
+                  <Package className="h-4 w-4 mr-2" />
+                  {isOptimizing ? 'Otimizando...' : 'Otimizar Compras Inteligente'}
+                </Button>
+              </CardContent>
+            </Card>
+
+            {/* Resultados da Otimização */}
+            {showOptimization && optimizationResult && (
+              <div className="space-y-4">
+                <OptimizedPurchasesSummary summary={optimizationResult.summary} />
+                <OptimizedPurchasesTable purchases={optimizationResult.optimized_purchases} />
+              </div>
+            )}
 
             {/* Menu Approval Panel */}
             <MenuApprovalPanel
