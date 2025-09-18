@@ -53,7 +53,52 @@ function calculateSimilarityScore(str1: string, str2: string): number {
   return commonWords.length / Math.max(words1.length, words2.length);
 }
 
-function findProductByName(nomeBusca: string, produtos: any[]): any[] {
+// Specific product mappings for key ingredients
+const SPECIFIC_PRODUCT_MAPPING: Record<string, number> = {
+  'arroz': 558, // Force use of produto_base_id 558 for rice
+  'arroz branco': 558,
+  'arroz branco simples': 558,
+  'arroz simples': 558,
+  'arroz tipo 1': 558,
+  'arroz agulhinha': 558
+};
+
+function getSpecificProductId(nomeIngrediente: string): number | null {
+  const nome = nomeIngrediente.toLowerCase().trim();
+  
+  // Check for exact matches first
+  if (SPECIFIC_PRODUCT_MAPPING[nome]) {
+    console.log(`🎯 Usando mapeamento específico para "${nomeIngrediente}": produto_base_id ${SPECIFIC_PRODUCT_MAPPING[nome]}`);
+    return SPECIFIC_PRODUCT_MAPPING[nome];
+  }
+  
+  // Check for partial matches
+  for (const [key, produtoId] of Object.entries(SPECIFIC_PRODUCT_MAPPING)) {
+    if (nome.includes(key) || key.includes(nome)) {
+      console.log(`🎯 Usando mapeamento específico por similaridade para "${nomeIngrediente}": produto_base_id ${produtoId}`);
+      return produtoId;
+    }
+  }
+  
+  return null;
+}
+
+function findProductByName(nomeBusca: string, produtos: any[], specificProductId?: number): any[] {
+  // If we have a specific product ID, filter by that first
+  if (specificProductId) {
+    const specificProducts = produtos.filter(p => p.produto_base_id === specificProductId);
+    if (specificProducts.length > 0) {
+      console.log(`✅ Encontrados ${specificProducts.length} produtos com produto_base_id ${specificProductId}`);
+      return specificProducts.sort((a, b) => {
+        // Prioritize items on promotion, then by price
+        if (a.em_promocao_sim_nao && !b.em_promocao_sim_nao) return -1;
+        if (!a.em_promocao_sim_nao && b.em_promocao_sim_nao) return 1;
+        return (a.preco || 0) - (b.preco || 0);
+      });
+    }
+  }
+  
+  // Fallback to similarity search
   return produtos
     .map(produto => ({
       ...produto,
@@ -87,6 +132,9 @@ async function calculateIngredientCost(
 ): Promise<IngredientCostResult> {
   const nomeIngrediente = ingrediente.nome || ingrediente.produto_base_descricao || '';
   
+  // Check for specific product mapping first
+  const specificProductId = getSpecificProductId(nomeIngrediente);
+  
   // Buscar produtos disponíveis
   const { data: produtos } = await supabase
     .from('co_solicitacao_produto_listagem')
@@ -98,8 +146,8 @@ async function calculateIngredientCost(
     throw new Error('Nenhum produto disponível na base de dados');
   }
   
-  // Encontrar melhor produto
-  const produtosEncontrados = findProductByName(nomeIngrediente, produtos);
+  // Encontrar melhor produto usando mapeamento específico se disponível
+  const produtosEncontrados = findProductByName(nomeIngrediente, produtos, specificProductId);
   
   if (produtosEncontrados.length === 0) {
     throw new Error(`Produto não encontrado: ${nomeIngrediente}`);
