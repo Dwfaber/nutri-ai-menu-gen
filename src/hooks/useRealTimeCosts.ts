@@ -21,10 +21,74 @@ interface CostCache {
 
 const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
 
-// Custos de fallback mais realistas baseados no tipo de receita
-function getFallbackCost(receitaId: string): number {
+// Calcular custo local usando dados reais da base
+async function calculateFallbackCost(receitaId: string, mealQuantity: number = 50): Promise<number> {
+  try {
+    // Buscar ingredientes da receita
+    const { data: ingredientes } = await supabase
+      .from('receita_ingredientes')
+      .select('*')
+      .eq('receita_id_legado', receitaId);
+    
+    if (!ingredientes || ingredientes.length === 0) {
+      console.warn(`⚠️ Nenhum ingrediente encontrado para receita ${receitaId} no fallback`);
+      return getFallbackCostStatic(receitaId);
+    }
+    
+    // Buscar produtos disponíveis
+    const { data: produtos } = await supabase
+      .from('co_solicitacao_produto_listagem')
+      .select('*')
+      .order('preco', { ascending: true });
+    
+    if (!produtos || produtos.length === 0) {
+      return getFallbackCostStatic(receitaId);
+    }
+    
+    let custoTotal = 0;
+    
+    for (const ingrediente of ingredientes) {
+      try {
+        // Buscar produto mais barato pelo produto_base_id
+        let produto = produtos.find(p => p.produto_base_id === ingrediente.produto_base_id);
+        
+        if (!produto) {
+          // Se não encontrou, buscar por nome
+          const nome = ingrediente.nome || ingrediente.produto_base_descricao || '';
+          produto = produtos.find(p => 
+            p.descricao?.toLowerCase().includes(nome.toLowerCase()) ||
+            nome.toLowerCase().includes(p.descricao?.toLowerCase() || '')
+          );
+        }
+        
+        if (produto) {
+          const quantidade = Number(ingrediente.quantidade) || 0;
+          const preco = Number(produto.preco) || 0;
+          const custoIngrediente = (quantidade * preco) / mealQuantity;
+          custoTotal += custoIngrediente;
+          
+          console.log(`💰 Fallback - ${ingrediente.nome}: R$ ${custoIngrediente.toFixed(4)}/refeição`);
+        }
+      } catch (error) {
+        console.error('Erro no cálculo de ingrediente no fallback:', error);
+      }
+    }
+    
+    const custoPorRefeicao = custoTotal > 0 ? custoTotal : getFallbackCostStatic(receitaId);
+    console.log(`🎯 Fallback calculado para receita ${receitaId}: R$ ${custoPorRefeicao.toFixed(2)}/refeição`);
+    
+    return custoPorRefeicao;
+  } catch (error) {
+    console.error('Erro no cálculo de fallback:', error);
+    return getFallbackCostStatic(receitaId);
+  }
+}
+
+// Custos estáticos de fallback para casos extremos
+function getFallbackCostStatic(receitaId: string): number {
   // IDs conhecidos que falharam anteriormente
   const knownRecipes: Record<string, number> = {
+    '581': 0.45, // FEIJÃO CARIOCA - cálculo manual correto
     '1248': 2.75, // PEIXE COM PARMESÃO - preço realista
     '1331': 1.85, // EMPADÃO - preço médio
     '1255': 2.20, // Outra receita
@@ -82,9 +146,10 @@ export function useRealTimeCosts() {
           error: error.message || error
         });
         
-        // Fallback com custo mais realista
-        const fallbackCost = getFallbackCost(receitaId);
-        console.warn('⚠️ Usando custo de fallback:', fallbackCost);
+        // Fallback inteligente com cálculo local usando dados reais
+        console.log('🔄 Tentando fallback com cálculo local...');
+        const fallbackCost = await calculateFallbackCost(receitaId, mealQuantity);
+        console.warn('⚠️ Usando custo de fallback calculado:', fallbackCost);
         
         const fallbackData = {
           receita_id: receitaId,
@@ -114,9 +179,10 @@ export function useRealTimeCosts() {
           error: data?.error
         });
         
-        // Fallback com custo mais realista
-        const fallbackCost = getFallbackCost(receitaId);
-        console.warn('⚠️ Usando custo de fallback:', fallbackCost);
+        // Fallback inteligente com cálculo local usando dados reais
+        console.log('🔄 Tentando fallback com cálculo local...');
+        const fallbackCost = await calculateFallbackCost(receitaId, mealQuantity);
+        console.warn('⚠️ Usando custo de fallback calculado:', fallbackCost);
         
         const fallbackData = {
           receita_id: receitaId,
@@ -180,9 +246,10 @@ export function useRealTimeCosts() {
         error: error instanceof Error ? error.message : String(error)
       });
       
-      // Fallback em caso de erro de conexão
-      const fallbackCost = getFallbackCost(receitaId);
-      console.warn('⚠️ Usando custo de fallback (erro de conexão):', fallbackCost);
+      // Fallback inteligente em caso de erro de conexão
+      console.log('🔄 Tentando fallback com cálculo local (erro de conexão)...');
+      const fallbackCost = await calculateFallbackCost(receitaId, mealQuantity);
+      console.warn('⚠️ Usando custo de fallback calculado (erro de conexão):', fallbackCost);
       
       const fallbackData = {
         receita_id: receitaId,

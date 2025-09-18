@@ -89,23 +89,52 @@ function findProductByName(nomeBusca: string, produtos: any[], specificProductId
     const specificProducts = produtos.filter(p => p.produto_base_id === specificProductId);
     if (specificProducts.length > 0) {
       console.log(`✅ Encontrados ${specificProducts.length} produtos com produto_base_id ${specificProductId}`);
-      return specificProducts.sort((a, b) => {
-        // Prioritize items on promotion, then by price
-        if (a.em_promocao_sim_nao && !b.em_promocao_sim_nao) return -1;
-        if (!a.em_promocao_sim_nao && b.em_promocao_sim_nao) return 1;
-        return (a.preco || 0) - (b.preco || 0);
+      // SEMPRE usar o mais barato: primeiro promoções, depois menor preço
+      const sorted = specificProducts.sort((a, b) => {
+        const precoA = Number(a.preco) || 0;
+        const precoB = Number(b.preco) || 0;
+        
+        // Se ambos em promoção ou ambos sem promoção, usar menor preço
+        if (a.em_promocao_sim_nao === b.em_promocao_sim_nao) {
+          return precoA - precoB;
+        }
+        
+        // Priorizar produtos em promoção apenas se forem mais baratos
+        if (a.em_promocao_sim_nao && !b.em_promocao_sim_nao) {
+          return precoA <= precoB ? -1 : 1;
+        }
+        if (!a.em_promocao_sim_nao && b.em_promocao_sim_nao) {
+          return precoB <= precoA ? 1 : -1;
+        }
+        
+        return precoA - precoB;
       });
+      
+      console.log(`🏷️ Produto mais barato selecionado: ${sorted[0].descricao} - R$ ${sorted[0].preco} (promoção: ${sorted[0].em_promocao_sim_nao})`);
+      return sorted;
     }
   }
   
-  // Fallback to similarity search
-  return produtos
+  // Fallback to similarity search with price sorting
+  const found = produtos
     .map(produto => ({
       ...produto,
       similarity: calculateSimilarityScore(nomeBusca, produto.descricao || '')
     }))
     .filter(produto => produto.similarity > 0.3)
-    .sort((a, b) => b.similarity - a.similarity);
+    .sort((a, b) => {
+      // First by similarity, then by price
+      if (Math.abs(a.similarity - b.similarity) > 0.1) {
+        return b.similarity - a.similarity;
+      }
+      return (Number(a.preco) || 0) - (Number(b.preco) || 0);
+    });
+    
+  if (found.length > 0) {
+    console.log(`🔍 Produto encontrado por similaridade: ${found[0].descricao} - R$ ${found[0].preco} (similaridade: ${found[0].similarity.toFixed(2)})`);
+  }
+  
+  return found;
 }
 
 interface IngredientCostResult {
@@ -131,29 +160,48 @@ async function calculateIngredientCost(
   mealQuantity: number = 50
 ): Promise<IngredientCostResult> {
   const nomeIngrediente = ingrediente.nome || ingrediente.produto_base_descricao || '';
+  const produtoBaseId = ingrediente.produto_base_id;
+  
+  console.log(`🔍 Calculando custo para: ${nomeIngrediente} (produto_base_id: ${produtoBaseId})`);
   
   // Check for specific product mapping first
-  const specificProductId = getSpecificProductId(nomeIngrediente);
+  const specificProductId = getSpecificProductId(nomeIngrediente) || produtoBaseId;
   
-  // Buscar produtos disponíveis
+  // Buscar produtos disponíveis - SEMPRE ordenar por preço para garantir o mais barato
   const { data: produtos } = await supabase
     .from('co_solicitacao_produto_listagem')
     .select('*')
-    .order('em_promocao_sim_nao', { ascending: false })
-    .order('preco', { ascending: true });
+    .order('preco', { ascending: true })
+    .order('em_promocao_sim_nao', { ascending: false });
   
   if (!produtos || produtos.length === 0) {
     throw new Error('Nenhum produto disponível na base de dados');
   }
   
-  // Encontrar melhor produto usando mapeamento específico se disponível
-  const produtosEncontrados = findProductByName(nomeIngrediente, produtos, specificProductId);
+  // Encontrar melhor produto usando produto_base_id primeiro, depois nome
+  let produtosEncontrados = [];
   
-  if (produtosEncontrados.length === 0) {
-    throw new Error(`Produto não encontrado: ${nomeIngrediente}`);
+  if (specificProductId) {
+    // Filtrar primeiro por produto_base_id
+    produtosEncontrados = produtos.filter(p => p.produto_base_id === specificProductId);
+    if (produtosEncontrados.length > 0) {
+      console.log(`✅ Encontrados ${produtosEncontrados.length} produtos com produto_base_id ${specificProductId}`);
+    }
   }
   
-  const melhorProduto = produtosEncontrados[0];
+  // Se não encontrou por ID, buscar por nome
+  if (produtosEncontrados.length === 0) {
+    produtosEncontrados = findProductByName(nomeIngrediente, produtos, specificProductId);
+  }
+  
+  if (produtosEncontrados.length === 0) {
+    throw new Error(`Produto não encontrado: ${nomeIngrediente} (produto_base_id: ${produtoBaseId})`);
+  }
+  
+  // SEMPRE pegar o produto mais barato
+  const melhorProduto = produtosEncontrados.sort((a, b) => {
+    return (Number(a.preco) || 0) - (Number(b.preco) || 0);
+  })[0];
   
   // Escalar quantidade para o número de refeições
   const quantidadeBase = Number(ingrediente.quantidade) || 0;
@@ -207,43 +255,18 @@ async function calculateIngredientCost(
 async function calculateRecipeCost(supabase: any, receitaId: string, mealQuantity: number = 50) {
   console.log(`🔍 Buscando receita ID: ${receitaId}`);
   
-  // Buscar receita
+  // Buscar receita (usando maybeSingle para evitar erro quando não existe)
   const { data: receita, error: receitaError } = await supabase
     .from('receitas_legado')
     .select('*')
     .eq('receita_id_legado', receitaId)
-    .single();
+    .maybeSingle();
   
   if (receitaError) {
     console.error(`❌ Erro ao buscar receita ${receitaId}:`, receitaError);
   }
   
-  if (!receita) {
-    // Se for item base injetado, usar custo estimado
-    if (receitaId.startsWith('base-injected-')) {
-      console.log(`🟡 Item base injetado detectado: ${receitaId}`);
-      return {
-        receita_id: receitaId,
-        nome: `Item Base ${receitaId}`,
-        categoria: 'Base',
-        porcoes_base: 50,
-        porcoes_calculadas: mealQuantity,
-        ingredientes: [],
-        custo_total: 0.85 * mealQuantity,
-        custo_por_porcao: 0.85,
-        total_ingredientes: 0,
-        metadata: {
-          generated_at: new Date().toISOString(),
-          meal_quantity: mealQuantity,
-          fallback_used: true
-        }
-      };
-    }
-    
-    throw new Error(`Receita não encontrada: ${receitaId}`);
-  }
-  
-  // Buscar ingredientes da receita
+  // Primeiro, buscar ingredientes independentemente se receita existe ou não
   const { data: ingredientes, error: ingredientesError } = await supabase
     .from('receita_ingredientes')
     .select('*')
@@ -253,17 +276,48 @@ async function calculateRecipeCost(supabase: any, receitaId: string, mealQuantit
     console.error(`❌ Erro ao buscar ingredientes para receita ${receitaId}:`, ingredientesError);
   }
   
+  // Se for item base injetado, usar custo estimado
+  if (receitaId.startsWith('base-injected-')) {
+    console.log(`🟡 Item base injetado detectado: ${receitaId}`);
+    return {
+      receita_id: receitaId,
+      nome: `Item Base ${receitaId}`,
+      categoria: 'Base',
+      porcoes_base: 50,
+      porcoes_calculadas: mealQuantity,
+      ingredientes: [],
+      custo_total: 0.85 * mealQuantity,
+      custo_por_porcao: 0.85,
+      total_ingredientes: 0,
+      metadata: {
+        generated_at: new Date().toISOString(),
+        meal_quantity: mealQuantity,
+        fallback_used: true
+      }
+    };
+  }
+  
+  // Se não temos receita nem ingredientes, é um erro real
+  if (!receita && (!ingredientes || ingredientes.length === 0)) {
+    throw new Error(`Receita não encontrada: ${receitaId}`);
+  }
+  
+  // Se temos ingredientes mas não receita, usar fallback para dados da receita
+  const nomeReceita = receita?.nome_receita || `Receita ${receitaId}`;
+  const categoriaReceita = receita?.categoria_descricao || 'Não especificada';
+  const porcoesBase = receita?.porcoes || 50;
+  
   if (!ingredientes || ingredientes.length === 0) {
     console.warn(`⚠️ Nenhum ingrediente encontrado para receita: ${receitaId}`);
     
     // Estimar custo baseado no tipo de receita quando não há ingredientes
-    const custoEstimado = receita.categoria_descricao?.toLowerCase().includes('proteí') ? 3.25 : 2.15;
+    const custoEstimado = categoriaReceita?.toLowerCase().includes('proteí') ? 3.25 : 2.15;
     
     return {
       receita_id: receitaId,
-      nome: receita.nome_receita,
-      categoria: receita.categoria_descricao,
-      porcoes_base: receita.porcoes || 50,
+      nome: nomeReceita,
+      categoria: categoriaReceita,
+      porcoes_base: porcoesBase,
       porcoes_calculadas: mealQuantity,
       ingredientes: [],
       custo_total: custoEstimado * mealQuantity,
@@ -278,7 +332,7 @@ async function calculateRecipeCost(supabase: any, receitaId: string, mealQuantit
     };
   }
   
-  console.log(`Calculando custos para receita ${receita.nome_receita} (${ingredientes.length} ingredientes)`);
+  console.log(`Calculando custos para receita ${nomeReceita} (${ingredientes.length} ingredientes)`);
   
   // Calcular custo de cada ingrediente
   const ingredientesComCusto = [];
@@ -287,21 +341,24 @@ async function calculateRecipeCost(supabase: any, receitaId: string, mealQuantit
   for (const ingrediente of ingredientes) {
     try {
       const custoIngrediente = await calculateIngredientCost(supabase, ingrediente, mealQuantity);
+      console.log(`✅ ${ingrediente.nome}: R$ ${custoIngrediente.custo_por_refeicao.toFixed(2)}/refeição (produto_base_id: ${custoIngrediente.produto_base_id}, preço: R$ ${custoIngrediente.preco_unitario}, promoção: ${custoIngrediente.em_promocao})`);
       ingredientesComCusto.push(custoIngrediente);
       custoTotal += custoIngrediente.custo_utilizado;
     } catch (error) {
-      console.error(`Erro ao calcular ingrediente ${ingrediente.nome}:`, error);
+      console.error(`❌ Erro ao calcular ingrediente ${ingrediente.nome}:`, error);
       // Continuar com outros ingredientes
     }
   }
   
   const custoPorRefeicao = custoTotal / mealQuantity;
   
+  console.log(`🎯 RESULTADO FINAL - Receita ${receitaId}: R$ ${custoPorRefeicao.toFixed(2)}/refeição (total: R$ ${custoTotal.toFixed(2)} para ${mealQuantity} refeições)`);
+  
   return {
     receita_id: receitaId,
-    nome: receita.nome_receita,
-    categoria: receita.categoria_descricao,
-    porcoes_base: receita.porcoes || 50,
+    nome: nomeReceita,
+    categoria: categoriaReceita,
+    porcoes_base: porcoesBase,
     porcoes_calculadas: mealQuantity,
     ingredientes: ingredientesComCusto,
     custo_total: custoTotal,
