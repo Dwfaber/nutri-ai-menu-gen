@@ -93,6 +93,24 @@ export function MenuDayCarousel({ menu }: MenuDayCarouselProps) {
 
   const currentDay = menuDays[currentDayIndex];
 
+  // Group available juices by type from database
+  const juicesByType = useMemo(() => {
+    const types: { [key: string]: typeof availableJuices } = {
+      pro_mix: [],
+      vita_suco: [],
+      diet: [],
+      natural: []
+    };
+    
+    availableJuices.forEach(juice => {
+      if (types[juice.tipo]) {
+        types[juice.tipo].push(juice);
+      }
+    });
+    
+    return types;
+  }, [availableJuices]);
+
   const nextDay = () => {
     setCurrentDayIndex((prev) => (prev + 1) % menuDays.length);
   };
@@ -338,23 +356,6 @@ export function MenuDayCarousel({ menu }: MenuDayCarouselProps) {
     const allExistingJuices = [...existingSuco1, ...existingSuco2];
     const juiceNames = allExistingJuices.map(j => normalizeString(j.name || j.nome || ''));
     
-    // Group available juices by type from database
-    const juicesByType = useMemo(() => {
-      const types: { [key: string]: typeof availableJuices } = {
-        pro_mix: [],
-        vita_suco: [],
-        diet: [],
-        natural: []
-      };
-      
-      availableJuices.forEach(juice => {
-        if (types[juice.tipo]) {
-          types[juice.tipo].push(juice);
-        }
-      });
-      
-      return types;
-    }, [availableJuices]);
     
     // Get client juice configuration
     const clientJuiceConfig = selectedClient ? {
@@ -467,7 +468,7 @@ export function MenuDayCarousel({ menu }: MenuDayCarouselProps) {
     }
     
     return grouped;
-  }, [currentDay]);
+  }, [currentDay, juicesByType, selectedClient, availableJuices]);
 
   // Calculate real-time costs for recipes
   const [realCosts, setRealCosts] = useState<Record<string, number>>({});
