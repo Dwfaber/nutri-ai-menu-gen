@@ -36,7 +36,7 @@ interface MenuDayCarouselProps {
 const CATEGORY_ORDER = [
   'Base', 'Prato Principal 1', 'Prato Principal 2', 
   'Guarnição', 'Salada 1', 'Salada 2', 
-  'Suco 1', 'Suco 2', 'Sobremesa'
+  'Sucos', 'Sobremesa'
 ];
 
 const WEEK_DAYS = [
@@ -97,6 +97,9 @@ export function MenuDayCarousel({ menu }: MenuDayCarouselProps) {
   const goToDay = (index: number) => {
     setCurrentDayIndex(index);
   };
+
+  // Helper function for normalized string comparison
+  const normalizeString = (str: string) => str.toUpperCase().trim();
 
   // Group recipes by category for the current day and ensure all categories are present
   const recipesByCategory = React.useMemo(() => {
@@ -184,6 +187,10 @@ export function MenuDayCarousel({ menu }: MenuDayCarouselProps) {
       // Check if it's a base product first
       if (isBaseProduct(name, code, rawCat)) {
         displayCat = 'Base';
+      } else if (code && ['SUCO1', 'SUCO2'].includes(code)) {
+        displayCat = 'Sucos';
+      } else if (rawCat && ['SUCO', 'Suco', 'SUCO 1', 'SUCO 2'].includes(rawCat)) {
+        displayCat = 'Sucos';
       } else if (code) {
         // Map other category codes
         displayCat = 
@@ -191,8 +198,6 @@ export function MenuDayCarousel({ menu }: MenuDayCarouselProps) {
           code === 'PP2' ? 'Prato Principal 2' :
           code === 'SALADA1' ? 'Salada 1' :
           code === 'SALADA2' ? 'Salada 2' :
-          code === 'SUCO1' ? 'Suco 1' :
-          code === 'SUCO2' ? 'Suco 2' :
           code === 'GUARNICAO' ? 'Guarnição' :
           code === 'SOBREMESA' ? 'Sobremesa' : rawCat;
       } else {
@@ -218,6 +223,10 @@ export function MenuDayCarousel({ menu }: MenuDayCarouselProps) {
       // Check if it's a base product first
       if (isBaseProduct(name, code, rawCat)) {
         displayCat = 'Base';
+      } else if (code && ['SUCO1', 'SUCO2'].includes(code)) {
+        displayCat = 'Sucos';
+      } else if (rawCat && ['SUCO', 'Suco', 'SUCO 1', 'SUCO 2'].includes(rawCat)) {
+        displayCat = 'Sucos';
       } else if (code) {
         // Map other category codes
         displayCat = 
@@ -225,8 +234,6 @@ export function MenuDayCarousel({ menu }: MenuDayCarouselProps) {
           code === 'PP2' ? 'Prato Principal 2' :
           code === 'SALADA1' ? 'Salada 1' :
           code === 'SALADA2' ? 'Salada 2' :
-          code === 'SUCO1' ? 'Suco 1' :
-          code === 'SUCO2' ? 'Suco 2' :
           code === 'GUARNICAO' ? 'Guarnição' :
           code === 'SOBREMESA' ? 'Sobremesa' : rawCat;
       } else {
@@ -242,70 +249,69 @@ export function MenuDayCarousel({ menu }: MenuDayCarouselProps) {
       grouped[displayCat].push(recipe);
     });
     
-    // Inject missing base items if Base category is empty
-    if (grouped['Base'].length === 0) {
-      const baseItems = [
-        {
-          id: 'base-arroz',
-          name: 'ARROZ BRANCO',
-          cost: 0.65,
-          category: 'Base'
-        },
-        {
-          id: 'base-feijao',
-          name: selectedBeanVariant,
-          cost: 0.85,
-          category: 'Base'
-        },
-        {
-          id: 'base-cafe',
-          name: 'CAFÉ CORTESIA',
-          cost: 0.15,
-          category: 'Base'
-        },
-        {
-          id: 'base-kit-descartaveis',
-          name: 'KIT DESCARTÁVEIS',
-          cost: 0.40,
-          category: 'Base'
-        },
-        {
-          id: 'base-kit-limpeza',
-          name: 'KIT LIMPEZA',
-          cost: 0.25,
-          category: 'Base'
-        },
-        {
-          id: 'base-kit-tempero',
-          name: 'KIT TEMPERO DE MESA',
-          cost: 0.10,
-          category: 'Base'
-        },
-        {
-          id: 'base-mini-filao',
-          name: 'MINI FILÃO',
-          cost: 0.30,
-          category: 'Base'
-        }
-      ];
-      
-      grouped['Base'] = baseItems;
-    } else {
-      // If there are base items but no bean, inject the selected bean variant
-      const hasBeanInBase = grouped['Base'].some(item => {
-        const name = item.name || item.nome || '';
-        return detectBeanVariant(name) !== null;
-      });
-      
-      if (!hasBeanInBase) {
-        grouped['Base'].push({
-          id: 'base-feijao-injected',
-          name: selectedBeanVariant,
-          cost: 0.85,
-          category: 'Base'
+    // Always complete Base category with required items
+    const baseRequired = [
+      { name: 'ARROZ BRANCO', cost: 2.50 },
+      { name: selectedBeanVariant, cost: 2.20 },
+      { name: 'CAFÉ COMPLEMENTAR', cost: 1.00 },
+      { name: 'KIT DESCARTÁVEL', cost: 0.50 },
+      { name: 'KIT LIMPEZA', cost: 0.30 },
+      { name: 'KIT TEMPEROS MESA', cost: 0.25 },
+      { name: 'PÃO FRANCÊS MINI', cost: 0.80 }
+    ];
+
+    // Get existing base items
+    const existingBaseItems = grouped['Base'] || [];
+    const existingBaseNames = new Set(
+      existingBaseItems.map(item => normalizeString(item.name || item.nome || ''))
+    );
+
+    // Add missing base items
+    baseRequired.forEach((requiredItem, index) => {
+      const normalizedRequired = normalizeString(requiredItem.name);
+      if (!existingBaseNames.has(normalizedRequired)) {
+        existingBaseItems.push({
+          id: `base-injected-${index}`,
+          name: requiredItem.name,
+          category: 'Base',
+          cost: requiredItem.cost
         });
       }
+    });
+
+    grouped['Base'] = existingBaseItems;
+
+    // Always inject juices if missing (2 juices per day)
+    const existingJuices = grouped['Sucos'] || [];
+    const juiceNames = existingJuices.map(j => normalizeString(j.name || j.nome || ''));
+    
+    // Juice pools by preference (Pro Mix preferred)
+    const juicePools = {
+      proMix: ['SUCO PRO MIX LARANJA', 'SUCO PRO MIX UVA', 'SUCO PRO MIX MARACUJÁ', 'SUCO PRO MIX MANGA'],
+      vita: ['SUCO VITA LARANJA', 'SUCO VITA UVA', 'SUCO VITA ABACAXI', 'SUCO VITA PÊSSEGO'],
+      diet: ['SUCO DIET LARANJA', 'SUCO DIET UVA', 'SUCO DIET LIMÃO'],
+      natural: ['SUCO NATURAL LARANJA', 'SUCO NATURAL LIMÃO', 'SUCO NATURAL MARACUJÁ']
+    };
+
+    // Select two distinct juices (prefer Pro Mix)
+    const availableJuices = [...juicePools.proMix, ...juicePools.vita];
+    
+    if (existingJuices.length < 2) {
+      const neededJuices = 2 - existingJuices.length;
+      for (let i = 0; i < neededJuices && i < availableJuices.length; i++) {
+        const juiceName = availableJuices[i];
+        if (!juiceNames.includes(normalizeString(juiceName))) {
+          existingJuices.push({
+            id: `juice-injected-${i}`,
+            name: juiceName,
+            category: 'Sucos',
+            cost: 3.50
+          });
+        }
+      }
     }
+
+    grouped['Sucos'] = existingJuices;
     
     return grouped;
   }, [currentDay]);
