@@ -358,88 +358,114 @@ export function MenuDayCarousel({ menu }: MenuDayCarouselProps) {
     const juiceNames = allExistingJuices.map(j => normalizeString(j.name || j.nome || ''));
     
     
-    // Get client juice configuration
-    const clientJuiceConfig = selectedClient ? {
-      use_pro_mix: selectedClient.use_pro_mix || false,
-      use_pro_vita: selectedClient.use_pro_vita || false,
-      use_suco_diet: selectedClient.use_suco_diet || false,
-      use_suco_natural: selectedClient.use_suco_natural || false
-    } : {
-      // Default configuration if no client selected
-      use_pro_mix: false,
-      use_pro_vita: false,
-      use_suco_diet: false,
-      use_suco_natural: true
-    };
+    // Get client juice configuration from selectedClient or infer from menu data
+    let clientJuiceConfig;
+    if (selectedClient) {
+      clientJuiceConfig = {
+        use_pro_mix: selectedClient.use_pro_mix || false,
+        use_pro_vita: selectedClient.use_pro_vita || false,
+        use_suco_diet: selectedClient.use_suco_diet || false,
+        use_suco_natural: selectedClient.use_suco_natural || false
+      };
+    } else {
+      // Try to infer from menu data if available
+      const menuData = (menu as any).menu_data;
+      const tiposConfigurados = menuData?.tipos_configurados || [];
+      clientJuiceConfig = {
+        use_pro_mix: tiposConfigurados.includes('pro_mix'),
+        use_pro_vita: tiposConfigurados.includes('vita_suco'),
+        use_suco_diet: tiposConfigurados.includes('diet'),
+        use_suco_natural: tiposConfigurados.includes('natural') || tiposConfigurados.length === 0
+      };
+    }
     
-    // Select juices based on configuration and business rules
+    console.log('Juice configuration applied:', clientJuiceConfig);
+    
+    // Select juices based on configuration with strict priority rules
     const selectJuices = () => {
       const selectedJuices: { suco1?: any, suco2?: any } = {};
       
-      // BUSINESS RULE: If diet is enabled, one juice must be diet and other non-diet
-      if (clientJuiceConfig.use_suco_diet && juicesByType.diet.length > 0) {
-        // SUCO1 = Diet juice
-        const dietJuices = juicesByType.diet.filter(j => !juiceNames.includes(normalizeString(j.nome)));
-        if (dietJuices.length > 0) {
-          const randomDiet = dietJuices[Math.floor(Math.random() * dietJuices.length)];
-          selectedJuices.suco1 = randomDiet;
-        }
+      // Helper function to get available juices from a type (not already used)
+      const getAvailableJuicesFromType = (type: string) => 
+        juicesByType[type]?.filter(j => !juiceNames.includes(normalizeString(j.nome))) || [];
+      
+      // Helper function to select juice by priority (Pró Mix > Vita Suco > Diet > Natural)
+      const selectByPriority = (excludeTypes: string[] = []) => {
+        const priorityOrder = ['pro_mix', 'vita_suco', 'diet', 'natural'];
         
-        // SUCO2 = Non-diet juice (priority: Pro Mix > Vita > Natural)
-        const nonDietTypes = ['pro_mix', 'vita_suco', 'natural'];
-        for (const type of nonDietTypes) {
-          if (
+        for (const type of priorityOrder) {
+          if (excludeTypes.includes(type)) continue;
+          
+          const isTypeEnabled = 
             (type === 'pro_mix' && clientJuiceConfig.use_pro_mix) ||
             (type === 'vita_suco' && clientJuiceConfig.use_pro_vita) ||
-            (type === 'natural' && clientJuiceConfig.use_suco_natural)
-          ) {
-            const typeJuices = juicesByType[type].filter(j => !juiceNames.includes(normalizeString(j.nome)));
-            if (typeJuices.length > 0) {
-              const randomJuice = typeJuices[Math.floor(Math.random() * typeJuices.length)];
-              selectedJuices.suco2 = randomJuice;
-              break;
+            (type === 'diet' && clientJuiceConfig.use_suco_diet) ||
+            (type === 'natural' && clientJuiceConfig.use_suco_natural);
+            
+          if (isTypeEnabled) {
+            const availableJuices = getAvailableJuicesFromType(type);
+            if (availableJuices.length > 0) {
+              // Select first available (consistent selection, no randomness)
+              return availableJuices[0];
             }
           }
         }
+        return null;
+      };
+      
+      // BUSINESS RULE: If diet is enabled, one juice must be diet and other non-diet
+      if (clientJuiceConfig.use_suco_diet && getAvailableJuicesFromType('diet').length > 0) {
+        // SUCO1 = Diet juice (first available)
+        const dietJuices = getAvailableJuicesFromType('diet');
+        selectedJuices.suco1 = dietJuices[0];
+        console.log('Selected Diet for SUCO1:', selectedJuices.suco1?.nome);
         
-        // Fallback: if no non-diet found, use natural as default
-        if (!selectedJuices.suco2 && juicesByType.natural.length > 0) {
-          const naturalJuices = juicesByType.natural.filter(j => !juiceNames.includes(normalizeString(j.nome)));
-          if (naturalJuices.length > 0) {
-            selectedJuices.suco2 = naturalJuices[0];
-          }
-        }
+        // SUCO2 = Non-diet juice (priority: Pro Mix > Vita > Natural)
+        selectedJuices.suco2 = selectByPriority(['diet']);
+        console.log('Selected Non-Diet for SUCO2:', selectedJuices.suco2?.nome);
+        
       } else {
-        // Normal selection (no diet restriction)
-        const enabledTypes = [];
-        if (clientJuiceConfig.use_pro_mix) enabledTypes.push('pro_mix');
-        if (clientJuiceConfig.use_pro_vita) enabledTypes.push('vita_suco');
-        if (clientJuiceConfig.use_suco_natural) enabledTypes.push('natural');
+        // Normal selection: Apply strict priority for both juices
         
-        // If no types enabled, use natural as default
-        if (enabledTypes.length === 0) {
-          enabledTypes.push('natural');
-        }
+        // Special case: If only Vita Suco is enabled, select two different Vita Suco
+        const enabledTypes = [
+          clientJuiceConfig.use_pro_mix && 'pro_mix',
+          clientJuiceConfig.use_pro_vita && 'vita_suco',
+          clientJuiceConfig.use_suco_diet && 'diet',
+          clientJuiceConfig.use_suco_natural && 'natural'
+        ].filter(Boolean);
         
-        // Collect all available juices from enabled types
-        const allEnabledJuices = enabledTypes.flatMap(type => juicesByType[type])
-          .filter(j => !juiceNames.includes(normalizeString(j.nome)));
-        
-        // Select two different juices
-        if (allEnabledJuices.length >= 2) {
-          const shuffled = [...allEnabledJuices].sort(() => Math.random() - 0.5);
-          selectedJuices.suco1 = shuffled[0];
-          selectedJuices.suco2 = shuffled[1];
-        } else if (allEnabledJuices.length === 1) {
-          selectedJuices.suco1 = allEnabledJuices[0];
-          // Find a different juice as fallback
-          const fallbackJuices = availableJuices.filter(j => 
-            j.produto_base_id !== selectedJuices.suco1.produto_base_id &&
-            !juiceNames.includes(normalizeString(j.nome))
-          );
-          if (fallbackJuices.length > 0) {
-            selectedJuices.suco2 = fallbackJuices[0];
+        if (enabledTypes.length === 1 && enabledTypes[0] === 'vita_suco') {
+          const vitaJuices = getAvailableJuicesFromType('vita_suco');
+          if (vitaJuices.length >= 2) {
+            selectedJuices.suco1 = vitaJuices[0];
+            selectedJuices.suco2 = vitaJuices[1];
+            console.log('Selected two Vita Suco:', selectedJuices.suco1?.nome, selectedJuices.suco2?.nome);
+          } else if (vitaJuices.length === 1) {
+            selectedJuices.suco1 = vitaJuices[0];
+            // Don't fallback to other types if only Vita Suco is enabled
+            console.log('Only one Vita Suco available:', selectedJuices.suco1?.nome);
           }
+        } else {
+          // Normal priority selection
+          selectedJuices.suco1 = selectByPriority();
+          console.log('Selected SUCO1 by priority:', selectedJuices.suco1?.nome);
+          
+          // For SUCO2, exclude the type already used for SUCO1 if possible
+          const suco1Type = selectedJuices.suco1 ? 
+            Object.keys(juicesByType).find(type => 
+              juicesByType[type].some(j => j.produto_base_id === selectedJuices.suco1.produto_base_id)
+            ) : null;
+          
+          const suco1TypeJuices = suco1Type ? getAvailableJuicesFromType(suco1Type) : [];
+          if (suco1TypeJuices.length > 1) {
+            // Use second juice from same type if available
+            selectedJuices.suco2 = suco1TypeJuices[1];
+          } else {
+            // Otherwise select from other types by priority
+            selectedJuices.suco2 = selectByPriority(suco1Type ? [suco1Type] : []);
+          }
+          console.log('Selected SUCO2 by priority:', selectedJuices.suco2?.nome);
         }
       }
       
@@ -448,24 +474,29 @@ export function MenuDayCarousel({ menu }: MenuDayCarouselProps) {
     
     const selectedJuices = selectJuices();
     
-    // Inject SUCO1 if missing
+    // Only inject juices if they are missing (respect pre-defined juices from menu)
     if (existingSuco1.length === 0 && selectedJuices.suco1) {
+      console.log('Injecting SUCO1:', selectedJuices.suco1.nome);
       grouped['SUCO1'] = [{
         id: `juice-${selectedJuices.suco1.produto_base_id}`,
         name: selectedJuices.suco1.nome,
         category: 'SUCO1',
         produto_base_id: selectedJuices.suco1.produto_base_id
       }];
+    } else if (existingSuco1.length > 0) {
+      console.log('Using existing SUCO1 from menu:', existingSuco1[0].name || existingSuco1[0].nome);
     }
     
-    // Inject SUCO2 if missing
     if (existingSuco2.length === 0 && selectedJuices.suco2) {
+      console.log('Injecting SUCO2:', selectedJuices.suco2.nome);
       grouped['SUCO2'] = [{
         id: `juice-${selectedJuices.suco2.produto_base_id}`,
         name: selectedJuices.suco2.nome,
         category: 'SUCO2',
         produto_base_id: selectedJuices.suco2.produto_base_id
       }];
+    } else if (existingSuco2.length > 0) {
+      console.log('Using existing SUCO2 from menu:', existingSuco2[0].name || existingSuco2[0].nome);
     }
     
     return grouped;
@@ -567,10 +598,49 @@ export function MenuDayCarousel({ menu }: MenuDayCarouselProps) {
     };
   }, [recipesByCategory, realCosts]);
 
+  // Get active juice types for display
+  const activeJuiceTypes = useMemo(() => {
+    // Get client juice configuration from selectedClient or infer from menu data
+    let config;
+    if (selectedClient) {
+      config = {
+        use_pro_mix: selectedClient.use_pro_mix || false,
+        use_pro_vita: selectedClient.use_pro_vita || false,
+        use_suco_diet: selectedClient.use_suco_diet || false,
+        use_suco_natural: selectedClient.use_suco_natural || false
+      };
+    } else {
+      // Try to infer from menu data if available
+      const menuData = (menu as any).menu_data;
+      const tiposConfigurados = menuData?.tipos_configurados || [];
+      config = {
+        use_pro_mix: tiposConfigurados.includes('pro_mix'),
+        use_pro_vita: tiposConfigurados.includes('vita_suco'),
+        use_suco_diet: tiposConfigurados.includes('diet'),
+        use_suco_natural: tiposConfigurados.includes('natural') || tiposConfigurados.length === 0
+      };
+    }
+    
+    const types = [];
+    if (config.use_pro_mix) types.push('Pró Mix');
+    if (config.use_pro_vita) types.push('Vita Suco');
+    if (config.use_suco_diet) types.push('Diet');
+    if (config.use_suco_natural) types.push('Natural');
+    return types;
+  }, [selectedClient, menu]);
+
   return (
     <div className="w-full max-w-4xl mx-auto bg-white rounded-lg shadow-sm border p-6 space-y-6">
       {/* Header */}
       <div className="text-center space-y-3">
+        {/* Juice Configuration Display */}
+        {activeJuiceTypes.length > 0 && (
+          <div className="flex justify-center gap-2 mb-2">
+            <Badge variant="secondary" className="text-xs">
+              Sucos ativos: {activeJuiceTypes.join(', ')}
+            </Badge>
+          </div>
+        )}
         <h2 className="text-xl font-medium text-gray-600">
           Semana 1 - {menu.clientName}
         </h2>
