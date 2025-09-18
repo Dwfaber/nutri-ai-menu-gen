@@ -326,9 +326,11 @@ export function MenuDayCarousel({ menu }: MenuDayCarouselProps) {
 
     grouped['Base'] = deduplicatedBaseItems;
 
-    // Always inject juices if missing (2 juices per day)
-    const existingJuices = grouped['Sucos'] || [];
-    const juiceNames = existingJuices.map(j => normalizeString(j.name || j.nome || ''));
+    // Always inject juices if missing (1 juice per category)
+    const existingSuco1 = grouped['SUCO1'] || [];
+    const existingSuco2 = grouped['SUCO2'] || [];
+    const allExistingJuices = [...existingSuco1, ...existingSuco2];
+    const juiceNames = allExistingJuices.map(j => normalizeString(j.name || j.nome || ''));
     
     // Juice pools by preference (Pro Mix preferred)
     const juicePools = {
@@ -341,22 +343,31 @@ export function MenuDayCarousel({ menu }: MenuDayCarouselProps) {
     // Select two distinct juices (prefer Pro Mix)
     const availableJuices = [...juicePools.proMix, ...juicePools.vita];
     
-    if (existingJuices.length < 2) {
-      const neededJuices = 2 - existingJuices.length;
-      for (let i = 0; i < neededJuices && i < availableJuices.length; i++) {
-        const juiceName = availableJuices[i];
-        if (!juiceNames.includes(normalizeString(juiceName))) {
-          existingJuices.push({
-            id: `juice-injected-${i}`,
-            name: juiceName,
-            category: i === 0 ? 'SUCO1' : 'SUCO2',
-            cost: 0.05
-          });
-        }
+    // Inject juice in SUCO1 if missing
+    if (existingSuco1.length === 0 && availableJuices.length > 0) {
+      const juiceName = availableJuices[0];
+      if (!juiceNames.includes(normalizeString(juiceName))) {
+        grouped['SUCO1'] = [{
+          id: 'juice-injected-suco1',
+          name: juiceName,
+          category: 'SUCO1',
+          cost: 0.05
+        }];
       }
     }
-
-    grouped['Sucos'] = existingJuices;
+    
+    // Inject juice in SUCO2 if missing
+    if (existingSuco2.length === 0 && availableJuices.length > 1) {
+      const juiceName = availableJuices[1];
+      if (!juiceNames.includes(normalizeString(juiceName))) {
+        grouped['SUCO2'] = [{
+          id: 'juice-injected-suco2',
+          name: juiceName,
+          category: 'SUCO2',
+          cost: 0.05
+        }];
+      }
+    }
     
     return grouped;
   }, [currentDay]);
