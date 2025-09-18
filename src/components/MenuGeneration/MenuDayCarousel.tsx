@@ -36,6 +36,7 @@ interface MenuDayCarouselProps {
     cardapio?: MenuDay[];
     recipes?: Recipe[];
   };
+  optimizationResult?: any;
 }
 
 const CATEGORY_ORDER = [
@@ -52,7 +53,7 @@ const WEEK_DAYS = [
   'Sexta-feira'
 ];
 
-export function MenuDayCarousel({ menu }: MenuDayCarouselProps) {
+export function MenuDayCarousel({ menu, optimizationResult }: MenuDayCarouselProps) {
   const [currentDayIndex, setCurrentDayIndex] = useState(0);
   const { calculateRecipeCost, getCachedCost } = useRealTimeCosts();
   const { availableJuices } = useJuiceConfiguration();

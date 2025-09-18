@@ -64,8 +64,31 @@ const IntegratedMenuGenerator = () => {
   }, [generatedMenu?.recipes]);
 
   const handleGenerateMenu = async (formData: SimpleMenuFormData) => {
-    await generateMenuWithFormData(formData);
+    const menu = await generateMenuWithFormData(formData);
     setShowForm(false);
+    
+    // Automaticamente executar otimização de compras após gerar o cardápio
+    if (menu?.menu && Array.isArray(menu.menu)) {
+      const menuDays = menu.menu.map((day: any) => ({
+        date: day.data,
+        recipes: Object.entries(day.refeicoes || {}).flatMap(([slot, receitas]) => 
+          (Array.isArray(receitas) ? receitas : [receitas]).map((receita: any) => ({
+            receita_id: receita.receita_id || receita.id || 'unknown',
+            nome: receita.nome || receita.receita || 'Receita sem nome',
+            meals_quantity: formData.mealsPerDay || 50
+          }))
+        )
+      }));
+
+      const totalMeals = menuDays.reduce((total, day) => 
+        total + day.recipes.reduce((dayTotal, recipe) => 
+          dayTotal + recipe.meals_quantity, 0
+        ), 0
+      );
+
+      await optimizeMenuPurchases(menuDays, totalMeals);
+      setShowOptimization(true);
+    }
   };
 
   const handleShowForm = () => setShowForm(true);
@@ -336,7 +359,11 @@ const IntegratedMenuGenerator = () => {
 
             {/* Visão semanal */}
             {generatedMenu.menu ? (
-              <WeeklyMenuView menu={generatedMenu.menu} />
+              <WeeklyMenuView 
+                menu={generatedMenu.menu} 
+                optimizationResult={optimizationResult}
+                onGenerateShoppingList={handleGenerateShoppingList}
+              />
             ) : (
               <div className="p-8 text-center text-gray-500">
                 <ChefHat className="w-12 h-12 mx-auto mb-3 text-gray-300" />
@@ -346,28 +373,39 @@ const IntegratedMenuGenerator = () => {
 
             <Separator />
 
-            {/* Otimização de Compras */}
-            <Card className="bg-primary/5 border-primary/20">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Calculator className="h-5 w-5 text-primary" />
-                  Sistema de Otimização de Compras
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-sm text-muted-foreground mb-4">
-                  Analisa embalagens, distribui sobras entre dias e calcula custos otimizados por período.
-                </p>
-                <Button 
-                  onClick={handleOptimizePurchases}
-                  disabled={isOptimizing}
-                  className="w-full"
-                >
-                  <Package className="h-4 w-4 mr-2" />
-                  {isOptimizing ? 'Otimizando...' : 'Otimizar Compras Inteligente'}
-                </Button>
-              </CardContent>
-            </Card>
+            {/* Status da Otimização */}
+            {(isOptimizing || optimizationResult) && (
+              <Card className="bg-primary/5 border-primary/20">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Calculator className="h-5 w-5 text-primary" />
+                    Sistema de Otimização de Compras Inteligente
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {isOptimizing ? (
+                    <div className="flex items-center justify-center space-x-2 py-4">
+                      <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-primary"></div>
+                      <span className="text-muted-foreground">Analisando embalagens e otimizando custos...</span>
+                    </div>
+                  ) : optimizationResult ? (
+                    <div className="space-y-2">
+                      <p className="text-sm text-muted-foreground">
+                        ✅ Otimização concluída! Custos calculados considerando embalagens reais e distribuição de sobras.
+                      </p>
+                      <div className="flex items-center gap-4 text-sm">
+                        <span className="font-medium text-green-600">
+                          Economia: R$ {optimizationResult.summary.estimated_savings.toFixed(2)}
+                        </span>
+                        <span className="text-muted-foreground">
+                          ({optimizationResult.summary.savings_percentage.toFixed(1)}%)
+                        </span>
+                      </div>
+                    </div>
+                  ) : null}
+                </CardContent>
+              </Card>
+            )}
 
             {/* Resultados da Otimização */}
             {showOptimization && optimizationResult && (
