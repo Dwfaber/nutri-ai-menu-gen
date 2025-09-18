@@ -17,6 +17,7 @@ import { SimpleMenuForm, SimpleMenuFormData } from '@/components/MenuGeneration/
 import MenuValidationPanel from '@/components/MenuGeneration/MenuValidationPanel';
 import MenuApprovalPanel from '@/components/MenuGeneration/MenuApprovalPanel';
 import { testEdgeFunctionConnectivity, testMenuGeneration } from '@/utils/edgeFunctionTest';
+import { transformMenuForOptimization, validateMenuForOptimization } from '@/utils/menuOptimizationUtils';
 import { useToast } from '@/hooks/use-toast';
 
 const IntegratedMenuGenerator = () => {
@@ -71,30 +72,37 @@ const IntegratedMenuGenerator = () => {
     console.log('📝 Cardápio gerado:', menu);
     
     // Automaticamente executar otimização de compras após gerar o cardápio
-    if (menu?.menu && Array.isArray(menu.menu)) {
-      console.log('🔄 Iniciando otimização automática...');
-      
-      const menuDays = menu.menu.map((day: any) => ({
-        date: day.data,
-        recipes: Object.entries(day.refeicoes || {}).flatMap(([slot, receitas]) => 
-          (Array.isArray(receitas) ? receitas : [receitas]).map((receita: any) => ({
-            receita_id: receita.receita_id || receita.id || 'unknown',
-            nome: receita.nome || receita.receita || 'Receita sem nome',
-            meals_quantity: formData.mealsPerDay || 50
-          }))
-        )
-      }));
+    if (menu?.menu) {
+      try {
+        console.log('🔄 Iniciando otimização automática...');
+        
+        // Validar menu antes da otimização
+        const validationErrors = validateMenuForOptimization(menu);
+        if (validationErrors.length > 0) {
+          console.warn('⚠️ Problemas no menu:', validationErrors);
+          toast({
+            title: "⚠️ Aviso na Otimização",
+            description: `Menu tem problemas: ${validationErrors.join(', ')}`,
+            variant: "destructive"
+          });
+          return;
+        }
 
-      const totalMeals = menuDays.reduce((total, day) => 
-        total + day.recipes.reduce((dayTotal, recipe) => 
-          dayTotal + recipe.meals_quantity, 0
-        ), 0
-      );
-
-      console.log('📊 Menu para otimização:', { menuDays, totalMeals });
-      await optimizeMenuPurchases(menuDays, totalMeals);
-      setShowOptimization(true);
-      console.log('✅ Otimização concluída');
+        // Transformar menu para otimização
+        const { menuDays, totalMeals } = transformMenuForOptimization(menu, formData.mealsPerDay);
+        
+        console.log('📊 Menu para otimização:', { menuDays, totalMeals });
+        await optimizeMenuPurchases(menuDays, totalMeals);
+        setShowOptimization(true);
+        console.log('✅ Otimização concluída');
+      } catch (error) {
+        console.error('❌ Erro na otimização automática:', error);
+        toast({
+          title: "❌ Erro na Otimização",
+          description: error instanceof Error ? error.message : "Erro na otimização automática",
+          variant: "destructive"
+        });
+      }
     }
   };
 
@@ -153,27 +161,41 @@ const IntegratedMenuGenerator = () => {
   };
 
   const handleOptimizePurchases = async () => {
-    if (!generatedMenu?.menu) return;
-
-    // Converter menu para formato esperado pela otimização
-    const menuDays = generatedMenu.menu.map((day: any) => ({
-      date: day.data,
-      recipes: Object.entries(day.refeicoes || {}).flatMap(([slot, receitas]) => 
-        (Array.isArray(receitas) ? receitas : [receitas]).map((receita: any) => ({
-          receita_id: receita.receita_id || receita.id || 'unknown',
-          nome: receita.nome || receita.receita || 'Receita sem nome',
-          meals_quantity: generatedMenu.mealsPerDay || 50
-        }))
-      )
-    }));
-
-    const totalMeals = menuDays.length * (generatedMenu.mealsPerDay || 50);
+    if (!generatedMenu?.menu) {
+      toast({
+        title: "❌ Erro",
+        description: "Nenhum menu encontrado para otimizar",
+        variant: "destructive"
+      });
+      return;
+    }
 
     try {
+      // Validar menu antes da otimização
+      const validationErrors = validateMenuForOptimization(generatedMenu);
+      if (validationErrors.length > 0) {
+        console.warn('⚠️ Problemas no menu:', validationErrors);
+        toast({
+          title: "⚠️ Menu Inválido",
+          description: `Problemas encontrados: ${validationErrors.join(', ')}`,
+          variant: "destructive"
+        });
+        return;
+      }
+
+      // Transformar menu usando função utilitária
+      const { menuDays, totalMeals } = transformMenuForOptimization(generatedMenu);
+      
+      console.log('📊 Executando otimização manual:', { menuDays, totalMeals });
       await optimizeMenuPurchases(menuDays, totalMeals);
       setShowOptimization(true);
     } catch (error) {
-      console.error('Erro na otimização:', error);
+      console.error('❌ Erro na otimização manual:', error);
+      toast({
+        title: "❌ Erro na Otimização",
+        description: error instanceof Error ? error.message : "Erro na otimização",
+        variant: "destructive"
+      });
     }
   };
 
