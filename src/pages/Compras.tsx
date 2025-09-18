@@ -59,6 +59,7 @@ const Compras = () => {
     setIsLoadingItems(true);
     
     try {
+      // Always fetch fresh items from database
       const items = await getShoppingListItems(list.id);
       setListItems(items);
       
@@ -120,7 +121,7 @@ const Compras = () => {
   const handleRegenerateItems = useCallback(async (listId: string) => {
     const success = await regenerateListItems(listId);
     if (success && selectedList?.id === listId) {
-      // Recarregar itens da lista selecionada
+      // Always fetch fresh items from database after regeneration
       const updatedItems = await getShoppingListItems(listId);
       setListItems(updatedItems);
     }

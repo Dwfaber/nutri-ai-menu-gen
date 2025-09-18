@@ -139,57 +139,19 @@ export const useShoppingList = () => {
       });
 
       if (result && result.length > 0) {
-        const mappedLists: ShoppingList[] = [];
-        
-        // Process lists with batch requests
-        const itemsPromises = result.map(list => 
-          withRetry(async () => {
-            const { data: items, error: itemsError } = await supabase
-              .from('shopping_list_items')
-              .select('*')
-              .eq('shopping_list_id', list.id);
-
-            if (itemsError) throw itemsError;
-            return { list, items: items || [] };
-          }, { maxRetries: 1 })
-        );
-
-        const listsWithItems = await Promise.allSettled(itemsPromises);
-        
-        listsWithItems.forEach((result) => {
-          if (result.status === 'fulfilled') {
-            const { list, items } = result.value;
-            
-            const mappedItems: ShoppingItem[] = items.map(item => ({
-              id: item.id,
-              produto_id: item.product_id_legado,
-              produto_nome: item.product_name,
-              categoria: item.category,
-              quantidade_necessaria: item.quantity,
-              unidade: item.unit,
-              preco_unitario: item.unit_price,
-              valor_total: item.total_price,
-              fornecedor: (item as any).supplier || '',
-              observacoes: (item as any).notes || '',
-              receita_origem: [],
-              available: item.available !== undefined ? item.available : true
-            }));
-
-            mappedLists.push({
-              id: list.id,
-              nome: `Lista de Compras - ${new Date(list.created_at).toLocaleDateString()}`,
-              cardapio_id: list.menu_id,
-              itens: mappedItems,
-              valor_total: (list.cost_actual || list.budget_predicted || 0),
-              data_criacao: list.created_at,
-              status: list.status === 'pending' ? 'draft' : list.status === 'budget_ok' ? 'approved' : 'draft',
-              client_name: list.client_name,
-              budget_predicted: list.budget_predicted,
-              cost_actual: list.cost_actual || 0,
-              created_at: list.created_at
-            });
-          }
-        });
+        const mappedLists: ShoppingList[] = result.map(list => ({
+          id: list.id,
+          nome: `Lista de Compras - ${new Date(list.created_at).toLocaleDateString()}`,
+          cardapio_id: list.menu_id,
+          itens: [], // Items will be loaded separately when needed
+          valor_total: (list.cost_actual || list.budget_predicted || 0),
+          data_criacao: list.created_at,
+          status: list.status === 'pending' ? 'draft' : list.status === 'budget_ok' ? 'approved' : 'draft',
+          client_name: list.client_name,
+          budget_predicted: list.budget_predicted,
+          cost_actual: list.cost_actual || 0,
+          created_at: list.created_at
+        }));
         
         setLists(mappedLists);
       } else {
@@ -297,8 +259,7 @@ export const useShoppingList = () => {
           unit: item.unidade,
           unit_price: item.preco_unitario,
           total_price: item.valor_total,
-          supplier: item.fornecedor || null,
-          notes: item.observacoes || null,
+          available: item.available !== undefined ? item.available : true
         }));
 
         const { error: itemsError } = await supabase
@@ -439,23 +400,44 @@ export const useShoppingList = () => {
   };
 
   const getShoppingListItems = async (listId: string): Promise<ShoppingListItem[]> => {
-    const list = lists.find(l => l.id === listId);
-    if (!list) return [];
+    try {
+      // Always fetch items directly from database
+      const { data: items, error } = await supabase
+        .from('shopping_list_items')
+        .select('*')
+        .eq('shopping_list_id', listId);
 
-      // Convert ShoppingItem to ShoppingListItem format
-      return list.itens.map(item => ({
+      if (error) {
+        console.error('Error fetching shopping list items:', error);
+        return [];
+      }
+
+      if (!items || items.length === 0) {
+        console.log('No items found for list:', listId);
+        return [];
+      }
+
+      // Map database items to ShoppingListItem format with proper type conversion
+      const mappedItems = items.map(item => ({
         id: item.id,
-        product_id_legado: item.produto_id,
-        product_name: item.produto_nome,
-        category: item.categoria,
-        quantity: item.quantidade_necessaria,
-        unit: item.unidade,
-        unit_price: item.preco_unitario,
-        total_price: item.valor_total,
+        product_id_legado: item.product_id_legado,
+        product_name: item.product_name,
+        category: item.category,
+        quantity: Number(item.quantity), // Ensure number type
+        unit: item.unit,
+        unit_price: Number(item.unit_price), // Ensure number type
+        total_price: Number(item.total_price), // Ensure number type
         available: item.available !== undefined ? item.available : true,
-        supplier: item.fornecedor,
-        notes: item.observacoes
+        optimized: (item as any).optimized || false,
+        promocao: (item as any).promocao || false
       }));
+
+      console.log(`Loaded ${mappedItems.length} items for list ${listId}. Sample quantity:`, mappedItems[0]?.quantity);
+      return mappedItems;
+    } catch (error) {
+      console.error('Error in getShoppingListItems:', error);
+      return [];
+    }
   };
 
   const exportToCSV = (items: ShoppingListItem[], clientName: string) => {
