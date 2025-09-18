@@ -157,25 +157,77 @@ async function calculateIngredientCost(
 }
 
 async function calculateRecipeCost(supabase: any, receitaId: string, mealQuantity: number = 50) {
+  console.log(`🔍 Buscando receita ID: ${receitaId}`);
+  
   // Buscar receita
-  const { data: receita } = await supabase
+  const { data: receita, error: receitaError } = await supabase
     .from('receitas_legado')
     .select('*')
     .eq('receita_id_legado', receitaId)
     .single();
   
+  if (receitaError) {
+    console.error(`❌ Erro ao buscar receita ${receitaId}:`, receitaError);
+  }
+  
   if (!receita) {
+    // Se for item base injetado, usar custo estimado
+    if (receitaId.startsWith('base-injected-')) {
+      console.log(`🟡 Item base injetado detectado: ${receitaId}`);
+      return {
+        receita_id: receitaId,
+        nome: `Item Base ${receitaId}`,
+        categoria: 'Base',
+        porcoes_base: 50,
+        porcoes_calculadas: mealQuantity,
+        ingredientes: [],
+        custo_total: 0.85 * mealQuantity,
+        custo_por_porcao: 0.85,
+        total_ingredientes: 0,
+        metadata: {
+          generated_at: new Date().toISOString(),
+          meal_quantity: mealQuantity,
+          fallback_used: true
+        }
+      };
+    }
+    
     throw new Error(`Receita não encontrada: ${receitaId}`);
   }
   
   // Buscar ingredientes da receita
-  const { data: ingredientes } = await supabase
+  const { data: ingredientes, error: ingredientesError } = await supabase
     .from('receita_ingredientes')
     .select('*')
     .eq('receita_id_legado', receitaId);
   
+  if (ingredientesError) {
+    console.error(`❌ Erro ao buscar ingredientes para receita ${receitaId}:`, ingredientesError);
+  }
+  
   if (!ingredientes || ingredientes.length === 0) {
-    throw new Error(`Nenhum ingrediente encontrado para receita: ${receitaId}`);
+    console.warn(`⚠️ Nenhum ingrediente encontrado para receita: ${receitaId}`);
+    
+    // Estimar custo baseado no tipo de receita quando não há ingredientes
+    const custoEstimado = receita.categoria_descricao?.toLowerCase().includes('proteí') ? 3.25 : 2.15;
+    
+    return {
+      receita_id: receitaId,
+      nome: receita.nome_receita,
+      categoria: receita.categoria_descricao,
+      porcoes_base: receita.porcoes || 50,
+      porcoes_calculadas: mealQuantity,
+      ingredientes: [],
+      custo_total: custoEstimado * mealQuantity,
+      custo_por_porcao: custoEstimado,
+      total_ingredientes: 0,
+      metadata: {
+        generated_at: new Date().toISOString(),
+        meal_quantity: mealQuantity,
+        estimated_cost: true,
+        reason: 'No ingredients found'
+      }
+    };
   }
   
   console.log(`Calculando custos para receita ${receita.nome_receita} (${ingredientes.length} ingredientes)`);

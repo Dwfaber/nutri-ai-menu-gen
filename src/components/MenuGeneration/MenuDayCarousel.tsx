@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { useRealTimeCosts } from '@/hooks/useRealTimeCosts';
+import { correctRecipeCost, isInjectedRecipe } from '@/utils/recipeMapping';
 import { useJuiceConfiguration } from '@/hooks/useJuiceConfiguration';
 import { useSelectedClient } from '@/contexts/SelectedClientContext';
 
@@ -505,7 +506,7 @@ export function MenuDayCarousel({ menu }: MenuDayCarouselProps) {
     loadCosts();
   }, [recipesByCategory, calculateRecipeCost, getCachedCost, realCosts]);
 
-  // Get real cost for a recipe
+  // Get real cost for a recipe with comprehensive validation
   const getRealCost = (recipe: any): number => {
     const recipeId = recipe.id?.toString() || '';
     const produtoBaseId = recipe.produto_base_id?.toString() || '';
@@ -513,12 +514,38 @@ export function MenuDayCarousel({ menu }: MenuDayCarouselProps) {
     // Try recipe ID first, then produto_base_id
     const realCost = realCosts[recipeId] || realCosts[produtoBaseId];
     
-    if (realCost !== undefined) {
-      return realCost;
+    if (realCost !== undefined && realCost > 0) {
+      // Validate even real costs from API
+      const correction = correctRecipeCost(
+        realCost,
+        recipe.category || 'default',
+        recipe.name || '',
+        recipeId
+      );
+      
+      if (correction.wasAdjusted) {
+        console.warn('⚠️ Custo real ajustado no frontend:', {
+          recipeId,
+          originalCost: realCost,
+          adjustedCost: correction.cost,
+          reason: correction.reason
+        });
+      }
+      
+      return correction.cost;
     }
     
-    // Fallback to original cost logic
-    return recipe.cost || recipe.custo || recipe.custo_por_refeicao || 0;
+    // Use correction system for fallback
+    const originalCost = recipe.cost || recipe.custo || recipe.custo_por_refeicao || 0;
+    
+    const correction = correctRecipeCost(
+      originalCost,
+      recipe.category || 'default',
+      recipe.name || '',
+      recipeId
+    );
+    
+    return correction.cost;
   };
 
   // Calculate costs separately for Base (fixed) and Variable Menu
