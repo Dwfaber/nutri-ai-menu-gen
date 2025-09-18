@@ -200,10 +200,14 @@ export function MenuDayCarousel({ menu }: MenuDayCarouselProps) {
       // Check if it's a base product first
       if (isBaseProduct(name, code, rawCat)) {
         displayCat = 'Base';
-      } else if (code && ['SUCO1', 'SUCO2'].includes(code)) {
-        displayCat = 'Sucos';
-      } else if (rawCat && ['SUCO', 'Suco', 'SUCO 1', 'SUCO 2'].includes(rawCat)) {
-        displayCat = 'Sucos';
+      } else if (code === 'SUCO1') {
+        displayCat = 'SUCO1';
+      } else if (code === 'SUCO2') {
+        displayCat = 'SUCO2';
+      } else if (rawCat && ['SUCO', 'Suco', 'SUCO 1'].includes(rawCat)) {
+        displayCat = 'SUCO1';
+      } else if (rawCat && ['SUCO 2'].includes(rawCat)) {
+        displayCat = 'SUCO2';
       } else if (code) {
         // Map other category codes
         displayCat = 
@@ -236,10 +240,14 @@ export function MenuDayCarousel({ menu }: MenuDayCarouselProps) {
       // Check if it's a base product first
       if (isBaseProduct(name, code, rawCat)) {
         displayCat = 'Base';
-      } else if (code && ['SUCO1', 'SUCO2'].includes(code)) {
-        displayCat = 'Sucos';
-      } else if (rawCat && ['SUCO', 'Suco', 'SUCO 1', 'SUCO 2'].includes(rawCat)) {
-        displayCat = 'Sucos';
+      } else if (code === 'SUCO1') {
+        displayCat = 'SUCO1';
+      } else if (code === 'SUCO2') {
+        displayCat = 'SUCO2';
+      } else if (rawCat && ['SUCO', 'Suco', 'SUCO 1'].includes(rawCat)) {
+        displayCat = 'SUCO1';
+      } else if (rawCat && ['SUCO 2'].includes(rawCat)) {
+        displayCat = 'SUCO2';
       } else if (code) {
         // Map other category codes
         displayCat = 
