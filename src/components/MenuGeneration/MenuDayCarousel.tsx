@@ -10,6 +10,7 @@ interface Recipe {
   nome?: string; // Portuguese version
   category?: string;
   categoria?: string; // Portuguese version
+  codigo?: string; // Category code
   cost?: number;
   custo?: number; // Portuguese version
   custo_por_refeicao?: number; // Portuguese version
@@ -17,8 +18,10 @@ interface Recipe {
 }
 
 interface MenuDay {
-  day: string;
-  recipes: Recipe[];
+  day?: string;
+  dia?: string; // Portuguese version
+  recipes?: Recipe[];
+  receitas?: Recipe[]; // Portuguese version
 }
 
 interface MenuDayCarouselProps {
@@ -105,6 +108,30 @@ export function MenuDayCarousel({ menu }: MenuDayCarouselProps) {
     });
     
     // Group actual recipes by category
+    currentDay?.receitas?.forEach((receita) => {
+      const code = receita.codigo || (receita as any).codigo;
+      const rawCat = receita.category || receita.categoria || 'Outros';
+      const displayCat = code
+        ? (
+            code === 'PP1' ? 'Prato Principal 1' :
+            code === 'PP2' ? 'Prato Principal 2' :
+            code === 'ARROZ' ? 'Base' :
+            code === 'FEIJAO' ? 'Base' :
+            code === 'SALADA1' ? 'Salada 1' :
+            code === 'SALADA2' ? 'Salada 2' :
+            code === 'SUCO1' ? 'Suco 1' :
+            code === 'SUCO2' ? 'Suco 2' :
+            code === 'GUARNICAO' ? 'Guarnição' :
+            code === 'SOBREMESA' ? 'Sobremesa' : rawCat
+          )
+        : (rawCat === 'PP1' ? 'Prato Principal 1' : rawCat === 'PP2' ? 'Prato Principal 2' : rawCat);
+
+      if (!grouped[displayCat]) {
+        grouped[displayCat] = [];
+      }
+      grouped[displayCat].push(receita);
+    }) || 
+    // Fallback for recipes property
     currentDay?.recipes?.forEach((recipe) => {
       const code = (recipe as any).codigo as string | undefined;
       const rawCat = recipe.category || recipe.categoria || 'Outros';
@@ -112,12 +139,14 @@ export function MenuDayCarousel({ menu }: MenuDayCarouselProps) {
         ? (
             code === 'PP1' ? 'Prato Principal 1' :
             code === 'PP2' ? 'Prato Principal 2' :
-            code === 'ARROZ' ? 'Arroz Branco' :
-            code === 'FEIJAO' ? 'Feijão' :
+            code === 'ARROZ' ? 'Base' :
+            code === 'FEIJAO' ? 'Base' :
             code === 'SALADA1' ? 'Salada 1' :
             code === 'SALADA2' ? 'Salada 2' :
             code === 'SUCO1' ? 'Suco 1' :
-            code === 'SUCO2' ? 'Suco 2' : rawCat
+            code === 'SUCO2' ? 'Suco 2' :
+            code === 'GUARNICAO' ? 'Guarnição' :
+            code === 'SOBREMESA' ? 'Sobremesa' : rawCat
           )
         : (rawCat === 'PP1' ? 'Prato Principal 1' : rawCat === 'PP2' ? 'Prato Principal 2' : rawCat);
 
@@ -132,14 +161,15 @@ export function MenuDayCarousel({ menu }: MenuDayCarouselProps) {
 
   // Calculate costs separately for Base (fixed) and Variable Menu
   const { baseCost, variableCost, totalCost } = React.useMemo(() => {
-    if (!currentDay?.recipes) return { baseCost: 0, variableCost: 0, totalCost: 0 };
+    const allRecipes = currentDay?.receitas || currentDay?.recipes || [];
+    if (!allRecipes || allRecipes.length === 0) return { baseCost: 0, variableCost: 0, totalCost: 0 };
     
-    const base = currentDay.recipes
-      .filter(recipe => (recipe.category || recipe.categoria) === 'Base')
+    const base = allRecipes
+      .filter(recipe => (recipe.category || recipe.categoria) === 'Base' || (recipe as any).codigo === 'ARROZ' || (recipe as any).codigo === 'FEIJAO')
       .reduce((sum, recipe) => sum + (recipe.cost || recipe.custo || recipe.custo_por_refeicao || 0), 0);
     
-    const variable = currentDay.recipes
-      .filter(recipe => (recipe.category || recipe.categoria) !== 'Base')
+    const variable = allRecipes
+      .filter(recipe => (recipe.category || recipe.categoria) !== 'Base' && (recipe as any).codigo !== 'ARROZ' && (recipe as any).codigo !== 'FEIJAO')
       .reduce((sum, recipe) => sum + (recipe.cost || recipe.custo || recipe.custo_por_refeicao || 0), 0);
     
     return {
@@ -164,7 +194,7 @@ export function MenuDayCarousel({ menu }: MenuDayCarouselProps) {
       {/* Day Title */}
       <div className="text-center">
         <h3 className="text-2xl font-semibold text-gray-800">
-          {currentDay?.day || 'Dia não encontrado'}
+          {currentDay?.day || currentDay?.dia || 'Dia não encontrado'}
         </h3>
       </div>
 
