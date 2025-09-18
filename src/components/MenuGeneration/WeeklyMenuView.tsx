@@ -47,11 +47,33 @@ const WeeklyMenuView: React.FC<WeeklyMenuViewProps> = ({
 
   // Caso já receba menu pronto (ex: vindo de Cardapios.tsx)
   if (menu) {
-    // Check if we have the new cardapio format or GeneratedMenu format from saved menus
+    console.log('WeeklyMenuView received menu:', menu);
+    
+    // Check for saved menu format: menu_data.cardapio_semanal
+    const savedCardapio = (menu as any).menu_data?.cardapio_semanal;
+    if (savedCardapio && Array.isArray(savedCardapio)) {
+      console.log('Found saved cardapio format:', savedCardapio);
+      return (
+        <div className="min-h-screen bg-gray-100 py-8">
+          <div className="container mx-auto px-4">
+            <MenuDayCarousel 
+              menu={{
+                clientName: menu.client_name || menu.clientName || menu.cliente || 'Cliente',
+                weekPeriod: menu.week_period || menu.weekPeriod || menu.periodo || 'Período',
+                cardapio: savedCardapio
+              }}
+            />
+          </div>
+        </div>
+      );
+    }
+    
+    // Check if we have the new cardapio format or GeneratedMenu format
     const cardapio = (menu as any).cardapio || (menu as any).menu?.cardapio;
     const recipes = (menu as any).recipes;
     
     if (cardapio && Array.isArray(cardapio)) {
+      console.log('Found direct cardapio format:', cardapio);
       return (
         <div className="min-h-screen bg-gray-100 py-8">
           <div className="container mx-auto px-4">
@@ -69,6 +91,7 @@ const WeeklyMenuView: React.FC<WeeklyMenuViewProps> = ({
     
     // If we have recipes array from saved menu, convert to cardapio format
     if (recipes && Array.isArray(recipes) && recipes.length > 0) {
+      console.log('Found recipes array format:', recipes);
       return (
         <div className="min-h-screen bg-gray-100 py-8">
           <div className="container mx-auto px-4">
@@ -86,6 +109,7 @@ const WeeklyMenuView: React.FC<WeeklyMenuViewProps> = ({
     
     // Fallback to old format if available
     if (menu.receitas) {
+      console.log('Using old receitas format');
       const recipesArray = convertRecipesToArray(menu.receitas);
       return (
         <MenuTable
@@ -96,6 +120,8 @@ const WeeklyMenuView: React.FC<WeeklyMenuViewProps> = ({
         />
       );
     }
+    
+    console.log('No recognized menu format found');
   }
 
   // Gera menu chamando Edge Function quando não recebe pronto
