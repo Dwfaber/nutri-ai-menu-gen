@@ -61,10 +61,10 @@ export const ClientContractsProvider = ({ children }: { children: ReactNode }) =
       setIsLoading(true);
       setError(null);
 
-      // Loading clients with optional search
+      // Loading clients with optional search - using separate queries to avoid relationship issues
 
-      // Buscar dados otimizados da tabela custos_filiais com configurações de sucos
-      let query = supabase
+      // Step 1: Get basic client data from custos_filiais
+      let clientQuery = supabase
         .from('custos_filiais')
         .select(`
           id,
@@ -85,50 +85,78 @@ export const ClientContractsProvider = ({ children }: { children: ReactNode }) =
           QtdeRefeicoesUsarMediaValidarSimNao,
           PorcentagemLimiteAcimaMedia,
           created_at,
-          updated_at,
-          contratos_corporativos!inner(
+          updated_at
+        `);
+
+      // Estratégia diferente para busca vs. carregamento inicial
+      if (searchTerm && searchTerm.trim()) {
+        // Na busca, usar filtro e ordenação alfabética
+        clientQuery = clientQuery
+          .or(`nome_fantasia.ilike.%${searchTerm}%,razao_social.ilike.%${searchTerm}%,nome_filial.ilike.%${searchTerm}%`)
+          .order('nome_fantasia')
+          .limit(limit || 1000);
+      } else {
+        // No carregamento inicial, pegar amostra diversificada
+        clientQuery = clientQuery
+          .order('cliente_id_legado')
+          .limit(limit || 2000);
+      }
+
+      const { data: clientData, error: fetchError } = await clientQuery;
+
+      if (fetchError) {
+        throw fetchError;
+      }
+
+      if (!clientData || clientData.length === 0) {
+        setClients([]);
+        setClientsWithCosts([]);
+        return;
+      }
+
+      // Step 2: Get juice configurations from contratos_corporativos
+      const filialIds = [...new Set(clientData.map(item => item.filial_id).filter((id): id is number => id !== null && id !== undefined))];
+      
+      let contractData = null;
+      let contractError = null;
+      
+      if (filialIds.length > 0) {
+        const { data, error } = await supabase
+          .from('contratos_corporativos')
+          .select(`
+            filial_id_legado,
             use_pro_mix,
             use_pro_vita,
             use_suco_diet,
             use_suco_natural,
             protein_grams_pp1,
             protein_grams_pp2
-          )
-        `);
-
-      // Estratégia diferente para busca vs. carregamento inicial
-      if (searchTerm && searchTerm.trim()) {
-        // Na busca, usar filtro e ordenação alfabética
-        query = query
-          .or(`nome_fantasia.ilike.%${searchTerm}%,razao_social.ilike.%${searchTerm}%,nome_filial.ilike.%${searchTerm}%`)
-          .order('nome_fantasia')
-          .limit(limit || 1000);
-      } else {
-        // No carregamento inicial, pegar amostra diversificada
-        query = query
-          .order('cliente_id_legado')
-          .limit(limit || 2000);
+          `)
+          .in('filial_id_legado', filialIds);
+        
+        contractData = data;
+        contractError = error;
       }
 
-      const { data, error: fetchError } = await query;
-
-      if (fetchError) {
-        throw fetchError;
+      if (contractError) {
+        console.warn('Erro ao carregar configurações de contrato:', contractError);
       }
 
-      // Data fetched successfully
+      // Create a map for quick lookup of juice configurations
+      const contractMap = new Map();
+      (contractData || []).forEach(contract => {
+        contractMap.set(contract.filial_id_legado, contract);
+      });
 
       // Transform data to match ContractClient interface - with null safety
-      const transformedData: ContractClient[] = (data || [])
-        .filter(item => {
+      const transformedData: ContractClient[] = clientData
+        .filter((item: any) => {
           // Filter out invalid clients
           const isValid = item.nome_fantasia || item.cliente_id_legado || item.id;
           return isValid;
         })
-        .map(item => {
-          const juiceConfig = Array.isArray(item.contratos_corporativos) 
-            ? item.contratos_corporativos[0] 
-            : item.contratos_corporativos;
+        .map((item: any) => {
+          const juiceConfig = contractMap.get(item.filial_id) || {};
 
           const client = {
             id: item.id,
@@ -248,19 +276,10 @@ export const ClientContractsProvider = ({ children }: { children: ReactNode }) =
 
   const getClientContract = async (clientId: string): Promise<ContractClient | null> => {
     try {
+      // Step 1: Get client data
       const { data, error } = await supabase
         .from('custos_filiais')
-        .select(`
-          *,
-          contratos_corporativos!inner(
-            use_pro_mix,
-            use_pro_vita,
-            use_suco_diet,
-            use_suco_natural,
-            protein_grams_pp1,
-            protein_grams_pp2
-          )
-        `)
+        .select('*')
         .eq('id', clientId)
         .single();
 
@@ -270,9 +289,26 @@ export const ClientContractsProvider = ({ children }: { children: ReactNode }) =
 
       if (!data) return null;
 
-      const juiceConfig = Array.isArray(data.contratos_corporativos) 
-        ? data.contratos_corporativos[0] 
-        : data.contratos_corporativos;
+      // Step 2: Get juice configuration if filial_id exists
+      let juiceConfig: any = {};
+      if (data.filial_id) {
+        const { data: contractData, error: contractError } = await supabase
+          .from('contratos_corporativos')
+          .select(`
+            use_pro_mix,
+            use_pro_vita,
+            use_suco_diet,
+            use_suco_natural,
+            protein_grams_pp1,
+            protein_grams_pp2
+          `)
+          .eq('filial_id_legado', data.filial_id)
+          .maybeSingle();
+
+        if (!contractError && contractData) {
+          juiceConfig = contractData;
+        }
+      }
 
       // Transform single record to match ContractClient interface usando dados reais
       return {
