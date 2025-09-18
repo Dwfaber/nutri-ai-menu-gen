@@ -98,8 +98,25 @@ export function MenuDayCarousel({ menu }: MenuDayCarouselProps) {
     setCurrentDayIndex(index);
   };
 
-  // Helper function for normalized string comparison
+  // Helper functions for strong normalization and deduplication
+  const stripAccents = (str: string) => str.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  const simple = (str: string) => stripAccents(str).toUpperCase().replace(/[^A-Z0-9]/g, '');
   const normalizeString = (str: string) => str.toUpperCase().trim();
+
+  // Slot-based detectors for base items
+  const detectSlot = (name: string) => {
+    const simplified = simple(name);
+    
+    if (simplified.includes('ARROZ')) return 'rice';
+    if (simplified.includes('FEIJAO')) return 'bean';
+    if (simplified.includes('CAFE')) return 'coffee';
+    if (simplified.includes('KITDESCARTAVEL') || simplified.includes('KITDESCARTAVEIS')) return 'disposable_kit';
+    if (simplified.includes('KITLIMPEZA')) return 'cleaning_kit';
+    if (simplified.includes('KITTEMPERO') || simplified.includes('TEMPEROMESA')) return 'seasoning_kit';
+    if (simplified.includes('PAOFRANCES') || simplified.includes('MINIFILAO') || simplified.includes('MINIPAO')) return 'bread';
+    
+    return null;
+  };
 
   // Group recipes by category for the current day and ensure all categories are present
   const recipesByCategory = React.useMemo(() => {
@@ -245,37 +262,50 @@ export function MenuDayCarousel({ menu }: MenuDayCarouselProps) {
       grouped[displayCat].push(recipe);
     });
     
-    // Always complete Base category with required items
+    // Always complete Base category with required items using slot-based deduplication
     const baseRequired = [
-      { name: 'ARROZ BRANCO', cost: 2.50 },
-      { name: currentDayBeanVariant, cost: 2.20 },
-      { name: 'CAFÉ COMPLEMENTAR', cost: 1.00 },
-      { name: 'KIT DESCARTÁVEL', cost: 0.50 },
-      { name: 'KIT LIMPEZA', cost: 0.30 },
-      { name: 'KIT TEMPEROS MESA', cost: 0.25 },
-      { name: 'PÃO FRANCÊS MINI', cost: 0.80 }
+      { name: 'ARROZ BRANCO', cost: 2.50, slot: 'rice' },
+      { name: currentDayBeanVariant, cost: 2.20, slot: 'bean' },
+      { name: 'CAFÉ COMPLEMENTAR', cost: 1.00, slot: 'coffee' },
+      { name: 'KIT DESCARTÁVEL', cost: 0.50, slot: 'disposable_kit' },
+      { name: 'KIT LIMPEZA', cost: 0.30, slot: 'cleaning_kit' },
+      { name: 'KIT TEMPEROS MESA', cost: 0.25, slot: 'seasoning_kit' },
+      { name: 'PÃO FRANCÊS MINI', cost: 0.80, slot: 'bread' }
     ];
 
-    // Get existing base items
+    // Get existing base items and deduplicate by slot
     const existingBaseItems = grouped['Base'] || [];
-    const existingBaseNames = new Set(
-      existingBaseItems.map(item => normalizeString(item.name || item.nome || ''))
-    );
+    const slotOccupied = new Set<string>();
+    const deduplicatedBaseItems: Recipe[] = [];
 
-    // Add missing base items
+    // First pass: keep only the first item of each slot
+    existingBaseItems.forEach(item => {
+      const name = item.name || item.nome || '';
+      const slot = detectSlot(name);
+      
+      if (slot && !slotOccupied.has(slot)) {
+        slotOccupied.add(slot);
+        deduplicatedBaseItems.push(item);
+      } else if (!slot) {
+        // Keep items that don't match any slot
+        deduplicatedBaseItems.push(item);
+      }
+    });
+
+    // Second pass: inject missing base items
     baseRequired.forEach((requiredItem, index) => {
-      const normalizedRequired = normalizeString(requiredItem.name);
-      if (!existingBaseNames.has(normalizedRequired)) {
-        existingBaseItems.push({
+      if (!slotOccupied.has(requiredItem.slot)) {
+        deduplicatedBaseItems.push({
           id: `base-injected-${index}`,
           name: requiredItem.name,
           category: 'Base',
           cost: requiredItem.cost
         });
+        slotOccupied.add(requiredItem.slot);
       }
     });
 
-    grouped['Base'] = existingBaseItems;
+    grouped['Base'] = deduplicatedBaseItems;
 
     // Always inject juices if missing (2 juices per day)
     const existingJuices = grouped['Sucos'] || [];
