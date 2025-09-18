@@ -2095,12 +2095,6 @@ Deno.serve(async (req) => {
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
 
-      const mainProcess = async () => {
-        return await Promise.race([processRequest(), timeoutPromise]);
-      };
-      
-      return await mainProcess();
-    
   } catch (error) {
     const executionTime = Date.now() - Date.now();
     console.error('❌ ERRO GERAL na Edge Function:', {
