@@ -107,24 +107,62 @@ export function MenuDayCarousel({ menu }: MenuDayCarouselProps) {
       grouped[category] = [];
     });
     
+    // Helper function to determine if a recipe should be categorized as Base
+    const isBaseProduct = (name: string, code?: string, category?: string) => {
+      const normalizedName = name.toLowerCase();
+      
+      // Check by category first
+      if (category?.toLowerCase() === 'base') return true;
+      
+      // Check by code
+      if (code && ['ARROZ', 'FEIJAO', 'CAFE', 'KIT'].some(baseCode => code.includes(baseCode))) return true;
+      
+      // Check by name patterns for all base products from the legacy system
+      return (
+        normalizedName.includes('arroz') ||
+        normalizedName.includes('feijão') ||
+        normalizedName.includes('feijao') ||
+        normalizedName.includes('café cortesia') ||
+        normalizedName.includes('cafe cortesia') ||
+        normalizedName.includes('kit descartáveis') ||
+        normalizedName.includes('kit descartaveis') ||
+        normalizedName.includes('kit limpeza') ||
+        normalizedName.includes('kit tempero') ||
+        normalizedName.includes('tempero de mesa') ||
+        normalizedName.includes('mini filão') ||
+        normalizedName.includes('mini filao') ||
+        normalizedName.includes('acompanhamento')
+      );
+    };
+    
     // Group actual recipes by category
     currentDay?.receitas?.forEach((receita) => {
       const code = receita.codigo || (receita as any).codigo;
       const rawCat = receita.category || receita.categoria || 'Outros';
-      const displayCat = code
-        ? (
-            code === 'PP1' ? 'Prato Principal 1' :
-            code === 'PP2' ? 'Prato Principal 2' :
-            code === 'ARROZ' ? 'Base' :
-            code === 'FEIJAO' ? 'Base' :
-            code === 'SALADA1' ? 'Salada 1' :
-            code === 'SALADA2' ? 'Salada 2' :
-            code === 'SUCO1' ? 'Suco 1' :
-            code === 'SUCO2' ? 'Suco 2' :
-            code === 'GUARNICAO' ? 'Guarnição' :
-            code === 'SOBREMESA' ? 'Sobremesa' : rawCat
-          )
-        : (rawCat === 'PP1' ? 'Prato Principal 1' : rawCat === 'PP2' ? 'Prato Principal 2' : rawCat);
+      const name = receita.name || receita.nome || '';
+      
+      let displayCat = rawCat;
+      
+      // Check if it's a base product first
+      if (isBaseProduct(name, code, rawCat)) {
+        displayCat = 'Base';
+      } else if (code) {
+        // Map other category codes
+        displayCat = 
+          code === 'PP1' ? 'Prato Principal 1' :
+          code === 'PP2' ? 'Prato Principal 2' :
+          code === 'SALADA1' ? 'Salada 1' :
+          code === 'SALADA2' ? 'Salada 2' :
+          code === 'SUCO1' ? 'Suco 1' :
+          code === 'SUCO2' ? 'Suco 2' :
+          code === 'GUARNICAO' ? 'Guarnição' :
+          code === 'SOBREMESA' ? 'Sobremesa' : rawCat;
+      } else {
+        // Map category names
+        displayCat = 
+          rawCat === 'PP1' ? 'Prato Principal 1' : 
+          rawCat === 'PP2' ? 'Prato Principal 2' : rawCat;
+      }
 
       if (!grouped[displayCat]) {
         grouped[displayCat] = [];
@@ -135,20 +173,30 @@ export function MenuDayCarousel({ menu }: MenuDayCarouselProps) {
     currentDay?.recipes?.forEach((recipe) => {
       const code = (recipe as any).codigo as string | undefined;
       const rawCat = recipe.category || recipe.categoria || 'Outros';
-      const displayCat = code
-        ? (
-            code === 'PP1' ? 'Prato Principal 1' :
-            code === 'PP2' ? 'Prato Principal 2' :
-            code === 'ARROZ' ? 'Base' :
-            code === 'FEIJAO' ? 'Base' :
-            code === 'SALADA1' ? 'Salada 1' :
-            code === 'SALADA2' ? 'Salada 2' :
-            code === 'SUCO1' ? 'Suco 1' :
-            code === 'SUCO2' ? 'Suco 2' :
-            code === 'GUARNICAO' ? 'Guarnição' :
-            code === 'SOBREMESA' ? 'Sobremesa' : rawCat
-          )
-        : (rawCat === 'PP1' ? 'Prato Principal 1' : rawCat === 'PP2' ? 'Prato Principal 2' : rawCat);
+      const name = recipe.name || recipe.nome || '';
+      
+      let displayCat = rawCat;
+      
+      // Check if it's a base product first
+      if (isBaseProduct(name, code, rawCat)) {
+        displayCat = 'Base';
+      } else if (code) {
+        // Map other category codes
+        displayCat = 
+          code === 'PP1' ? 'Prato Principal 1' :
+          code === 'PP2' ? 'Prato Principal 2' :
+          code === 'SALADA1' ? 'Salada 1' :
+          code === 'SALADA2' ? 'Salada 2' :
+          code === 'SUCO1' ? 'Suco 1' :
+          code === 'SUCO2' ? 'Suco 2' :
+          code === 'GUARNICAO' ? 'Guarnição' :
+          code === 'SOBREMESA' ? 'Sobremesa' : rawCat;
+      } else {
+        // Map category names
+        displayCat = 
+          rawCat === 'PP1' ? 'Prato Principal 1' : 
+          rawCat === 'PP2' ? 'Prato Principal 2' : rawCat;
+      }
 
       if (!grouped[displayCat]) {
         grouped[displayCat] = [];
@@ -164,12 +212,44 @@ export function MenuDayCarousel({ menu }: MenuDayCarouselProps) {
     const allRecipes = currentDay?.receitas || currentDay?.recipes || [];
     if (!allRecipes || allRecipes.length === 0) return { baseCost: 0, variableCost: 0, totalCost: 0 };
     
+    // Use the same logic as the categorization to identify base products
+    const isBaseProduct = (name: string, code?: string, category?: string) => {
+      const normalizedName = name.toLowerCase();
+      
+      if (category?.toLowerCase() === 'base') return true;
+      if (code && ['ARROZ', 'FEIJAO', 'CAFE', 'KIT'].some(baseCode => code.includes(baseCode))) return true;
+      
+      return (
+        normalizedName.includes('arroz') ||
+        normalizedName.includes('feijão') ||
+        normalizedName.includes('feijao') ||
+        normalizedName.includes('café cortesia') ||
+        normalizedName.includes('cafe cortesia') ||
+        normalizedName.includes('kit descartáveis') ||
+        normalizedName.includes('kit descartaveis') ||
+        normalizedName.includes('kit limpeza') ||
+        normalizedName.includes('kit tempero') ||
+        normalizedName.includes('tempero de mesa') ||
+        normalizedName.includes('mini filão') ||
+        normalizedName.includes('mini filao') ||
+        normalizedName.includes('acompanhamento')
+      );
+    };
+    
     const base = allRecipes
-      .filter(recipe => (recipe.category || recipe.categoria) === 'Base' || (recipe as any).codigo === 'ARROZ' || (recipe as any).codigo === 'FEIJAO')
+      .filter(recipe => isBaseProduct(
+        recipe.name || recipe.nome || '', 
+        (recipe as any).codigo, 
+        recipe.category || recipe.categoria
+      ))
       .reduce((sum, recipe) => sum + (recipe.cost || recipe.custo || recipe.custo_por_refeicao || 0), 0);
     
     const variable = allRecipes
-      .filter(recipe => (recipe.category || recipe.categoria) !== 'Base' && (recipe as any).codigo !== 'ARROZ' && (recipe as any).codigo !== 'FEIJAO')
+      .filter(recipe => !isBaseProduct(
+        recipe.name || recipe.nome || '', 
+        (recipe as any).codigo, 
+        recipe.category || recipe.categoria
+      ))
       .reduce((sum, recipe) => sum + (recipe.cost || recipe.custo || recipe.custo_por_refeicao || 0), 0);
     
     return {
