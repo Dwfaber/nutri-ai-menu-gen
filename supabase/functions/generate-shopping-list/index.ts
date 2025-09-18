@@ -168,14 +168,51 @@ class ShoppingListGeneratorFixed {
         throw new Error('Nenhum ID de receita válido encontrado');
       }
 
-      const { data: ingredients, error: ingredientsError } = await this.supabase
+      const { data: ingredientsRaw, error: ingredientsError } = await this.supabase
         .from('receita_ingredientes')
         .select('receita_id_legado, nome, produto_base_id, produto_base_descricao, quantidade, unidade, quantidade_refeicoes')
         .in('receita_id_legado', recipeIds)
         .order('receita_id_legado');
       
-      if (ingredientsError || !ingredients) {
+      if (ingredientsError) {
         throw new Error('Erro ao buscar ingredientes das receitas');
+      }
+      
+      let ingredients = ingredientsRaw || [];
+      
+      // Fallback: usar JSON de receitas_legado quando não houver ingredientes estruturados
+      if (!ingredients.length) {
+        console.warn('⚠️ Nenhum ingrediente encontrado em receita_ingredientes. Tentando fallback via receitas_legado.');
+        const { data: receitasJson, error: receitasError } = await this.supabase
+          .from('receitas_legado')
+          .select('receita_id_legado, nome_receita, ingredientes, porcoes, quantidade_refeicoes')
+          .in('receita_id_legado', recipeIds);
+        
+        if (receitasError) {
+          console.warn('⚠️ Erro ao buscar receitas_legado para fallback:', receitasError);
+        } else if (receitasJson && receitasJson.length) {
+          const flatten: any[] = [];
+          for (const r of receitasJson) {
+            const basePorcoes = parseInt(r.quantidade_refeicoes) || parseInt(r.porcoes) || 100;
+            const arr = Array.isArray(r.ingredientes) ? r.ingredientes : [];
+            for (const ing of arr) {
+              const prodId = ing.produto_base_id ?? ing.produto_id ?? ing.id ?? null;
+              const nomeDesc = ing.produto_base_descricao ?? ing.descricao ?? ing.nome ?? 'Ingrediente';
+              const unidade = ing.unidade ?? ing.unidade_medida ?? 'UN';
+              const qtdNum = typeof ing.quantidade === 'number' ? ing.quantidade : parseFloat(ing.quantidade);
+              flatten.push({
+                receita_id_legado: r.receita_id_legado,
+                nome: r.nome_receita,
+                produto_base_id: prodId,
+                produto_base_descricao: nomeDesc,
+                quantidade: isNaN(qtdNum) ? 0 : qtdNum,
+                unidade,
+                quantidade_refeicoes: basePorcoes
+              });
+            }
+          }
+          ingredients = flatten.filter(i => i.quantidade > 0);
+        }
       }
       
       console.log(`📦 ${ingredients.length} ingredientes encontrados nas receitas`);
@@ -409,13 +446,12 @@ class ShoppingListGeneratorFixed {
     
     for (const ingrediente of ingredientesReceitas) {
       try {
-        // Validar dados básicos
-        if (!ingrediente.produto_base_id || 
-            !ingrediente.quantidade || 
-            !ingrediente.unidade ||
-            ingrediente.quantidade <= 0) {
+        // Validar dados básicos (permitir itens sem produto_base_id para gerar placeholders)
+        const qtdVal = typeof ingrediente.quantidade === 'number' ? ingrediente.quantidade : parseFloat(ingrediente.quantidade);
+        const unidadeVal = ingrediente.unidade;
+        if (!qtdVal || isNaN(qtdVal) || !unidadeVal || qtdVal <= 0) {
           console.warn(`⚠️ Ingrediente inválido ignorado:`, {
-            nome: ingrediente.produto_base_descricao,
+            nome: ingrediente.produto_base_descricao || ingrediente.nome,
             quantidade: ingrediente.quantidade,
             unidade: ingrediente.unidade,
             produto_id: ingrediente.produto_base_id
@@ -423,10 +459,11 @@ class ShoppingListGeneratorFixed {
           continue;
         }
         
-        const produtoId = ingrediente.produto_base_id;
-        const quantidadeBase = parseFloat(ingrediente.quantidade);
+        const produtoId: number | null = ingrediente.produto_base_id ?? null;
+        const nomeDesc = (ingrediente.produto_base_descricao || ingrediente.nome || 'Ingrediente').toString().trim();
+        const quantidadeBase = parseFloat(String(qtdVal));
         const porcoeBase = parseInt(ingrediente.quantidade_refeicoes) || 100;
-        const unidadeOriginal = ingrediente.unidade?.toUpperCase() || 'UN';
+        const unidadeOriginal = (unidadeVal || 'UN').toUpperCase();
         
         // CALCULAR QUANTIDADE NECESSÁRIA
         const fatorEscala = servingsPerDay / porcoeBase;
@@ -435,21 +472,22 @@ class ShoppingListGeneratorFixed {
         // NORMALIZAR UNIDADE
         const unidadePadrao = this.normalizarUnidade(unidadeOriginal, quantidadeNecessaria);
         
-        console.log(`📦 ${ingrediente.produto_base_descricao}:`);
+        console.log(`📦 ${nomeDesc}:`);
         console.log(`  - Qtd base: ${quantidadeBase} ${unidadeOriginal} para ${porcoeBase} porções`);
         console.log(`  - Fator escala: ${fatorEscala.toFixed(3)}`);
         console.log(`  - Qtd necessária: ${quantidadeNecessaria.toFixed(3)} ${unidadeOriginal}`);
         console.log(`  - Unidade normalizada: ${unidadePadrao.quantidade.toFixed(3)} ${unidadePadrao.unidade}`);
         
-        // CONSOLIDAR
-        if (consolidados.has(produtoId)) {
-          const existing = consolidados.get(produtoId);
+        // CONSOLIDAR (usar chave por ID ou por nome quando sem ID)
+        const chave: any = (produtoId ?? `NM:${nomeDesc.toUpperCase()}`);
+        if (consolidados.has(chave)) {
+          const existing = consolidados.get(chave);
           existing.quantidade_total += unidadePadrao.quantidade;
           existing.receitas.add(ingrediente.nome || 'Receita');
         } else {
-          consolidados.set(produtoId, {
+          consolidados.set(chave, {
             produto_base_id: produtoId,
-            nome: ingrediente.produto_base_descricao?.trim() || 'Ingrediente',
+            nome: nomeDesc,
             quantidade_total: unidadePadrao.quantidade,
             unidade_padrao: unidadePadrao.unidade,
             receitas: new Set([ingrediente.nome || 'Receita'])

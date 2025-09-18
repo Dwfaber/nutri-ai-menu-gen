@@ -254,9 +254,9 @@ const Compras = () => {
                   )}
                   <div>
                     <p className="text-sm font-medium text-gray-600">Status</p>
-                    <p className="text-sm font-medium">
+                    <div className="text-sm font-medium">
                       {selectedList ? getStatusBadge(selectedList.status as ShoppingListStatus) : 'Nenhuma lista selecionada'}
-                    </p>
+                    </div>
                   </div>
                 </div>
               </CardContent>
