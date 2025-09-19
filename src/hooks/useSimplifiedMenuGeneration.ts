@@ -176,27 +176,37 @@ export function useSimplifiedMenuGeneration() {
         throw new Error(response?.error || 'Falha na geração do cardápio');
       }
 
-      const cardapioValidado = response.cardapio;
+      const cardapioValidado = response?.cardapio;
       console.log('✅ Cardápio Validado recebido:', {
-        diasSemana: cardapioValidado.cardapio_semanal?.length || 0,
-        categoriasComReceitas: cardapioValidado.resumo?.categorias_com_receitas || 0,
-        totalCategorias: cardapioValidado.resumo?.total_categorias || 0
+        diasSemana: cardapioValidado?.cardapio_semanal?.length || 0,
+        categoriasComReceitas: cardapioValidado?.resumo?.categorias_com_receitas || 0,
+        totalCategorias: cardapioValidado?.resumo?.total_categorias || 0
       });
 
-      // === Flatten receitas do cardápio semanal
+      // === Flatten receitas do cardápio semanal (com fallback para response.recipes)
       const allRecipesRaw: any[] = [];
-      cardapioValidado.cardapio_semanal?.forEach((dia: any) => {
-        dia.receitas?.forEach((receita: any) => {
-          allRecipesRaw.push({
-            ...receita,
-            dia: dia.dia
+      if (cardapioValidado?.cardapio_semanal?.length) {
+        cardapioValidado.cardapio_semanal.forEach((dia: any) => {
+          dia?.receitas?.forEach((receita: any) => {
+            allRecipesRaw.push({
+              ...receita,
+              dia: dia.dia
+            });
           });
         });
-      });
+      } else if (Array.isArray(response?.recipes) && response.recipes.length > 0) {
+        // Fallback: usar recipes direto quando não houver cardápio estruturado
+        response.recipes.forEach((r: any, idx: number) => {
+          allRecipesRaw.push({
+            ...r,
+            dia: r.dia || r.day || 'Dia Único'
+          });
+        });
+      }
 
       console.log('📊 Receitas encontradas:', {
         total: allRecipesRaw.length,
-        porDia: cardapioValidado.cardapio_semanal?.map((d: any) => `${d.dia}: ${d.receitas?.length || 0}`).join(', ')
+        porDia: cardapioValidado?.cardapio_semanal?.map((d: any) => `${d.dia}: ${d.receitas?.length || 0}`).join(', ')
       });
 
       // === Categorias para UI
