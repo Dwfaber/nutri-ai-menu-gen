@@ -21,6 +21,7 @@ const fetchRecipeAnalysis = async (): Promise<CategoryAnalysis[]> => {
     .from('receitas_legado')
     .select('receita_id_legado, nome_receita, categoria_descricao')
     .eq('inativa', false)
+    .not('categoria_descricao', 'is', null)
     .order('categoria_descricao', { ascending: true });
 
   if (receitasError) {
