@@ -439,12 +439,28 @@ Deno.serve(async (req) => {
 
         console.log(`🔄 [${categoria}] Candidatas finais: ${candidatas.length}`);
 
-        // Selecionar da lista filtrada (priorizar por custo)
-        const receitaSelecionada = candidatas.sort((a, b) => {
-          const custoA = custosBatch.get(a.id) || 999;
-          const custoB = custosBatch.get(b.id) || 999;
-          return custoA - custoB; // Mais barata primeiro
-        })[0];
+        // Selecionar da lista filtrada com variação inteligente
+        const candidatasComCusto = candidatas.map(receita => ({
+          receita,
+          custo: custosBatch.get(receita.id) || 999
+        })).filter(item => item.custo < 999); // Só receitas com custo calculado
+
+        let receitaSelecionada;
+        
+        if (candidatasComCusto.length > 0) {
+          // Ordenar por custo e pegar as 3 mais baratas para dar variação
+          const topCandidatas = candidatasComCusto
+            .sort((a, b) => a.custo - b.custo)
+            .slice(0, Math.min(3, candidatasComCusto.length));
+          
+          // Selecionar aleatoriamente entre as top 3 mais baratas
+          const indiceAleatorio = Math.floor(Math.random() * topCandidatas.length);
+          receitaSelecionada = topCandidatas[indiceAleatorio].receita;
+        } else {
+          // Fallback: pegar aleatoriamente da lista original
+          const indiceAleatorio = Math.floor(Math.random() * candidatas.length);
+          receitaSelecionada = candidatas[indiceAleatorio];
+        }
         
         if (receitaSelecionada) {
           const tempoProcessamento = Date.now() - stepStart;
