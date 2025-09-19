@@ -88,8 +88,8 @@ Deno.serve(async (req) => {
     // Cache para custos calculados durante a execução
     const costCache = new Map<string, number>();
 
-    // Função para calcular custo real da receita
-    async function calcularCustoReal(receitaId: string): Promise<number> {
+    // Função para calcular custo real da receita - APENAS CÁLCULO REAL
+    async function calcularCustoReal(receitaId: string): Promise<number | null> {
       const cacheKey = `cost_${receitaId}`;
       
       // Verificar cache primeiro
@@ -107,8 +107,8 @@ Deno.serve(async (req) => {
           .eq('receita_id_legado', receitaId);
         
         if (ingredientesError || !ingredientes?.length) {
-          console.log(`⚠️ Ingredientes não encontrados para receita ${receitaId}`);
-          return null; // Retornar null para usar fallback
+          console.log(`❌ PULANDO receita ${receitaId} - sem ingredientes`);
+          return null; // PULAR receita - não usar fallback
         }
 
         // Buscar preços atuais para todos os ingredientes
@@ -120,11 +120,12 @@ Deno.serve(async (req) => {
           .order('criado_em', { ascending: false });
 
         if (precosError || !precos?.length) {
-          console.log(`⚠️ Preços não encontrados para receita ${receitaId}`);
-          return null; // Retornar null para usar fallback
+          console.log(`❌ PULANDO receita ${receitaId} - sem preços`);
+          return null; // PULAR receita - não usar fallback
         }
 
         let custoTotal = 0;
+        let ingredientesComPreco = 0;
         
         for (const ingrediente of ingredientes) {
           const preco = precos.find(p => p.produto_base_id === ingrediente.produto_base_id);
@@ -135,37 +136,28 @@ Deno.serve(async (req) => {
             // Aplicar desconto se em promoção
             const custoFinal = preco.em_promocao_sim_nao ? custoIngrediente * 0.9 : custoIngrediente;
             custoTotal += custoFinal;
+            ingredientesComPreco++;
+            
+            console.log(`  📊 ${ingrediente.produto_base_id}: ${ingrediente.quantidade}/${quantidadeEmbalagem} * R$${preco.preco} = R$${custoFinal.toFixed(2)} ${preco.em_promocao_sim_nao ? '(PROMOÇÃO)' : ''}`);
           }
+        }
+
+        // Só aceitar se conseguiu calcular pelo menos 80% dos ingredientes
+        const percentualCalculado = (ingredientesComPreco / ingredientes.length) * 100;
+        if (percentualCalculado < 80) {
+          console.log(`❌ PULANDO receita ${receitaId} - apenas ${percentualCalculado.toFixed(1)}% dos ingredientes têm preço`);
+          return null;
         }
 
         // Cache do resultado
         costCache.set(cacheKey, custoTotal);
-        console.log(`✅ Custo real calculado para ${receitaId}: R$ ${custoTotal.toFixed(2)}`);
+        console.log(`✅ CUSTO REAL calculado para ${receitaId}: R$ ${custoTotal.toFixed(2)} (${ingredientesComPreco}/${ingredientes.length} ingredientes)`);
         
         return custoTotal;
       } catch (error) {
-        console.log(`❌ Erro ao calcular custo real para ${receitaId}:`, error);
-        return null; // Retornar null para usar fallback
+        console.log(`❌ ERRO ao calcular custo real para ${receitaId}:`, error);
+        return null; // PULAR receita - não usar fallback
       }
-    }
-
-    // Custos fallback (apenas quando cálculo real falha)
-    function getCustoEstimadoFallback(categoria: string): number {
-      const custosBase = {
-        'Prato Principal 1': 2.80,
-        'Prato Principal 2': 2.40, 
-        'Arroz Branco': 0.60,
-        'Feijão': 0.55,
-        'Guarnição': 0.80,
-        'Salada 1': 0.50,
-        'Salada 2': 0.60,
-        'Suco 1': 0.15,
-        'Suco 2': 0.15,
-        'Sobremesa': 0.40
-      };
-      
-      console.log(`⚠️ Usando custo estimado para ${categoria}: R$ ${custosBase[categoria] || 1.00}`);
-      return custosBase[categoria] || 1.00;
     }
 
     // Função para distribuir orçamento por categoria
@@ -203,11 +195,14 @@ Deno.serve(async (req) => {
         const custoMaximoCategoria = getCustoMaximoCategoria(categoria, budgetPerMeal);
         console.log(`💰 Orçamento máximo para ${categoria}: R$ ${custoMaximoCategoria.toFixed(2)}`);
         
-        // Usar estimativa rápida em vez de cálculo real para evitar timeout
-        const candidatasDentroOrcamento = candidatas.filter(receita => {
-          const custoEstimado = getCustoEstimadoFallback(categoria);
-          return custoEstimado <= custoMaximoCategoria;
-        });
+        // Filtrar por orçamento usando apenas receitas com custo calculável
+        const candidatasDentroOrcamento = [];
+        for (const receita of candidatas) {
+          const custoReal = await calcularCustoReal(receita.id);
+          if (custoReal !== null && custoReal <= custoMaximoCategoria) {
+            candidatasDentroOrcamento.push(receita);
+          }
+        }
         
         if (candidatasDentroOrcamento.length > 0) {
           candidatas = candidatasDentroOrcamento;
@@ -324,15 +319,15 @@ Deno.serve(async (req) => {
             // Marcar receita como usada
             receitasUsadas.add(receitaSelecionada.id);
             
-            // Calcular custo real da receita ou usar fallback
-            let custoAjustado;
+            // Calcular custo real da receita - PULAR se não conseguir
             const custoReal = await calcularCustoReal(receitaSelecionada.id);
-            if (custoReal !== null) {
-              custoAjustado = custoReal;
-              console.log(`💰 Usando custo real para ${receitaSelecionada.nome}: R$ ${custoReal.toFixed(2)}`);
-            } else {
-              custoAjustado = getCustoEstimadoFallback(categoria);
+            if (custoReal === null) {
+              console.log(`❌ PULANDO receita ${receitaSelecionada.nome} - custo não calculável`);
+              continue; // PULAR para próxima categoria
             }
+            
+            const custoAjustado = custoReal;
+            console.log(`💰 Usando custo real para ${receitaSelecionada.nome}: R$ ${custoReal.toFixed(2)}`);
             
             // Aplicar gramagem das proteínas
             let displayName = receitaSelecionada.nome;
@@ -359,38 +354,8 @@ Deno.serve(async (req) => {
               cost: custoAjustado
             });
           } else {
-            // Fallback se não houver receitas com ingredientes
-            const fallback = getFallbackReceita(categoria);
-            if (fallback) {
-              console.log(`⚠️ Usando fallback para ${categoria}: ${fallback.nome}`);
-              
-              // Aplicar gramagem nas proteínas também para fallback
-              let displayName = fallback.nome;
-              let custoAjustado = fallback.custo;
-              
-              if (categoria === 'Prato Principal 1' && proteinConfig.protein_grams_pp1) {
-                displayName = `${fallback.nome} ${proteinConfig.protein_grams_pp1}G`;
-                if (proteinConfig.protein_grams_pp1 === 90) {
-                  custoAjustado = custoAjustado * 0.9;
-                }
-              } else if (categoria === 'Prato Principal 2' && proteinConfig.protein_grams_pp2) {
-                displayName = `${fallback.nome} ${proteinConfig.protein_grams_pp2}G`;
-                if (proteinConfig.protein_grams_pp2 === 90) {
-                  custoAjustado = custoAjustado * 0.9;
-                }
-              }
-              
-              receitasDia.push({
-                id: fallback.id,
-                name: displayName,
-                category: categoria,
-                day: dia,
-                cost: custoAjustado,
-                warning: `⚠️ Receita fallback - categoria ${categoria} sem ingredientes`
-              });
-            } else {
-              console.error(`❌ Sem fallback para categoria ${categoria}`);
-            }
+            // PULAR categoria se não houver receitas com ingredientes calculáveis
+            console.log(`❌ PULANDO categoria ${categoria} - sem receitas com custos calculáveis`);
           }
         }
 
@@ -438,23 +403,6 @@ Deno.serve(async (req) => {
       };
     }
 
-    // Receitas de fallback em caso de não encontrar receitas com ingredientes
-    function getFallbackReceita(categoria: string): any {
-      const fallbacks = {
-        'Prato Principal 1': { id: 'fallback_pp1', nome: 'Frango Assado', custo: getCustoEstimadoFallback(categoria) },
-        'Prato Principal 2': { id: 'fallback_pp2', nome: 'Carne Moída', custo: getCustoEstimadoFallback(categoria) },
-        'Arroz Branco': { id: 'fallback_arroz', nome: 'Arroz Branco', custo: getCustoEstimadoFallback(categoria) },
-        'Feijão': { id: 'fallback_feijao', nome: 'Feijão Carioca', custo: getCustoEstimadoFallback(categoria) },
-        'Guarnição': { id: 'fallback_guarnicao', nome: 'Batata Cozida', custo: getCustoEstimadoFallback(categoria) },
-        'Salada 1': { id: 'fallback_salada1', nome: 'Salada Verde', custo: getCustoEstimadoFallback(categoria) },
-        'Salada 2': { id: 'fallback_salada2', nome: 'Salada de Tomate', custo: getCustoEstimadoFallback(categoria) },
-        'Suco 1': { id: 'fallback_suco1', nome: 'Suco de Laranja', custo: getCustoEstimadoFallback(categoria) },
-        'Suco 2': { id: 'fallback_suco2', nome: 'Suco de Maracujá', custo: getCustoEstimadoFallback(categoria) },
-        'Sobremesa': { id: 'fallback_sobremesa', nome: 'Fruta da Estação', custo: getCustoEstimadoFallback(categoria) }
-      };
-      
-      return fallbacks[categoria] || null;
-    }
 
     // Processar request
     const requestData = await req.json();
