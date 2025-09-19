@@ -85,7 +85,71 @@ Deno.serve(async (req) => {
       return 'outros';
     }
 
-    // Custos fallback otimizados (baseados em dados reais)
+    // Cache para custos calculados durante a execução
+    const costCache = new Map<string, number>();
+
+    // Função para calcular custo real da receita
+    async function calcularCustoReal(receitaId: string): Promise<number> {
+      const cacheKey = `cost_${receitaId}`;
+      
+      // Verificar cache primeiro
+      if (costCache.has(cacheKey)) {
+        return costCache.get(cacheKey)!;
+      }
+
+      try {
+        console.log(`💰 Calculando custo real para receita ${receitaId}`);
+        
+        // Buscar ingredientes da receita
+        const { data: ingredientes, error: ingredientesError } = await supabase
+          .from('receita_ingredientes')
+          .select('produto_base_id, quantidade, unidade')
+          .eq('receita_id_legado', receitaId);
+        
+        if (ingredientesError || !ingredientes?.length) {
+          console.log(`⚠️ Ingredientes não encontrados para receita ${receitaId}`);
+          return null; // Retornar null para usar fallback
+        }
+
+        // Buscar preços atuais para todos os ingredientes
+        const produtoBaseIds = ingredientes.map(ing => ing.produto_base_id);
+        const { data: precos, error: precosError } = await supabase
+          .from('co_solicitacao_produto_listagem')
+          .select('produto_base_id, preco, produto_base_quantidade_embalagem, em_promocao_sim_nao')
+          .in('produto_base_id', produtoBaseIds)
+          .order('criado_em', { ascending: false });
+
+        if (precosError || !precos?.length) {
+          console.log(`⚠️ Preços não encontrados para receita ${receitaId}`);
+          return null; // Retornar null para usar fallback
+        }
+
+        let custoTotal = 0;
+        
+        for (const ingrediente of ingredientes) {
+          const preco = precos.find(p => p.produto_base_id === ingrediente.produto_base_id);
+          if (preco && preco.preco > 0) {
+            const quantidadeEmbalagem = preco.produto_base_quantidade_embalagem || 1000;
+            const custoIngrediente = (ingrediente.quantidade / quantidadeEmbalagem) * preco.preco;
+            
+            // Aplicar desconto se em promoção
+            const custoFinal = preco.em_promocao_sim_nao ? custoIngrediente * 0.9 : custoIngrediente;
+            custoTotal += custoFinal;
+          }
+        }
+
+        // Cache do resultado
+        costCache.set(cacheKey, custoTotal);
+        console.log(`✅ Custo real calculado para ${receitaId}: R$ ${custoTotal.toFixed(2)}`);
+        
+        return custoTotal;
+      } catch (error) {
+        console.log(`❌ Erro ao calcular custo real para ${receitaId}:`, error);
+        return null; // Retornar null para usar fallback
+      }
+    }
+
+    // Custos fallback (apenas quando cálculo real falha)
     function getCustoEstimadoFallback(categoria: string): number {
       const custosBase = {
         'Prato Principal 1': 2.80,
@@ -100,6 +164,7 @@ Deno.serve(async (req) => {
         'Sobremesa': 0.40
       };
       
+      console.log(`⚠️ Usando custo estimado para ${categoria}: R$ ${custosBase[categoria] || 1.00}`);
       return custosBase[categoria] || 1.00;
     }
 
@@ -259,8 +324,15 @@ Deno.serve(async (req) => {
             // Marcar receita como usada
             receitasUsadas.add(receitaSelecionada.id);
             
-            // Usar custo estimado para evitar timeout
-            let custoAjustado = getCustoEstimadoFallback(categoria);
+            // Calcular custo real da receita ou usar fallback
+            let custoAjustado;
+            const custoReal = await calcularCustoReal(receitaSelecionada.id);
+            if (custoReal !== null) {
+              custoAjustado = custoReal;
+              console.log(`💰 Usando custo real para ${receitaSelecionada.nome}: R$ ${custoReal.toFixed(2)}`);
+            } else {
+              custoAjustado = getCustoEstimadoFallback(categoria);
+            }
             
             // Aplicar gramagem das proteínas
             let displayName = receitaSelecionada.nome;
