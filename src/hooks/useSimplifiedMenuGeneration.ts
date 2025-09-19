@@ -172,12 +172,20 @@ export function useSimplifiedMenuGeneration() {
         throw new Error(`Erro na geração: ${menuError.message}`);
       }
 
+      console.log('🔍 DEBUG: Response completo da Edge Function:', response);
+      console.log('🔍 DEBUG: response.success:', response?.success);
+      console.log('🔍 DEBUG: response.cardapio:', response?.cardapio);
+      console.log('🔍 DEBUG: response.data:', response?.data);
+      console.log('🔍 DEBUG: Todas as propriedades da response:', Object.keys(response || {}));
+
       if (!response?.success) {
         throw new Error(response?.error || 'Falha na geração do cardápio');
       }
 
-      const cardapioValidado = response?.cardapio;
+      // Priorizar response.cardapio, fallback para response.data
+      const cardapioValidado = response?.cardapio || response?.data;
       console.log('✅ Cardápio Validado recebido:', {
+        cardapioValidado,
         diasSemana: cardapioValidado?.cardapio_semanal?.length || 0,
         categoriasComReceitas: cardapioValidado?.resumo?.categorias_com_receitas || 0,
         totalCategorias: cardapioValidado?.resumo?.total_categorias || 0

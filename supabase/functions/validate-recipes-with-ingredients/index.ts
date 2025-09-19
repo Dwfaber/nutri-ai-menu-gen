@@ -726,6 +726,7 @@ Deno.serve(async (req) => {
         return new Response(
           JSON.stringify({
             success: true,
+            cardapio: resultado,
             data: resultado
           }),
           {
