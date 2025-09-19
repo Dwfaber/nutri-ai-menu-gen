@@ -159,6 +159,8 @@ Deno.serve(async (req) => {
           }
         }
 
+        // Fator de escala baseado em receitas para 100 pessoas
+        const fatorEscala = mealQuantity / 100;
         let custoTotal = 0;
         let ingredientesComPreco = 0;
         
@@ -166,14 +168,16 @@ Deno.serve(async (req) => {
           const melhorPreco = melhoresPrecos.get(ingrediente.produto_base_id);
           if (melhorPreco && melhorPreco.preco > 0) {
             const quantidadeEmbalagem = melhorPreco.produto_base_quantidade_embalagem || 1000;
-            const custoIngrediente = (ingrediente.quantidade / quantidadeEmbalagem) * melhorPreco.preco;
+            // Aplicar escalonamento na quantidade do ingrediente
+            const quantidadeEscalonada = ingrediente.quantidade * fatorEscala;
+            const custoIngrediente = (quantidadeEscalonada / quantidadeEmbalagem) * melhorPreco.preco;
             
             // Aplicar desconto se em promoção
             const custoFinal = melhorPreco.em_promocao_sim_nao ? custoIngrediente * 0.9 : custoIngrediente;
             custoTotal += custoFinal;
             ingredientesComPreco++;
             
-            console.log(`  📊 ${ingrediente.produto_base_id}: ${ingrediente.quantidade}/${quantidadeEmbalagem} * R$${melhorPreco.preco} = R$${custoFinal.toFixed(2)} ${melhorPreco.em_promocao_sim_nao ? '(PROMOÇÃO)' : ''}`);
+            console.log(`  📊 ${ingrediente.produto_base_id}: ${quantidadeEscalonada.toFixed(2)}/${quantidadeEmbalagem} * R$${melhorPreco.preco} = R$${custoFinal.toFixed(2)} ${melhorPreco.em_promocao_sim_nao ? '(PROMOÇÃO)' : ''}`);
           }
         }
 
