@@ -161,8 +161,8 @@ export function useSimplifiedMenuGeneration() {
           selectedRecipes: selectedRecipes,
           client_data: clientToUse,
           protein_config: {
-            protein_grams_pp1: (clientToUse as any).protein_grams_pp1 || 100,
-            protein_grams_pp2: (clientToUse as any).protein_grams_pp2 || 90
+            protein_grams_pp1: parseInt(proteinGrams || '100'),
+            protein_grams_pp2: parseInt(proteinGrams || '100')  // Usar MESMA gramagem escolhida pelo usuário
           },
           include_weekends: periodDays === 7
         }
