@@ -25,6 +25,13 @@ Deno.serve(async (req) => {
       try {
         console.log(`🔍 Buscando receitas para categoria: ${categoria}`);
         
+        // Mapear categorias para nomes corretos no banco de dados
+        const categoriaMapeada = categoria === 'Arroz Branco' ? 'Arroz' : categoria;
+        
+        if (categoriaMapeada !== categoria) {
+          console.log(`🔄 Mapeando categoria '${categoria}' → '${categoriaMapeada}'`);
+        }
+        
         // Buscar receitas que têm ingredientes na tabela receita_ingredientes
         const { data: receitasComIngredientes, error } = await supabase
           .from('receita_ingredientes')
@@ -34,7 +41,7 @@ Deno.serve(async (req) => {
             categoria_descricao,
             produto_base_id
           `)
-          .eq('categoria_descricao', categoria)
+          .eq('categoria_descricao', categoriaMapeada)
           .not('produto_base_id', 'is', null)
           .order('receita_id_legado');
 
