@@ -8,26 +8,32 @@ import { useRecipeAnalysis } from '@/hooks/useRecipeAnalysis';
 import { Separator } from '@/components/ui/separator';
 
 const Receitas = () => {
-  const [searchTerm, setSearchTerm] = useState('');
-  const [openCategories, setOpenCategories] = useState<Record<string, boolean>>({});
+  const [selectedCategories, setSelectedCategories] = useState<Set<string>>(new Set());
   const { data: recipeData, isLoading, error } = useRecipeAnalysis();
 
   const toggleCategory = (category: string) => {
-    setOpenCategories(prev => ({
-      ...prev,
-      [category]: !prev[category]
-    }));
+    setSelectedCategories(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(category)) {
+        newSet.delete(category);
+      } else {
+        newSet.add(category);
+      }
+      return newSet;
+    });
   };
 
-  const filteredCategories = recipeData?.filter(category => 
-    category.nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    category.receitas_completas.some(recipe => 
-      recipe.nome.toLowerCase().includes(searchTerm.toLowerCase())
-    ) ||
-    category.receitas_problematicas.some(recipe => 
-      recipe.nome.toLowerCase().includes(searchTerm.toLowerCase())
-    )
-  ) || [];
+  const toggleAllCategories = () => {
+    if (selectedCategories.size === recipeData?.length) {
+      setSelectedCategories(new Set());
+    } else {
+      setSelectedCategories(new Set(recipeData?.map(cat => cat.nome) || []));
+    }
+  };
+
+  const filteredCategories = selectedCategories.size === 0 
+    ? recipeData || []
+    : recipeData?.filter(category => selectedCategories.has(category.nome)) || [];
 
   const getCompletionColor = (percentage: number) => {
     if (percentage >= 80) return 'bg-green-500/10 text-green-500 border-green-500/20';
@@ -117,159 +123,181 @@ const Receitas = () => {
         </Card>
       </div>
 
-      {/* Busca */}
+      {/* Filtros por Categoria */}
       <Card>
-        <CardContent className="pt-6">
-          <div className="relative">
-            <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Buscar por categoria ou nome da receita..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10"
-            />
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-lg">Filtrar por Categoria</CardTitle>
+            <button
+              onClick={toggleAllCategories}
+              className="text-sm text-primary hover:underline"
+            >
+              {selectedCategories.size === recipeData?.length ? 'Limpar Filtros' : 'Selecionar Todas'}
+            </button>
           </div>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-wrap gap-2">
+            {recipeData?.map((category) => {
+              const isSelected = selectedCategories.has(category.nome);
+              const completionPercentage = category.total_receitas > 0 
+                ? (category.receitas_completas.length / category.total_receitas) * 100 
+                : 0;
+
+              return (
+                <button
+                  key={category.nome}
+                  onClick={() => toggleCategory(category.nome)}
+                  className={`
+                    px-3 py-2 rounded-lg border text-sm font-medium transition-all
+                    ${isSelected 
+                      ? 'bg-primary text-primary-foreground border-primary shadow-sm' 
+                      : 'bg-background hover:bg-accent border-border'
+                    }
+                  `}
+                >
+                  <div className="flex items-center space-x-2">
+                    <span>{category.nome}</span>
+                    <Badge 
+                      variant={isSelected ? "secondary" : "outline"}
+                      className="text-xs"
+                    >
+                      {category.total_receitas}
+                    </Badge>
+                    <div className={`
+                      h-2 w-2 rounded-full 
+                      ${completionPercentage >= 80 ? 'bg-green-500' : 
+                        completionPercentage >= 50 ? 'bg-yellow-500' : 'bg-red-500'}
+                    `} />
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+          {selectedCategories.size > 0 && (
+            <div className="mt-3 text-sm text-muted-foreground">
+              {selectedCategories.size} de {recipeData?.length || 0} categorias selecionadas
+            </div>
+          )}
         </CardContent>
       </Card>
 
       {/* Lista de Categorias */}
-      <div className="space-y-4">
-        {filteredCategories.map((category) => {
-          const isOpen = openCategories[category.nome];
-          const completionPercentage = category.total_receitas > 0 
-            ? (category.receitas_completas.length / category.total_receitas) * 100 
-            : 0;
-
-          return (
-            <Card key={category.nome}>
-              <Collapsible open={isOpen} onOpenChange={() => toggleCategory(category.nome)}>
-                <CollapsibleTrigger asChild>
-                  <CardHeader className="cursor-pointer hover:bg-accent/50 transition-colors">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center space-x-3">
-                        {isOpen ? (
-                          <ChevronDown className="h-4 w-4" />
-                        ) : (
-                          <ChevronRight className="h-4 w-4" />
-                        )}
-                        <CardTitle className="text-xl">{category.nome}</CardTitle>
-                      </div>
-                      <div className="flex items-center space-x-2">
-                        <Badge 
-                          variant="outline" 
-                          className={getCompletionColor(completionPercentage)}
-                        >
-                          {completionPercentage.toFixed(1)}% completas
-                        </Badge>
-                        <Badge variant="secondary">
-                          {category.total_receitas} receitas
-                        </Badge>
-                      </div>
-                    </div>
-                  </CardHeader>
-                </CollapsibleTrigger>
-
-                <CollapsibleContent>
-                  <CardContent className="pt-0">
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                      {/* Receitas Completas */}
-                      <div>
-                        <div className="flex items-center space-x-2 mb-3">
-                          <div className="h-3 w-3 rounded-full bg-green-500" />
-                          <h3 className="font-semibold text-green-700">
-                            Receitas Completas ({category.receitas_completas.length})
-                          </h3>
-                        </div>
-                        <div className="space-y-2 max-h-60 overflow-y-auto">
-                          {category.receitas_completas.length > 0 ? (
-                            category.receitas_completas
-                              .filter(recipe => 
-                                searchTerm === '' || 
-                                recipe.nome.toLowerCase().includes(searchTerm.toLowerCase())
-                              )
-                              .map((recipe, index) => (
-                                <div 
-                                  key={index}
-                                  className="p-2 bg-green-50 rounded-lg text-sm border border-green-200"
-                                >
-                                  <span className="font-medium">{recipe.nome}</span>
-                                  <Badge variant="outline" className="ml-2 text-xs">
-                                    {recipe.ingredientes} ingredientes
-                                  </Badge>
-                                </div>
-                              ))
-                          ) : (
-                            <p className="text-sm text-muted-foreground italic">
-                              Nenhuma receita completa encontrada
-                            </p>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Receitas Problemáticas */}
-                      <div>
-                        <div className="flex items-center space-x-2 mb-3">
-                          <div className="h-3 w-3 rounded-full bg-red-500" />
-                          <h3 className="font-semibold text-red-700">
-                            Receitas Problemáticas ({category.receitas_problematicas.length})
-                          </h3>
-                        </div>
-                        <div className="space-y-2 max-h-60 overflow-y-auto">
-                          {category.receitas_problematicas.length > 0 ? (
-                            category.receitas_problematicas
-                              .filter(recipe => 
-                                searchTerm === '' || 
-                                recipe.nome.toLowerCase().includes(searchTerm.toLowerCase())
-                              )
-                              .map((recipe, index) => (
-                                <div 
-                                  key={index}
-                                  className="p-2 bg-red-50 rounded-lg text-sm border border-red-200"
-                                >
-                                  <span className="font-medium">{recipe.nome}</span>
-                                  <Badge 
-                                    variant="outline" 
-                                    className="ml-2 text-xs bg-red-100 text-red-700 border-red-300"
-                                  >
-                                    {recipe.ingredientes} ingredientes
-                                  </Badge>
-                                </div>
-                              ))
-                          ) : (
-                            <p className="text-sm text-muted-foreground italic">
-                              Todas as receitas estão completas!
-                            </p>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                    <Separator className="mt-4" />
-                    <div className="mt-4 text-sm text-muted-foreground">
-                      <p>
-                        <strong>Receitas Completas:</strong> Possuem 5 ou mais ingredientes e podem ter custos calculados com precisão.
-                      </p>
-                      <p>
-                        <strong>Receitas Problemáticas:</strong> Possuem 0-4 ingredientes e precisam de sistema de fallback para cálculo de custos.
-                      </p>
-                    </div>
-                  </CardContent>
-                </CollapsibleContent>
-              </Collapsible>
-            </Card>
-          );
-        })}
-      </div>
-
-      {filteredCategories.length === 0 && searchTerm && (
+      {selectedCategories.size === 0 && (
         <Card>
           <CardContent className="pt-6">
             <div className="text-center text-muted-foreground">
-              <Search className="mx-auto h-12 w-12 mb-2" />
-              <p>Nenhuma receita encontrada para "{searchTerm}"</p>
+              <ChefHat className="mx-auto h-12 w-12 mb-2" />
+              <p>Selecione uma ou mais categorias acima para visualizar as receitas</p>
             </div>
           </CardContent>
         </Card>
       )}
+
+      {selectedCategories.size > 0 && (
+        <div className="space-y-4">
+          {filteredCategories.map((category) => {
+            const completionPercentage = category.total_receitas > 0 
+              ? (category.receitas_completas.length / category.total_receitas) * 100 
+              : 0;
+
+            return (
+              <Card key={category.nome}>
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="text-xl">{category.nome}</CardTitle>
+                    <div className="flex items-center space-x-2">
+                      <Badge 
+                        variant="outline" 
+                        className={getCompletionColor(completionPercentage)}
+                      >
+                        {completionPercentage.toFixed(1)}% completas
+                      </Badge>
+                      <Badge variant="secondary">
+                        {category.total_receitas} receitas
+                      </Badge>
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    {/* Receitas Completas */}
+                    <div>
+                      <div className="flex items-center space-x-2 mb-3">
+                        <div className="h-3 w-3 rounded-full bg-green-500" />
+                        <h3 className="font-semibold text-green-700">
+                          Receitas Completas ({category.receitas_completas.length})
+                        </h3>
+                      </div>
+                      <div className="space-y-2 max-h-60 overflow-y-auto">
+                        {category.receitas_completas.length > 0 ? (
+                          category.receitas_completas.map((recipe, index) => (
+                            <div 
+                              key={index}
+                              className="p-2 bg-green-50 rounded-lg text-sm border border-green-200"
+                            >
+                              <span className="font-medium">{recipe.nome}</span>
+                              <Badge variant="outline" className="ml-2 text-xs">
+                                {recipe.ingredientes} ingredientes
+                              </Badge>
+                            </div>
+                          ))
+                        ) : (
+                          <p className="text-sm text-muted-foreground italic">
+                            Nenhuma receita completa encontrada
+                          </p>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Receitas Problemáticas */}
+                    <div>
+                      <div className="flex items-center space-x-2 mb-3">
+                        <div className="h-3 w-3 rounded-full bg-red-500" />
+                        <h3 className="font-semibold text-red-700">
+                          Receitas Problemáticas ({category.receitas_problematicas.length})
+                        </h3>
+                      </div>
+                      <div className="space-y-2 max-h-60 overflow-y-auto">
+                        {category.receitas_problematicas.length > 0 ? (
+                          category.receitas_problematicas.map((recipe, index) => (
+                            <div 
+                              key={index}
+                              className="p-2 bg-red-50 rounded-lg text-sm border border-red-200"
+                            >
+                              <span className="font-medium">{recipe.nome}</span>
+                              <Badge 
+                                variant="outline" 
+                                className="ml-2 text-xs bg-red-100 text-red-700 border-red-300"
+                              >
+                                {recipe.ingredientes} ingredientes
+                              </Badge>
+                            </div>
+                          ))
+                        ) : (
+                          <p className="text-sm text-muted-foreground italic">
+                            Todas as receitas estão completas!
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  <Separator className="mt-4" />
+                  <div className="mt-4 text-sm text-muted-foreground">
+                    <p>
+                      <strong>Receitas Completas:</strong> Possuem 5 ou mais ingredientes e podem ter custos calculados com precisão.
+                    </p>
+                    <p>
+                      <strong>Receitas Problemáticas:</strong> Possuem 0-4 ingredientes e precisam de sistema de fallback para cálculo de custos.
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
+      )}
+
     </div>
   );
 };
