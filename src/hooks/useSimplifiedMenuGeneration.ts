@@ -289,7 +289,7 @@ export function useSimplifiedMenuGeneration() {
         warnings: [
           ...allRecipes.flatMap(r => r.warnings || [])
         ],
-        juiceMenu: null
+        juiceMenu: undefined
       };
 
       // === Salvar no banco

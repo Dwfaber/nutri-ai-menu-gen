@@ -377,7 +377,7 @@ export const EnhancedMenuGenerator: React.FC<EnhancedMenuGeneratorProps> = ({
                     </Card>
                   )}
 
-                  {generatedMenu.juiceMenu && (
+                  {generatedMenu.juiceMenu && generatedMenu.juiceMenu.cardapio_semanal && generatedMenu.juiceMenu.cardapio_semanal.length > 0 && (
                     <Card>
                       <CardHeader>
                         <CardTitle className="text-sm flex items-center gap-2">

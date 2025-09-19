@@ -27,7 +27,7 @@ interface JuiceMenuDisplayProps {
 }
 
 export const JuiceMenuDisplay: React.FC<JuiceMenuDisplayProps> = ({ juiceConfig }) => {
-  if (!juiceConfig?.cardapio_semanal) {
+  if (!juiceConfig || !juiceConfig.cardapio_semanal || juiceConfig.cardapio_semanal.length === 0) {
     return <p className="text-muted-foreground">Nenhuma configuração de sucos disponível.</p>;
   }
 
