@@ -62,7 +62,7 @@ Deno.serve(async (req) => {
     }
 
     // Gerar cardápio usando apenas receitas com ingredientes
-    async function gerarCardapioValidado() {
+    async function gerarCardapioValidado(proteinConfig = {}) {
       const categorias = [
         'Prato Principal 1',
         'Prato Principal 2', 
@@ -96,9 +96,17 @@ Deno.serve(async (req) => {
             // Selecionar aleatoriamente uma receita da categoria
             const receitaSelecionada = receitasDisponiveis[Math.floor(Math.random() * receitasDisponiveis.length)];
             
+            // Aplicar gramagem das proteínas
+            let displayName = receitaSelecionada.nome;
+            if (categoria === 'Prato Principal 1' && proteinConfig.protein_grams_pp1) {
+              displayName = `${receitaSelecionada.nome} ${proteinConfig.protein_grams_pp1}G`;
+            } else if (categoria === 'Prato Principal 2' && proteinConfig.protein_grams_pp2) {
+              displayName = `${receitaSelecionada.nome} ${proteinConfig.protein_grams_pp2}G`;
+            }
+            
             receitasDia.push({
               id: receitaSelecionada.id,
-              name: receitaSelecionada.nome,
+              name: displayName,
               category: categoria,
               day: dia,
               cost: getCustoEstimado(categoria)
@@ -107,9 +115,17 @@ Deno.serve(async (req) => {
             // Fallback se não houver receitas com ingredientes
             const fallback = getFallbackReceita(categoria);
             if (fallback) {
+              // Aplicar gramagem nas proteínas também para fallback
+              let displayName = fallback.nome;
+              if (categoria === 'Prato Principal 1' && proteinConfig.protein_grams_pp1) {
+                displayName = `${fallback.nome} ${proteinConfig.protein_grams_pp1}G`;
+              } else if (categoria === 'Prato Principal 2' && proteinConfig.protein_grams_pp2) {
+                displayName = `${fallback.nome} ${proteinConfig.protein_grams_pp2}G`;
+              }
+              
               receitasDia.push({
                 id: fallback.id,
-                name: fallback.nome,
+                name: displayName,
                 category: categoria,
                 day: dia,
                 cost: fallback.custo,
@@ -193,7 +209,8 @@ Deno.serve(async (req) => {
     }
 
     // Gerar cardápio validado por padrão
-    const cardapioValidado = await gerarCardapioValidado();
+    const proteinConfig = requestData.protein_config || {};
+    const cardapioValidado = await gerarCardapioValidado(proteinConfig);
 
     return new Response(
       JSON.stringify({

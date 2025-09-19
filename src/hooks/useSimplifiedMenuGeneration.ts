@@ -159,7 +159,11 @@ export function useSimplifiedMenuGeneration() {
           periodDays: periodDays,
           budgetPerMeal: budgetPerMeal || clientToUse.custo_maximo_refeicao,
           selectedRecipes: selectedRecipes,
-          client_data: clientToUse
+          client_data: clientToUse,
+          protein_config: {
+            protein_grams_pp1: (clientToUse as any).protein_grams_pp1 || 100,
+            protein_grams_pp2: (clientToUse as any).protein_grams_pp2 || 90
+          }
         }
       });
 
