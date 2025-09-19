@@ -2083,20 +2083,13 @@ Deno.serve(async (req) => {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         });
       }
-    }
+    };
 
-    // Default
-    return new Response(
-      JSON.stringify({
-        success: true,
-        version: 'CORRIGIDA-FINAL-v3.0',
-        message: 'Sistema de cardápio funcionando - versão final corrigida'
-      }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
+    // Execute the processRequest function with timeout
+    return await Promise.race([processRequest(), timeoutPromise]);
 
   } catch (error) {
-    const executionTime = Date.now() - Date.now();
+    const executionTime = Date.now() - startTime;
     console.error('❌ ERRO GERAL na Edge Function:', {
       error: error.message,
       stack: error.stack,
