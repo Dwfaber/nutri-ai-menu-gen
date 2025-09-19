@@ -476,7 +476,7 @@ Deno.serve(async (req) => {
 
     // Função com timeout para evitar CPU exceeded (reduzido e com logs)
     async function gerarCardapioComTimeout(proteinConfig = {}, includeWeekends = false, budgetPerMeal = null, mealQuantity = 50) {
-      const TIMEOUT_MS = 23000; // 23 segundos para dar margem
+      const TIMEOUT_MS = 45000; // 45 segundos para permitir processamento completo
       const startTime = Date.now();
       console.log(`⏰ Iniciando geração com timeout de ${TIMEOUT_MS}ms`);
       

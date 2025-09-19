@@ -398,7 +398,7 @@ export const SimpleMenuForm: React.FC<SimpleMenuFormProps> = ({
               {isGenerating ? (
                 <>
                   <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Gerando Cardápio...
+                  <span className="animate-pulse">Processando receitas e custos...</span>
                 </>
               ) : (
                 <>
@@ -418,6 +418,13 @@ export const SimpleMenuForm: React.FC<SimpleMenuFormProps> = ({
               <li>• Calculamos custos baseados no orçamento do cliente</li>
               <li>• Geramos lista de compras automaticamente após aprovação</li>
             </ul>
+            {isGenerating && (
+              <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded">
+                <p className="text-sm text-yellow-800">
+                  ⏰ <strong>Processamento em andamento:</strong> A geração pode levar até 1 minuto. Por favor, aguarde...
+                </p>
+              </div>
+            )}
           </div>
         </form>
       </CardContent>

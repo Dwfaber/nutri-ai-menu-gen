@@ -13,6 +13,7 @@ import WeeklyMenuView from "@/components/MenuGeneration/WeeklyMenuView";
 import { SimpleMenuForm, SimpleMenuFormData } from '@/components/MenuGeneration/SimpleMenuForm';
 import MenuValidationPanel from '@/components/MenuGeneration/MenuValidationPanel';
 import MenuApprovalPanel from '@/components/MenuGeneration/MenuApprovalPanel';
+import { MenuGenerationProgress } from '@/components/MenuGeneration/MenuGenerationProgress';
 import { testEdgeFunctionConnectivity, testMenuGeneration } from '@/utils/edgeFunctionTest';
 import { useToast } from '@/hooks/use-toast';
 
@@ -22,6 +23,7 @@ const IntegratedMenuGenerator = () => {
   const [rejectionReason, setRejectionReason] = useState('');
   const [isTesting, setIsTesting] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<'unknown' | 'healthy' | 'error'>('unknown');
+  const [generationStage, setGenerationStage] = useState<'fetching' | 'calculating' | 'processing' | 'finalizing' | 'complete'>('fetching');
   
   const { toast } = useToast();
   const { selectedClient } = useSelectedClient();
@@ -54,8 +56,17 @@ const IntegratedMenuGenerator = () => {
   }, [generatedMenu?.recipes]);
 
   const handleGenerateMenu = async (formData: SimpleMenuFormData) => {
+    // Simular progresso para melhor UX
+    setGenerationStage('fetching');
+    
+    // Simular etapas do processo
+    setTimeout(() => setGenerationStage('calculating'), 2000);
+    setTimeout(() => setGenerationStage('processing'), 8000);
+    setTimeout(() => setGenerationStage('finalizing'), 35000);
+    
     await generateMenuWithFormData(formData);
-    setShowForm(false);
+    setGenerationStage('complete');
+    setTimeout(() => setShowForm(false), 1000);
   };
 
   const handleShowForm = () => setShowForm(true);
@@ -188,12 +199,21 @@ const IntegratedMenuGenerator = () => {
 
   if (showForm && !generatedMenu) {
     return (
-      <SimpleMenuForm
-        onSubmit={handleGenerateMenu}
-        onCancel={handleCancelForm}
-        isGenerating={isGenerating}
-        error={error}
-      />
+      <div className="space-y-6">
+        <SimpleMenuForm
+          onSubmit={handleGenerateMenu}
+          onCancel={handleCancelForm}
+          isGenerating={isGenerating}
+          error={error}
+        />
+        
+        {isGenerating && (
+          <MenuGenerationProgress 
+            stage={generationStage}
+            message="Processamento detalhado de receitas e custos em andamento..."
+          />
+        )}
+      </div>
     );
   }
 
