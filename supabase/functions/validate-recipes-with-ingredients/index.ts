@@ -61,6 +61,104 @@ Deno.serve(async (req) => {
       }
     }
 
+    // Função para identificar tipo de proteína
+    function getProteinType(recipeName: string): string {
+      const name = recipeName.toLowerCase();
+      if (name.includes('frango') || name.includes('peito') || name.includes('coxa') || name.includes('sobrecoxa') || name.includes('asa')) {
+        return 'frango';
+      }
+      if (name.includes('boi') || name.includes('carne') || name.includes('patinho') || name.includes('alcatra') || name.includes('maminha') || name.includes('picanha') || name.includes('contra filé') || name.includes('cupim')) {
+        return 'bovina';
+      }
+      if (name.includes('porco') || name.includes('suíno') || name.includes('lombo') || name.includes('costeleta') || name.includes('linguiça') || name.includes('bacon')) {
+        return 'suína';
+      }
+      if (name.includes('peixe') || name.includes('pescado') || name.includes('tilápia') || name.includes('salmão') || name.includes('sardinha')) {
+        return 'peixe';
+      }
+      if (name.includes('ovo') || name.includes('mexido') || name.includes('cozido') || name.includes('frito')) {
+        return 'ovo';
+      }
+      return 'outros';
+    }
+
+    // Função para selecionar receita com controle de variedade
+    function selecionarReceitaComVariedade(receitasDisponiveis: any[], categoria: string, receitasUsadas: Set<string>, receitasDoDia: any[], budgetPerMeal?: number): any {
+      console.log(`🎯 Selecionando receita para ${categoria}, disponíveis: ${receitasDisponiveis.length}`);
+      
+      // Filtrar receitas já usadas na semana
+      let candidatas = receitasDisponiveis.filter(receita => !receitasUsadas.has(receita.id));
+      
+      // Se todas foram usadas, usar todas novamente
+      if (candidatas.length === 0) {
+        candidatas = [...receitasDisponiveis];
+        console.log(`♻️ Todas as receitas de ${categoria} já foram usadas, reiniciando pool`);
+      }
+
+      // Aplicar filtro de orçamento se especificado
+      if (budgetPerMeal) {
+        const custoMaximoCategoria = getCustoMaximoCategoria(categoria, budgetPerMeal);
+        const candidatasDentroOrcamento = candidatas.filter(receita => {
+          const custoEstimado = getCustoEstimado(categoria);
+          return custoEstimado <= custoMaximoCategoria;
+        });
+        
+        if (candidatasDentroOrcamento.length > 0) {
+          candidatas = candidatasDentroOrcamento;
+        }
+      }
+
+      // Controle especial para proteínas para evitar repetição no mesmo dia
+      if (categoria === 'Prato Principal 1' || categoria === 'Prato Principal 2') {
+        const proteinaOposta = categoria === 'Prato Principal 1' ? 'Prato Principal 2' : 'Prato Principal 1';
+        const proteinaOpostaDoMesmodia = receitasDoDia.find(r => r.category === proteinaOposta);
+        
+        if (proteinaOpostaDoMesmodia) {
+          const tipoProteinaOposta = getProteinType(proteinaOpostaDoMesmodia.name);
+          console.log(`🥩 Proteína oposta: ${proteinaOpostaDoMesmodia.name} (tipo: ${tipoProteinaOposta})`);
+          
+          // Filtrar para evitar mesmo tipo de proteína
+          const candidatasDiferentesTipo = candidatas.filter(receita => {
+            const tipo = getProteinType(receita.nome);
+            return tipo !== tipoProteinaOposta;
+          });
+          
+          if (candidatasDiferentesTipo.length > 0) {
+            candidatas = candidatasDiferentesTipo;
+            console.log(`✅ Filtrado para tipo diferente de proteína: ${candidatas.length} opções`);
+          } else {
+            console.log(`⚠️ Não foi possível evitar repetição de tipo de proteína`);
+          }
+        }
+      }
+
+      // Controle especial para saladas para evitar repetição
+      if (categoria === 'Salada 1' || categoria === 'Salada 2') {
+        const saladaOposta = categoria === 'Salada 1' ? 'Salada 2' : 'Salada 1';
+        const saladaOpostaDoMesmoDia = receitasDoDia.find(r => r.category === saladaOposta);
+        
+        if (saladaOpostaDoMesmoDia) {
+          console.log(`🥗 Salada oposta: ${saladaOpostaDoMesmoDia.name}`);
+          
+          // Filtrar para evitar salada idêntica no mesmo dia
+          const candidatasDiferentes = candidatas.filter(receita => 
+            receita.nome.toLowerCase() !== saladaOpostaDoMesmoDia.name.toLowerCase()
+          );
+          
+          if (candidatasDiferentes.length > 0) {
+            candidatas = candidatasDiferentes;
+            console.log(`✅ Filtrado para salada diferente: ${candidatas.length} opções`);
+          }
+        }
+      }
+
+      // Selecionar aleatoriamente da lista filtrada
+      const receitaSelecionada = candidatas[Math.floor(Math.random() * candidatas.length)];
+      console.log(`✅ Selecionada: ${receitaSelecionada.nome} para ${categoria}`);
+      
+      return receitaSelecionada;
+    }
+
     // Gerar cardápio usando apenas receitas com ingredientes
     async function gerarCardapioValidado(proteinConfig = {}, includeWeekends = false, budgetPerMeal = null) {
       const categorias = [
@@ -83,6 +181,9 @@ Deno.serve(async (req) => {
         receitasPorCategoria[categoria] = await buscarReceitasComIngredientes(categoria);
       }
 
+      // Controle de variedade - rastrear receitas usadas na semana
+      const receitasUsadas = new Set<string>();
+
       // Gerar cardápio semanal (5 ou 7 dias dependendo da configuração)
       const diasSemana = includeWeekends 
         ? ['Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado', 'Domingo']
@@ -90,6 +191,7 @@ Deno.serve(async (req) => {
       const cardapioSemanal = [];
 
       for (const dia of diasSemana) {
+        console.log(`📅 Gerando cardápio para ${dia}`);
         const receitasDia = [];
 
         // Selecionar uma receita de cada categoria (ou fallback se não houver)
@@ -97,23 +199,17 @@ Deno.serve(async (req) => {
           const receitasDisponiveis = receitasPorCategoria[categoria];
           
           if (receitasDisponiveis && receitasDisponiveis.length > 0) {
-            // Filtrar receitas por orçamento se especificado
-            let receitasFiltradas = receitasDisponiveis;
-            if (budgetPerMeal) {
-              const custoMaximoCategoria = getCustoMaximoCategoria(categoria, budgetPerMeal);
-              receitasFiltradas = receitasDisponiveis.filter(receita => {
-                const custoEstimado = getCustoEstimado(categoria);
-                return custoEstimado <= custoMaximoCategoria;
-              });
-              
-              // Se não houver receitas dentro do orçamento, usar as mais baratas
-              if (receitasFiltradas.length === 0) {
-                receitasFiltradas = receitasDisponiveis;
-              }
-            }
+            // Usar seleção inteligente com controle de variedade
+            const receitaSelecionada = selecionarReceitaComVariedade(
+              receitasDisponiveis, 
+              categoria, 
+              receitasUsadas, 
+              receitasDia, 
+              budgetPerMeal
+            );
             
-            // Selecionar aleatoriamente uma receita da categoria filtrada
-            const receitaSelecionada = receitasFiltradas[Math.floor(Math.random() * receitasFiltradas.length)];
+            // Marcar receita como usada
+            receitasUsadas.add(receitaSelecionada.id);
             
             // Aplicar gramagem das proteínas
             let displayName = receitaSelecionada.nome;
@@ -144,6 +240,8 @@ Deno.serve(async (req) => {
             // Fallback se não houver receitas com ingredientes
             const fallback = getFallbackReceita(categoria);
             if (fallback) {
+              console.log(`⚠️ Usando fallback para ${categoria}: ${fallback.nome}`);
+              
               // Aplicar gramagem nas proteínas também para fallback
               let displayName = fallback.nome;
               let custoAjustado = fallback.custo;
@@ -168,6 +266,8 @@ Deno.serve(async (req) => {
                 cost: custoAjustado,
                 warning: `⚠️ Receita fallback - categoria ${categoria} sem ingredientes`
               });
+            } else {
+              console.error(`❌ Sem fallback para categoria ${categoria}`);
             }
           }
         }
@@ -177,6 +277,18 @@ Deno.serve(async (req) => {
           const custoTotalDia = receitasDia.reduce((sum, receita) => sum + (receita.cost || 0), 0);
           if (custoTotalDia > budgetPerMeal) {
             console.log(`⚠️ ${dia}: Custo R$ ${custoTotalDia.toFixed(2)} excede orçamento R$ ${budgetPerMeal.toFixed(2)}`);
+          }
+        }
+
+        // Validação pós-geração do dia
+        const pp1 = receitasDia.find(r => r.category === 'Prato Principal 1');
+        const pp2 = receitasDia.find(r => r.category === 'Prato Principal 2');
+        
+        if (pp1 && pp2) {
+          const tipo1 = getProteinType(pp1.name);
+          const tipo2 = getProteinType(pp2.name);
+          if (tipo1 === tipo2 && tipo1 !== 'outros') {
+            console.log(`⚠️ ${dia}: Dois ${tipo1} no mesmo dia (${pp1.name} e ${pp2.name})`);
           }
         }
 
