@@ -653,11 +653,6 @@ Deno.serve(async (req) => {
             console.log(`⚠️ ${dia}: Dois ${tipo1} no mesmo dia (${pp1.name} e ${pp2.name})`);
           }
         }
-
-        cardapioSemanal.push({
-          dia,
-          receitas: receitasDia
-        });
       }
 
       const endTime = Date.now();
