@@ -288,8 +288,8 @@ export const useMenuBusinessRules = () => {
   const validateMenuStructure = (recipes: any[]): MenuViolation[] => {
     const violations: MenuViolation[] = [];
     const orderedDays = ['Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira'];
-    // Usar códigos fixos, iguais ao backend
-    const requiredCodes = ['PP1','PP2','ARROZ','FEIJAO','SALADA1','SALADA2','SUCO1','SUCO2'];
+    // Usar códigos fixos, iguais ao backend (removidos sucos pois não são gerados)
+    const requiredCodes = ['PP1','PP2','ARROZ','FEIJAO','SALADA1','SALADA2'];
     
     // Group recipes by day
     const recipesByDay: { [key: string]: any[] } = {};
