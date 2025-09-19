@@ -155,7 +155,7 @@ export function useSimplifiedMenuGeneration() {
           client_id: clientToUse.id,
           clientId: clientToUse.cliente_id_legado,
           filial_id: clientToUse.filial_id,
-          mealQuantity: mealQuantity,
+          meal_quantity: mealQuantity, // Corrigido para meal_quantity
           periodDays: periodDays,
           budgetPerMeal: budgetPerMeal || clientToUse.custo_maximo_refeicao,
           selectedRecipes: selectedRecipes,

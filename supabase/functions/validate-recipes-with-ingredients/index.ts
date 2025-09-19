@@ -88,9 +88,9 @@ Deno.serve(async (req) => {
     // Cache para custos calculados durante a execução
     const costCache = new Map<string, number>();
 
-    // Função para calcular custo real da receita - APENAS CÁLCULO REAL
-    async function calcularCustoReal(receitaId: string): Promise<number | null> {
-      const cacheKey = `cost_${receitaId}`;
+    // Função para calcular custo real da receita com quantidade de refeições
+    async function calcularCustoReal(receitaId: string, mealQuantity: number = 50): Promise<number | null> {
+      const cacheKey = `cost_${receitaId}_${mealQuantity}`;
       
       // Verificar cache primeiro
       if (costCache.has(cacheKey)) {
@@ -98,65 +98,96 @@ Deno.serve(async (req) => {
       }
 
       try {
-        console.log(`💰 Calculando custo real para receita ${receitaId}`);
+        console.log(`💰 Calculando custo real para receita ${receitaId} (${mealQuantity} porções)`);
         
         // Buscar ingredientes da receita
         const { data: ingredientes, error: ingredientesError } = await supabase
           .from('receita_ingredientes')
-          .select('produto_base_id, quantidade, unidade')
+          .select('produto_base_id, quantidade, unidade, nome')
           .eq('receita_id_legado', receitaId);
         
         if (ingredientesError || !ingredientes?.length) {
           console.log(`❌ PULANDO receita ${receitaId} - sem ingredientes`);
-          return null; // PULAR receita - não usar fallback
+          return null;
         }
 
-        // Buscar preços atuais para todos os ingredientes
-        const produtoBaseIds = ingredientes.map(ing => ing.produto_base_id);
-        const { data: precos, error: precosError } = await supabase
+        // Agrupar ingredientes similares (mesmo produto_base_id) e usar menor quantidade
+        const ingredientesAgrupados = new Map();
+        for (const ingrediente of ingredientes) {
+          const key = ingrediente.produto_base_id;
+          if (!ingredientesAgrupados.has(key)) {
+            ingredientesAgrupados.set(key, ingrediente);
+          } else {
+            // Se já existe, manter o de menor quantidade (evita duplicação)
+            const existente = ingredientesAgrupados.get(key);
+            if (ingrediente.quantidade < existente.quantidade) {
+              ingredientesAgrupados.set(key, ingrediente);
+            }
+          }
+        }
+
+        const ingredientesUnicos = Array.from(ingredientesAgrupados.values());
+        console.log(`📦 ${ingredientes.length} ingredientes → ${ingredientesUnicos.length} únicos`);
+
+        // Buscar preços atuais (sempre o menor preço por produto_base_id)
+        const produtoBaseIds = ingredientesUnicos.map(ing => ing.produto_base_id);
+        const { data: todosPrecos, error: precosError } = await supabase
           .from('co_solicitacao_produto_listagem')
           .select('produto_base_id, preco, produto_base_quantidade_embalagem, em_promocao_sim_nao')
           .in('produto_base_id', produtoBaseIds)
-          .order('criado_em', { ascending: false });
+          .gt('preco', 0)
+          .order('preco', { ascending: true }); // Ordem crescente para pegar menor preço
 
-        if (precosError || !precos?.length) {
+        if (precosError || !todosPrecos?.length) {
           console.log(`❌ PULANDO receita ${receitaId} - sem preços`);
-          return null; // PULAR receita - não usar fallback
+          return null;
+        }
+
+        // Selecionar menor preço por produto_base_id
+        const melhoresPrecos = new Map();
+        for (const preco of todosPrecos) {
+          const key = preco.produto_base_id;
+          if (!melhoresPrecos.has(key)) {
+            melhoresPrecos.set(key, preco);
+          }
         }
 
         let custoTotal = 0;
         let ingredientesComPreco = 0;
         
-        for (const ingrediente of ingredientes) {
-          const preco = precos.find(p => p.produto_base_id === ingrediente.produto_base_id);
-          if (preco && preco.preco > 0) {
-            const quantidadeEmbalagem = preco.produto_base_quantidade_embalagem || 1000;
-            const custoIngrediente = (ingrediente.quantidade / quantidadeEmbalagem) * preco.preco;
+        for (const ingrediente of ingredientesUnicos) {
+          const melhorPreco = melhoresPrecos.get(ingrediente.produto_base_id);
+          if (melhorPreco && melhorPreco.preco > 0) {
+            const quantidadeEmbalagem = melhorPreco.produto_base_quantidade_embalagem || 1000;
+            const custoIngrediente = (ingrediente.quantidade / quantidadeEmbalagem) * melhorPreco.preco;
             
             // Aplicar desconto se em promoção
-            const custoFinal = preco.em_promocao_sim_nao ? custoIngrediente * 0.9 : custoIngrediente;
+            const custoFinal = melhorPreco.em_promocao_sim_nao ? custoIngrediente * 0.9 : custoIngrediente;
             custoTotal += custoFinal;
             ingredientesComPreco++;
             
-            console.log(`  📊 ${ingrediente.produto_base_id}: ${ingrediente.quantidade}/${quantidadeEmbalagem} * R$${preco.preco} = R$${custoFinal.toFixed(2)} ${preco.em_promocao_sim_nao ? '(PROMOÇÃO)' : ''}`);
+            console.log(`  📊 ${ingrediente.produto_base_id}: ${ingrediente.quantidade}/${quantidadeEmbalagem} * R$${melhorPreco.preco} = R$${custoFinal.toFixed(2)} ${melhorPreco.em_promocao_sim_nao ? '(PROMOÇÃO)' : ''}`);
           }
         }
 
-        // Só aceitar se conseguiu calcular pelo menos 80% dos ingredientes
-        const percentualCalculado = (ingredientesComPreco / ingredientes.length) * 100;
+        // Só aceitar se conseguiu calcular pelo menos 80% dos ingredientes únicos
+        const percentualCalculado = (ingredientesComPreco / ingredientesUnicos.length) * 100;
         if (percentualCalculado < 80) {
           console.log(`❌ PULANDO receita ${receitaId} - apenas ${percentualCalculado.toFixed(1)}% dos ingredientes têm preço`);
           return null;
         }
 
-        // Cache do resultado
-        costCache.set(cacheKey, custoTotal);
-        console.log(`✅ CUSTO REAL calculado para ${receitaId}: R$ ${custoTotal.toFixed(2)} (${ingredientesComPreco}/${ingredientes.length} ingredientes)`);
+        // CRÍTICO: Dividir pelo número correto de porções
+        const custoPorPorcao = custoTotal / mealQuantity;
+
+        // Cache do resultado POR PORÇÃO
+        costCache.set(cacheKey, custoPorPorcao);
+        console.log(`✅ CUSTO CALCULADO para ${receitaId}: R$ ${custoTotal.toFixed(2)} ÷ ${mealQuantity} porções = R$ ${custoPorPorcao.toFixed(2)} por porção`);
         
-        return custoTotal;
+        return custoPorPorcao;
       } catch (error) {
         console.log(`❌ ERRO ao calcular custo real para ${receitaId}:`, error);
-        return null; // PULAR receita - não usar fallback
+        return null;
       }
     }
 
@@ -180,15 +211,15 @@ Deno.serve(async (req) => {
     // Cache para lotes de custos calculados por categoria
     const batchCache = new Map<string, Map<string, number>>();
     
-    // Função otimizada para calcular custos em batch
-    async function calcularCustosBatch(receitas: any[], categoria: string): Promise<Map<string, number>> {
-      const cacheKey = `batch_${categoria}`;
+    // Função otimizada para calcular custos em batch com quantidade de refeições
+    async function calcularCustosBatch(receitas: any[], categoria: string, mealQuantity: number = 50): Promise<Map<string, number>> {
+      const cacheKey = `batch_${categoria}_${mealQuantity}`;
       
       if (batchCache.has(cacheKey)) {
         return batchCache.get(cacheKey)!;
       }
       
-      console.log(`📦 Calculando custos em batch para ${categoria}: ${receitas.length} receitas`);
+      console.log(`📦 Calculando custos em batch para ${categoria}: ${receitas.length} receitas (${mealQuantity} porções)`);
       const resultados = new Map<string, number>();
       
       // Limitar a 15 receitas por categoria para controlar timeout
@@ -198,7 +229,7 @@ Deno.serve(async (req) => {
       const receitaIds = receitasLimitadas.map(r => r.id);
       const { data: todosIngredientes } = await supabase
         .from('receita_ingredientes')
-        .select('receita_id_legado, produto_base_id, quantidade, unidade')
+        .select('receita_id_legado, produto_base_id, quantidade, unidade, nome')
         .in('receita_id_legado', receitaIds);
       
       if (!todosIngredientes?.length) {
@@ -206,13 +237,23 @@ Deno.serve(async (req) => {
         return resultados;
       }
       
-      // Buscar todos os preços de uma vez
+      // Buscar todos os preços ordenados por preço (menor primeiro)
       const todosProdutoIds = [...new Set(todosIngredientes.map(ing => ing.produto_base_id))];
       const { data: todosPrecos } = await supabase
         .from('co_solicitacao_produto_listagem')
         .select('produto_base_id, preco, produto_base_quantidade_embalagem, em_promocao_sim_nao')
         .in('produto_base_id', todosProdutoIds)
-        .order('criado_em', { ascending: false });
+        .gt('preco', 0)
+        .order('preco', { ascending: true }); // Menor preço primeiro
+      
+      // Criar mapa de melhores preços
+      const melhoresPrecos = new Map();
+      todosPrecos?.forEach(preco => {
+        const key = preco.produto_base_id;
+        if (!melhoresPrecos.has(key)) {
+          melhoresPrecos.set(key, preco);
+        }
+      });
       
       // Processar cada receita
       for (const receita of receitasLimitadas) {
@@ -220,25 +261,43 @@ Deno.serve(async (req) => {
         
         if (!ingredientesReceita.length) continue;
         
+        // Agrupar ingredientes similares (mesmo produto_base_id)
+        const ingredientesAgrupados = new Map();
+        for (const ingrediente of ingredientesReceita) {
+          const key = ingrediente.produto_base_id;
+          if (!ingredientesAgrupados.has(key)) {
+            ingredientesAgrupados.set(key, ingrediente);
+          } else {
+            // Manter o de menor quantidade (evita duplicação)
+            const existente = ingredientesAgrupados.get(key);
+            if (ingrediente.quantidade < existente.quantidade) {
+              ingredientesAgrupados.set(key, ingrediente);
+            }
+          }
+        }
+        
+        const ingredientesUnicos = Array.from(ingredientesAgrupados.values());
         let custoTotal = 0;
         let ingredientesComPreco = 0;
         
-        for (const ingrediente of ingredientesReceita) {
-          const preco = todosPrecos?.find(p => p.produto_base_id === ingrediente.produto_base_id);
-          if (preco && preco.preco > 0) {
-            const quantidadeEmbalagem = preco.produto_base_quantidade_embalagem || 1000;
-            const custoIngrediente = (ingrediente.quantidade / quantidadeEmbalagem) * preco.preco;
-            const custoFinal = preco.em_promocao_sim_nao ? custoIngrediente * 0.9 : custoIngrediente;
+        for (const ingrediente of ingredientesUnicos) {
+          const melhorPreco = melhoresPrecos.get(ingrediente.produto_base_id);
+          if (melhorPreco && melhorPreco.preco > 0) {
+            const quantidadeEmbalagem = melhorPreco.produto_base_quantidade_embalagem || 1000;
+            const custoIngrediente = (ingrediente.quantidade / quantidadeEmbalagem) * melhorPreco.preco;
+            const custoFinal = melhorPreco.em_promocao_sim_nao ? custoIngrediente * 0.9 : custoIngrediente;
             custoTotal += custoFinal;
             ingredientesComPreco++;
           }
         }
         
-        // Só aceitar se conseguiu calcular pelo menos 80% dos ingredientes
-        const percentualCalculado = (ingredientesComPreco / ingredientesReceita.length) * 100;
+        // Só aceitar se conseguiu calcular pelo menos 80% dos ingredientes únicos
+        const percentualCalculado = (ingredientesComPreco / ingredientesUnicos.length) * 100;
         if (percentualCalculado >= 80) {
-          resultados.set(receita.id, custoTotal);
-          console.log(`✅ ${receita.id}: R$ ${custoTotal.toFixed(2)} (${ingredientesComPreco}/${ingredientesReceita.length})`);
+          // CRÍTICO: Dividir pelo número correto de porções
+          const custoPorPorcao = custoTotal / mealQuantity;
+          resultados.set(receita.id, custoPorPorcao);
+          console.log(`✅ ${receita.id}: R$ ${custoTotal.toFixed(2)} ÷ ${mealQuantity} = R$ ${custoPorPorcao.toFixed(2)} por porção`);
         }
       }
       
@@ -248,11 +307,11 @@ Deno.serve(async (req) => {
     }
 
     // Função para selecionar receita com controle de variedade (otimizada)
-    async function selecionarReceitaComVariedade(receitasDisponiveis: any[], categoria: string, receitasUsadas: Set<string>, receitasDoDia: any[], budgetPerMeal?: number): Promise<any> {
+    async function selecionarReceitaComVariedade(receitasDisponiveis: any[], categoria: string, receitasUsadas: Set<string>, receitasDoDia: any[], budgetPerMeal?: number, mealQuantity: number = 50): Promise<any> {
       console.log(`🎯 Selecionando receita para ${categoria}, disponíveis: ${receitasDisponiveis.length}`);
       
-      // Calcular custos em batch primeiro
-      const custosBatch = await calcularCustosBatch(receitasDisponiveis, categoria);
+      // Calcular custos em batch primeiro com quantidade correta
+      const custosBatch = await calcularCustosBatch(receitasDisponiveis, categoria, mealQuantity);
       
       // Filtrar apenas receitas com custos calculáveis
       let candidatas = receitasDisponiveis.filter(receita => 
@@ -340,12 +399,12 @@ Deno.serve(async (req) => {
     }
 
     // Função com timeout para evitar CPU exceeded
-    async function gerarCardapioComTimeout(proteinConfig = {}, includeWeekends = false, budgetPerMeal = null) {
+    async function gerarCardapioComTimeout(proteinConfig = {}, includeWeekends = false, budgetPerMeal = null, mealQuantity = 50) {
       const TIMEOUT_MS = 25000; // 25 segundos
       const startTime = Date.now();
       
       return Promise.race([
-        gerarCardapioValidado(proteinConfig, includeWeekends, budgetPerMeal),
+        gerarCardapioValidado(proteinConfig, includeWeekends, budgetPerMeal, mealQuantity),
         new Promise((_, reject) => 
           setTimeout(() => reject(new Error('Timeout na geração do cardápio')), TIMEOUT_MS)
         )
@@ -353,9 +412,9 @@ Deno.serve(async (req) => {
     }
 
     // Gerar cardápio usando apenas receitas com ingredientes (otimizado)
-    async function gerarCardapioValidado(proteinConfig = {}, includeWeekends = false, budgetPerMeal = null) {
+    async function gerarCardapioValidado(proteinConfig = {}, includeWeekends = false, budgetPerMeal = null, mealQuantity = 50) {
       const startTime = Date.now();
-      console.log('🚀 Iniciando geração de cardápio otimizada com timeout');
+      console.log(`🚀 Iniciando geração de cardápio otimizada para ${mealQuantity} porções`);
       
       const categorias = [
         'Prato Principal 1',
@@ -407,14 +466,15 @@ Deno.serve(async (req) => {
               categoria, 
               receitasUsadas, 
               receitasDia, 
-              budgetPerMeal
+              budgetPerMeal,
+              mealQuantity
             );
             
             // Marcar receita como usada
             receitasUsadas.add(receitaSelecionada.id);
             
-            // Obter custo do batch cache
-            const custosBatch = await calcularCustosBatch(receitasDisponiveis, categoria);
+            // Obter custo do batch cache (já calculado por porção)
+            const custosBatch = await calcularCustosBatch(receitasDisponiveis, categoria, mealQuantity);
             const custoReal = custosBatch.get(receitaSelecionada.id);
             
             if (custoReal === undefined) {
@@ -535,15 +595,19 @@ Deno.serve(async (req) => {
       const { 
         protein_config = {}, 
         include_weekends = false, 
-        budget_per_meal = null 
+        budget_per_meal = null,
+        meal_quantity = 50
       } = requestData;
 
       try {
+        console.log(`🍽️ Gerando cardápio para ${meal_quantity} refeições`);
+        
         // Usar função com timeout
         const resultado = await gerarCardapioComTimeout(
           protein_config, 
           include_weekends, 
-          budget_per_meal
+          budget_per_meal,
+          meal_quantity
         );
 
         return new Response(
@@ -602,7 +666,8 @@ Deno.serve(async (req) => {
     const proteinConfig = requestData.protein_config || {};
     const includeWeekends = requestData.include_weekends || false;
     const budgetPerMeal = requestData.budgetPerMeal || null;
-    const cardapioValidado = await gerarCardapioComTimeout(proteinConfig, includeWeekends, budgetPerMeal);
+    const mealQuantity = requestData.meal_quantity || 50;
+    const cardapioValidado = await gerarCardapioComTimeout(proteinConfig, includeWeekends, budgetPerMeal, mealQuantity);
 
     return new Response(
       JSON.stringify({
