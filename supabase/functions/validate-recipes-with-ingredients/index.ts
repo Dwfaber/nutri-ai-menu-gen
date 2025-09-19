@@ -323,10 +323,10 @@ Deno.serve(async (req) => {
             const custoReal = await calcularCustoReal(receitaSelecionada.id);
             if (custoReal === null) {
               console.log(`❌ PULANDO receita ${receitaSelecionada.nome} - custo não calculável`);
-              continue; // PULAR para próxima categoria
+              continue; // Pular para próxima categoria
             }
             
-            const custoAjustado = custoReal;
+            let custoAjustado = custoReal;
             console.log(`💰 Usando custo real para ${receitaSelecionada.nome}: R$ ${custoReal.toFixed(2)}`);
             
             // Aplicar gramagem das proteínas
