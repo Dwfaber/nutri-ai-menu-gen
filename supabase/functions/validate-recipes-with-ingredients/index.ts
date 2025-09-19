@@ -177,39 +177,114 @@ Deno.serve(async (req) => {
       return budgetPerMeal * (distribuicaoOrcamento[categoria] || 0.1);
     }
 
+    // Cache para lotes de custos calculados por categoria
+    const batchCache = new Map<string, Map<string, number>>();
+    
+    // Função otimizada para calcular custos em batch
+    async function calcularCustosBatch(receitas: any[], categoria: string): Promise<Map<string, number>> {
+      const cacheKey = `batch_${categoria}`;
+      
+      if (batchCache.has(cacheKey)) {
+        return batchCache.get(cacheKey)!;
+      }
+      
+      console.log(`📦 Calculando custos em batch para ${categoria}: ${receitas.length} receitas`);
+      const resultados = new Map<string, number>();
+      
+      // Limitar a 15 receitas por categoria para controlar timeout
+      const receitasLimitadas = receitas.slice(0, 15);
+      
+      // Buscar todos os ingredientes de uma vez
+      const receitaIds = receitasLimitadas.map(r => r.id);
+      const { data: todosIngredientes } = await supabase
+        .from('receita_ingredientes')
+        .select('receita_id_legado, produto_base_id, quantidade, unidade')
+        .in('receita_id_legado', receitaIds);
+      
+      if (!todosIngredientes?.length) {
+        batchCache.set(cacheKey, resultados);
+        return resultados;
+      }
+      
+      // Buscar todos os preços de uma vez
+      const todosProdutoIds = [...new Set(todosIngredientes.map(ing => ing.produto_base_id))];
+      const { data: todosPrecos } = await supabase
+        .from('co_solicitacao_produto_listagem')
+        .select('produto_base_id, preco, produto_base_quantidade_embalagem, em_promocao_sim_nao')
+        .in('produto_base_id', todosProdutoIds)
+        .order('criado_em', { ascending: false });
+      
+      // Processar cada receita
+      for (const receita of receitasLimitadas) {
+        const ingredientesReceita = todosIngredientes.filter(ing => ing.receita_id_legado === receita.id);
+        
+        if (!ingredientesReceita.length) continue;
+        
+        let custoTotal = 0;
+        let ingredientesComPreco = 0;
+        
+        for (const ingrediente of ingredientesReceita) {
+          const preco = todosPrecos?.find(p => p.produto_base_id === ingrediente.produto_base_id);
+          if (preco && preco.preco > 0) {
+            const quantidadeEmbalagem = preco.produto_base_quantidade_embalagem || 1000;
+            const custoIngrediente = (ingrediente.quantidade / quantidadeEmbalagem) * preco.preco;
+            const custoFinal = preco.em_promocao_sim_nao ? custoIngrediente * 0.9 : custoIngrediente;
+            custoTotal += custoFinal;
+            ingredientesComPreco++;
+          }
+        }
+        
+        // Só aceitar se conseguiu calcular pelo menos 80% dos ingredientes
+        const percentualCalculado = (ingredientesComPreco / ingredientesReceita.length) * 100;
+        if (percentualCalculado >= 80) {
+          resultados.set(receita.id, custoTotal);
+          console.log(`✅ ${receita.id}: R$ ${custoTotal.toFixed(2)} (${ingredientesComPreco}/${ingredientesReceita.length})`);
+        }
+      }
+      
+      batchCache.set(cacheKey, resultados);
+      console.log(`📦 Batch ${categoria}: ${resultados.size}/${receitasLimitadas.length} receitas calculadas`);
+      return resultados;
+    }
+
     // Função para selecionar receita com controle de variedade (otimizada)
     async function selecionarReceitaComVariedade(receitasDisponiveis: any[], categoria: string, receitasUsadas: Set<string>, receitasDoDia: any[], budgetPerMeal?: number): Promise<any> {
       console.log(`🎯 Selecionando receita para ${categoria}, disponíveis: ${receitasDisponiveis.length}`);
       
-      // Filtrar receitas já usadas na semana
-      let candidatas = receitasDisponiveis.filter(receita => !receitasUsadas.has(receita.id));
+      // Calcular custos em batch primeiro
+      const custosBatch = await calcularCustosBatch(receitasDisponiveis, categoria);
       
-      // Se todas foram usadas, usar todas novamente
+      // Filtrar apenas receitas com custos calculáveis
+      let candidatas = receitasDisponiveis.filter(receita => 
+        custosBatch.has(receita.id) && !receitasUsadas.has(receita.id)
+      );
+      
+      // Se todas foram usadas, usar todas com custos calculáveis
       if (candidatas.length === 0) {
-        candidatas = [...receitasDisponiveis];
-        console.log(`♻️ Todas as receitas de ${categoria} já foram usadas, reiniciando pool`);
+        candidatas = receitasDisponiveis.filter(receita => custosBatch.has(receita.id));
+        console.log(`♻️ Reiniciando pool para ${categoria}: ${candidatas.length} receitas`);
+      }
+      
+      if (candidatas.length === 0) {
+        console.log(`❌ Nenhuma receita calculável para ${categoria}`);
+        return null;
       }
 
-      // Se há orçamento, aplicar filtro mais simples para evitar timeout
+      // Aplicar filtro de orçamento
       if (budgetPerMeal) {
         const custoMaximoCategoria = getCustoMaximoCategoria(categoria, budgetPerMeal);
         console.log(`💰 Orçamento máximo para ${categoria}: R$ ${custoMaximoCategoria.toFixed(2)}`);
         
-        // Filtrar por orçamento usando apenas receitas com custo calculável
-        const candidatasDentroOrcamento = [];
-        for (const receita of candidatas) {
-          const custoReal = await calcularCustoReal(receita.id);
-          if (custoReal !== null && custoReal <= custoMaximoCategoria) {
-            candidatasDentroOrcamento.push(receita);
-          }
-        }
+        const candidatasDentroOrcamento = candidatas.filter(receita => {
+          const custo = custosBatch.get(receita.id)!;
+          return custo <= custoMaximoCategoria;
+        });
         
         if (candidatasDentroOrcamento.length > 0) {
           candidatas = candidatasDentroOrcamento;
-          console.log(`💰 ${candidatasDentroOrcamento.length} receitas dentro do orçamento estimado para ${categoria}`);
+          console.log(`💰 ${candidatasDentroOrcamento.length} receitas dentro do orçamento`);
         } else {
           console.log(`⚠️ Usando orçamento flexível para ${categoria}`);
-          // Manter todas as candidatas se nenhuma passar no filtro
         }
       }
 
@@ -264,10 +339,23 @@ Deno.serve(async (req) => {
       return receitaSelecionada;
     }
 
+    // Função com timeout para evitar CPU exceeded
+    async function gerarCardapioComTimeout(proteinConfig = {}, includeWeekends = false, budgetPerMeal = null) {
+      const TIMEOUT_MS = 25000; // 25 segundos
+      const startTime = Date.now();
+      
+      return Promise.race([
+        gerarCardapioValidado(proteinConfig, includeWeekends, budgetPerMeal),
+        new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Timeout na geração do cardápio')), TIMEOUT_MS)
+        )
+      ]);
+    }
+
     // Gerar cardápio usando apenas receitas com ingredientes (otimizado)
     async function gerarCardapioValidado(proteinConfig = {}, includeWeekends = false, budgetPerMeal = null) {
       const startTime = Date.now();
-      console.log('🚀 Iniciando geração de cardápio otimizada');
+      console.log('🚀 Iniciando geração de cardápio otimizada com timeout');
       
       const categorias = [
         'Prato Principal 1',
@@ -284,9 +372,15 @@ Deno.serve(async (req) => {
 
       const receitasPorCategoria = {};
       
-      // Buscar receitas para cada categoria
+      // Buscar receitas para cada categoria com limite
       for (const categoria of categorias) {
         receitasPorCategoria[categoria] = await buscarReceitasComIngredientes(categoria);
+        
+        // Verificar timeout a cada categoria
+        if (Date.now() - startTime > 20000) {
+          console.log('⏰ Timeout detectado, finalizando busca de receitas');
+          break;
+        }
       }
 
       // Controle de variedade - rastrear receitas usadas na semana
@@ -319,11 +413,13 @@ Deno.serve(async (req) => {
             // Marcar receita como usada
             receitasUsadas.add(receitaSelecionada.id);
             
-            // Calcular custo real da receita - PULAR se não conseguir
-            const custoReal = await calcularCustoReal(receitaSelecionada.id);
-            if (custoReal === null) {
+            // Obter custo do batch cache
+            const custosBatch = await calcularCustosBatch(receitasDisponiveis, categoria);
+            const custoReal = custosBatch.get(receitaSelecionada.id);
+            
+            if (custoReal === undefined) {
               console.log(`❌ PULANDO receita ${receitaSelecionada.nome} - custo não calculável`);
-              continue; // Pular para próxima categoria
+              continue;
             }
             
             let custoAjustado = custoReal;
@@ -357,6 +453,12 @@ Deno.serve(async (req) => {
             // PULAR categoria se não houver receitas com ingredientes calculáveis
             console.log(`❌ PULANDO categoria ${categoria} - sem receitas com custos calculáveis`);
           }
+        }
+
+        // Verificar timeout durante geração
+        if (Date.now() - startTime > 22000) {
+          console.log('⏰ Timeout detectado durante geração do dia, finalizando');
+          break;
         }
 
         // Verificar se o custo total do dia está dentro do orçamento
@@ -429,11 +531,78 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Gerar cardápio validado por padrão
+    if (action === 'generate_validated_menu') {
+      const { 
+        protein_config = {}, 
+        include_weekends = false, 
+        budget_per_meal = null 
+      } = requestData;
+
+      try {
+        // Usar função com timeout
+        const resultado = await gerarCardapioComTimeout(
+          protein_config, 
+          include_weekends, 
+          budget_per_meal
+        );
+
+        return new Response(
+          JSON.stringify({
+            success: true,
+            data: resultado
+          }),
+          {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+          }
+        );
+      } catch (error) {
+        console.error('❌ Erro na geração do cardápio:', error);
+        
+        // Se for timeout, retornar cardápio parcial
+        if (error.message.includes('Timeout')) {
+          return new Response(
+            JSON.stringify({
+              success: false,
+              timeout: true,
+              error: 'Geração interrompida por timeout - use cardápio parcial ou tente novamente',
+              data: {
+                cardapio_semanal: [],
+                resumo: {
+                  erro: 'Timeout na geração - cálculos muito complexos'
+                }
+              }
+            }),
+            {
+              status: 408,
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+            }
+          );
+        }
+        
+        return new Response(
+          JSON.stringify({
+            success: false,
+            error: error.message,
+            data: {
+              cardapio_semanal: [],
+              resumo: {
+                erro: 'Falha na geração do cardápio'
+              }
+            }
+          }),
+          {
+            status: 500,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+          }
+        );
+      }
+    }
+
+    // Fallback: Gerar cardápio padrão
     const proteinConfig = requestData.protein_config || {};
     const includeWeekends = requestData.include_weekends || false;
     const budgetPerMeal = requestData.budgetPerMeal || null;
-    const cardapioValidado = await gerarCardapioValidado(proteinConfig, includeWeekends, budgetPerMeal);
+    const cardapioValidado = await gerarCardapioComTimeout(proteinConfig, includeWeekends, budgetPerMeal);
 
     return new Response(
       JSON.stringify({
