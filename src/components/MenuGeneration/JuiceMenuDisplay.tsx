@@ -23,7 +23,7 @@ interface JuiceConfigResult {
 }
 
 interface JuiceMenuDisplayProps {
-  juiceConfig: JuiceConfigResult;
+  juiceConfig?: JuiceConfigResult | null;
 }
 
 export const JuiceMenuDisplay: React.FC<JuiceMenuDisplayProps> = ({ juiceConfig }) => {

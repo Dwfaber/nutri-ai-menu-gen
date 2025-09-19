@@ -46,7 +46,7 @@ const WeeklyMenuView: React.FC<WeeklyMenuViewProps> = ({
   };
 
   // Caso já receba menu pronto (ex: vindo de Cardapios.tsx)
-  if (menu) {
+  if (menu) { try {
     console.log('WeeklyMenuView received menu:', menu);
     
     // Check for saved menu format: menu_data.cardapio_semanal
@@ -69,7 +69,7 @@ const WeeklyMenuView: React.FC<WeeklyMenuViewProps> = ({
     }
     
     // Support validated menu format: top-level cardapio_semanal
-    const validatedWeekly = (menu as any).cardapio_semanal;
+    const validatedWeekly = (menu as any)?.cardapio_semanal;
     if (validatedWeekly && Array.isArray(validatedWeekly)) {
       console.log('Found validated cardapio_semanal format:', validatedWeekly);
       return (
@@ -141,9 +141,19 @@ const WeeklyMenuView: React.FC<WeeklyMenuViewProps> = ({
     }
     
     console.log('No recognized menu format found');
-  }
+   } catch (error) {
+     console.error('WeeklyMenuView menu parsing error:', error, menu);
+     return (
+       <div className="min-h-screen bg-gray-100 py-8">
+         <div className="container mx-auto px-4 text-gray-500">
+           Falha ao interpretar o cardápio recebido.
+         </div>
+       </div>
+     );
+   }
 
-  // Gera menu chamando Edge Function quando não recebe pronto
+   }
+   // Gera menu chamando Edge Function quando não recebe pronto
   useEffect(() => {
     const fetchMenu = async () => {
       if (!clienteId) return;
