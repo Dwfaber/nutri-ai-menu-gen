@@ -178,7 +178,7 @@ Deno.serve(async (req) => {
     }
 
     // Função para selecionar receita com controle de variedade (otimizada)
-    function selecionarReceitaComVariedade(receitasDisponiveis: any[], categoria: string, receitasUsadas: Set<string>, receitasDoDia: any[], budgetPerMeal?: number): any {
+    async function selecionarReceitaComVariedade(receitasDisponiveis: any[], categoria: string, receitasUsadas: Set<string>, receitasDoDia: any[], budgetPerMeal?: number): Promise<any> {
       console.log(`🎯 Selecionando receita para ${categoria}, disponíveis: ${receitasDisponiveis.length}`);
       
       // Filtrar receitas já usadas na semana
@@ -308,7 +308,7 @@ Deno.serve(async (req) => {
           
           if (receitasDisponiveis && receitasDisponiveis.length > 0) {
             // Usar seleção inteligente com controle de variedade
-            const receitaSelecionada = selecionarReceitaComVariedade(
+            const receitaSelecionada = await selecionarReceitaComVariedade(
               receitasDisponiveis, 
               categoria, 
               receitasUsadas, 
