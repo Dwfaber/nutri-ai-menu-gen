@@ -71,6 +71,8 @@ Deno.serve(async (req) => {
         'Guarnição',
         'Salada 1',
         'Salada 2',
+        'Suco 1',
+        'Suco 2',
         'Sobremesa'
       ];
 
@@ -166,6 +168,8 @@ Deno.serve(async (req) => {
         'Guarnição': 0.80,
         'Salada 1': 0.50,
         'Salada 2': 0.60,
+        'Suco 1': 0.25,
+        'Suco 2': 0.25,
         'Sobremesa': 0.50
       };
       return custos[categoria] || 1.00;
@@ -180,6 +184,8 @@ Deno.serve(async (req) => {
         'Guarnição': { id: 1401, nome: "BATATA COZIDA", custo: 0.80 },
         'Salada 1': { id: 1501, nome: "SALADA MISTA", custo: 0.50 },
         'Salada 2': { id: 1502, nome: "LEGUMES COZIDOS", custo: 0.60 },
+        'Suco 1': { id: 1701, nome: "SUCO NATURAL", custo: 0.25 },
+        'Suco 2': { id: 1702, nome: "ÁGUA AROMATIZADA", custo: 0.25 },
         'Sobremesa': { id: 1601, nome: "FRUTA DA ESTAÇÃO", custo: 0.50 }
       };
       return fallbacks[categoria] || null;
@@ -191,7 +197,7 @@ Deno.serve(async (req) => {
 
     if (action === 'check_recipes_with_ingredients') {
       // Retornar apenas estatísticas sobre receitas com ingredientes
-      const categorias = ['Prato Principal 1', 'Prato Principal 2', 'Arroz Branco', 'Feijão', 'Guarnição', 'Salada 1', 'Salada 2', 'Sobremesa'];
+      const categorias = ['Prato Principal 1', 'Prato Principal 2', 'Arroz Branco', 'Feijão', 'Guarnição', 'Salada 1', 'Salada 2', 'Suco 1', 'Suco 2', 'Sobremesa'];
       const resultado = {};
       
       for (const categoria of categorias) {
