@@ -233,6 +233,7 @@ Deno.serve(async (req) => {
       
       const percentual = distribuicaoOrcamento[categoria] || 0.1;
       return budgetTotal * percentual;
+    }
 
     function getFallbackReceita(categoria: string) {
       const fallbacks = {
