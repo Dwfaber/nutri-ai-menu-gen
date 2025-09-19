@@ -62,7 +62,7 @@ Deno.serve(async (req) => {
     }
 
     // Gerar cardápio usando apenas receitas com ingredientes
-    async function gerarCardapioValidado(proteinConfig = {}, includeWeekends = false) {
+    async function gerarCardapioValidado(proteinConfig = {}, includeWeekends = false, budgetPerMeal = null) {
       const categorias = [
         'Prato Principal 1',
         'Prato Principal 2', 
@@ -97,15 +97,40 @@ Deno.serve(async (req) => {
           const receitasDisponiveis = receitasPorCategoria[categoria];
           
           if (receitasDisponiveis && receitasDisponiveis.length > 0) {
-            // Selecionar aleatoriamente uma receita da categoria
-            const receitaSelecionada = receitasDisponiveis[Math.floor(Math.random() * receitasDisponiveis.length)];
+            // Filtrar receitas por orçamento se especificado
+            let receitasFiltradas = receitasDisponiveis;
+            if (budgetPerMeal) {
+              const custoMaximoCategoria = getCustoMaximoCategoria(categoria, budgetPerMeal);
+              receitasFiltradas = receitasDisponiveis.filter(receita => {
+                const custoEstimado = getCustoEstimado(categoria);
+                return custoEstimado <= custoMaximoCategoria;
+              });
+              
+              // Se não houver receitas dentro do orçamento, usar as mais baratas
+              if (receitasFiltradas.length === 0) {
+                receitasFiltradas = receitasDisponiveis;
+              }
+            }
+            
+            // Selecionar aleatoriamente uma receita da categoria filtrada
+            const receitaSelecionada = receitasFiltradas[Math.floor(Math.random() * receitasFiltradas.length)];
             
             // Aplicar gramagem das proteínas
             let displayName = receitaSelecionada.nome;
+            let custoAjustado = getCustoEstimado(categoria);
+            
             if (categoria === 'Prato Principal 1' && proteinConfig.protein_grams_pp1) {
               displayName = `${receitaSelecionada.nome} ${proteinConfig.protein_grams_pp1}G`;
+              // Ajustar custo baseado na gramagem (100g = custo base, 90g = 10% menor)
+              if (proteinConfig.protein_grams_pp1 === 90) {
+                custoAjustado = custoAjustado * 0.9;
+              }
             } else if (categoria === 'Prato Principal 2' && proteinConfig.protein_grams_pp2) {
               displayName = `${receitaSelecionada.nome} ${proteinConfig.protein_grams_pp2}G`;
+              // Ajustar custo baseado na gramagem (100g = custo base, 90g = 10% menor)
+              if (proteinConfig.protein_grams_pp2 === 90) {
+                custoAjustado = custoAjustado * 0.9;
+              }
             }
             
             receitasDia.push({
@@ -113,7 +138,7 @@ Deno.serve(async (req) => {
               name: displayName,
               category: categoria,
               day: dia,
-              cost: getCustoEstimado(categoria)
+              cost: custoAjustado
             });
           } else {
             // Fallback se não houver receitas com ingredientes
@@ -121,10 +146,18 @@ Deno.serve(async (req) => {
             if (fallback) {
               // Aplicar gramagem nas proteínas também para fallback
               let displayName = fallback.nome;
+              let custoAjustado = fallback.custo;
+              
               if (categoria === 'Prato Principal 1' && proteinConfig.protein_grams_pp1) {
                 displayName = `${fallback.nome} ${proteinConfig.protein_grams_pp1}G`;
+                if (proteinConfig.protein_grams_pp1 === 90) {
+                  custoAjustado = custoAjustado * 0.9;
+                }
               } else if (categoria === 'Prato Principal 2' && proteinConfig.protein_grams_pp2) {
                 displayName = `${fallback.nome} ${proteinConfig.protein_grams_pp2}G`;
+                if (proteinConfig.protein_grams_pp2 === 90) {
+                  custoAjustado = custoAjustado * 0.9;
+                }
               }
               
               receitasDia.push({
@@ -132,10 +165,18 @@ Deno.serve(async (req) => {
                 name: displayName,
                 category: categoria,
                 day: dia,
-                cost: fallback.custo,
+                cost: custoAjustado,
                 warning: `⚠️ Receita fallback - categoria ${categoria} sem ingredientes`
               });
             }
+          }
+        }
+
+        // Verificar se o custo total do dia está dentro do orçamento
+        if (budgetPerMeal) {
+          const custoTotalDia = receitasDia.reduce((sum, receita) => sum + (receita.cost || 0), 0);
+          if (custoTotalDia > budgetPerMeal) {
+            console.log(`⚠️ ${dia}: Custo R$ ${custoTotalDia.toFixed(2)} excede orçamento R$ ${budgetPerMeal.toFixed(2)}`);
           }
         }
 
@@ -174,6 +215,24 @@ Deno.serve(async (req) => {
       };
       return custos[categoria] || 1.00;
     }
+
+    function getCustoMaximoCategoria(categoria: string, budgetTotal: number): number {
+      // Distribuir orçamento proporcionalmente entre categorias
+      const distribuicaoOrcamento = {
+        'Prato Principal 1': 0.30,  // 30% do orçamento
+        'Prato Principal 2': 0.25,  // 25% do orçamento
+        'Arroz Branco': 0.05,       // 5% do orçamento
+        'Feijão': 0.05,             // 5% do orçamento
+        'Guarnição': 0.12,          // 12% do orçamento
+        'Salada 1': 0.08,           // 8% do orçamento
+        'Salada 2': 0.08,           // 8% do orçamento
+        'Suco 1': 0.03,             // 3% do orçamento
+        'Suco 2': 0.03,             // 3% do orçamento
+        'Sobremesa': 0.08           // 8% do orçamento
+      };
+      
+      const percentual = distribuicaoOrcamento[categoria] || 0.1;
+      return budgetTotal * percentual;
 
     function getFallbackReceita(categoria: string) {
       const fallbacks = {
@@ -219,7 +278,8 @@ Deno.serve(async (req) => {
     // Gerar cardápio validado por padrão
     const proteinConfig = requestData.protein_config || {};
     const includeWeekends = requestData.include_weekends || false;
-    const cardapioValidado = await gerarCardapioValidado(proteinConfig, includeWeekends);
+    const budgetPerMeal = requestData.budgetPerMeal || null;
+    const cardapioValidado = await gerarCardapioValidado(proteinConfig, includeWeekends, budgetPerMeal);
 
     return new Response(
       JSON.stringify({
