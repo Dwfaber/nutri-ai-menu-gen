@@ -62,7 +62,7 @@ Deno.serve(async (req) => {
     }
 
     // Gerar cardápio usando apenas receitas com ingredientes
-    async function gerarCardapioValidado(proteinConfig = {}) {
+    async function gerarCardapioValidado(proteinConfig = {}, includeWeekends = false) {
       const categorias = [
         'Prato Principal 1',
         'Prato Principal 2', 
@@ -81,8 +81,10 @@ Deno.serve(async (req) => {
         receitasPorCategoria[categoria] = await buscarReceitasComIngredientes(categoria);
       }
 
-      // Gerar cardápio semanal (5 dias)
-      const diasSemana = ['Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira'];
+      // Gerar cardápio semanal (5 ou 7 dias dependendo da configuração)
+      const diasSemana = includeWeekends 
+        ? ['Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado', 'Domingo']
+        : ['Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira'];
       const cardapioSemanal = [];
 
       for (const dia of diasSemana) {
@@ -210,7 +212,8 @@ Deno.serve(async (req) => {
 
     // Gerar cardápio validado por padrão
     const proteinConfig = requestData.protein_config || {};
-    const cardapioValidado = await gerarCardapioValidado(proteinConfig);
+    const includeWeekends = requestData.include_weekends || false;
+    const cardapioValidado = await gerarCardapioValidado(proteinConfig, includeWeekends);
 
     return new Response(
       JSON.stringify({

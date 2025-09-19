@@ -163,7 +163,8 @@ export function useSimplifiedMenuGeneration() {
           protein_config: {
             protein_grams_pp1: (clientToUse as any).protein_grams_pp1 || 100,
             protein_grams_pp2: (clientToUse as any).protein_grams_pp2 || 90
-          }
+          },
+          include_weekends: periodDays === 7
         }
       });
 
