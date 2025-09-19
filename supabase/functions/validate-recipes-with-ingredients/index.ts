@@ -517,12 +517,12 @@ Deno.serve(async (req) => {
         'Prato Principal 2', 
         'Arroz Branco',
         'Feijão',
+        'Sobremesa',  // Movida para antes para evitar timeout
         'Guarnição',
         'Salada 1',
         'Salada 2',
         'Suco 1',
-        'Suco 2',
-        'Sobremesa'
+        'Suco 2'
       ];
 
       const receitasPorCategoria = {};
