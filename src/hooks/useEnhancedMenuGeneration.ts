@@ -102,7 +102,7 @@ export const useEnhancedMenuGeneration = () => {
       const [proteinRecipes, garnishRecipes, saladRecipes, sobremesaRecipes] = await Promise.all([
         loadRecipesByCategory(['Prato Principal 1', 'Prato Principal 2']),
         loadRecipesByCategory(['Guarnição']),
-        loadRecipesByCategory(['Salada']),
+        loadRecipesByCategory(['Salada 1', 'Salada 2']),
         loadRecipesByCategory(['Sobremesa'])
       ]);
 
@@ -133,8 +133,8 @@ export const useEnhancedMenuGeneration = () => {
         const selectedGarnish = selectOptimalRecipe(garnishSuggestions, garnishRecipes, weeklyRecipes, 'GUARNICAO');
 
         // Select salads with variety logic
-        const selectedSalad1 = selectSaladWithVariety(saladRecipes, weeklyRecipes, 'verduras_folhas');
-        const selectedSalad2 = selectSaladWithVariety(saladRecipes, weeklyRecipes, 'legumes');
+        const selectedSalad1 = selectSaladWithVariety(saladRecipes, weeklyRecipes, 'Salada 1');
+        const selectedSalad2 = selectSaladWithVariety(saladRecipes, weeklyRecipes, 'Salada 2');
 
         // Select juices based on configuration
         const [selectedSuco1, selectedSuco2] = selectJuicesForDay(juiceConfig);
@@ -281,12 +281,9 @@ export const useEnhancedMenuGeneration = () => {
     };
   };
 
-  const selectSaladWithVariety = (saladRecipes: any[], usedRecipes: any[], preferredType: string) => {
-    // Try to find salad of preferred type that hasn't been used
-    const preferredSalads = saladRecipes.filter(s => {
-      const mapping = saladMappings.find(m => m.receita_id === s.receita_id_legado);
-      return mapping?.tipo === preferredType;
-    });
+  const selectSaladWithVariety = (saladRecipes: any[], usedRecipes: any[], targetCategory: string) => {
+    // Filter salads by categoria_descricao directly
+    const preferredSalads = saladRecipes.filter(s => s.categoria_descricao === targetCategory);
 
     const unused = preferredSalads.filter(s => !usedRecipes.some(u => u.id === s.receita_id_legado));
     const selected = unused[Math.floor(Math.random() * unused.length)] || 
@@ -296,7 +293,7 @@ export const useEnhancedMenuGeneration = () => {
     return selected ? {
       id: selected.receita_id_legado,
       nome: selected.nome_receita,
-      categoria: 'Salada',
+      categoria: selected.categoria_descricao,
       cost: 0.4
     } : null;
   };
