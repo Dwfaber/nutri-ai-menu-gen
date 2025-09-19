@@ -150,29 +150,37 @@ Deno.serve(async (req) => {
           return null;
         }
 
-        // Selecionar menor preço por produto_base_id (com exceção especial para receita 1724)
-        const melhoresPrecos = new Map();
+        // Calcular preço médio por produto_base_id
+        const precosAgrupados = new Map();
+        
+        // Agrupar preços por produto_base_id
         for (const preco of todosPrecos) {
           const key = preco.produto_base_id;
-          
-          // Caso especial para receita 1724 (CAFÉ CORTESIA) - forçar preço específico para café (produto_base_id = 67)
-          if (receitaId === '1724' && key === 67) {
-            // Buscar especificamente o preço R$ 33.07 ou o mais próximo acima de R$ 30
-            const precosParaCafe = todosPrecos.filter(p => p.produto_base_id === 67);
-            const precoEspecifico = precosParaCafe.find(p => Math.abs(p.preco - 33.07) < 0.1);
-            const precoAlternativo = precosParaCafe.filter(p => p.preco > 30).sort((a, b) => a.preco - b.preco)[0];
-            
-            const precoEscolhido = precoEspecifico || precoAlternativo || precosParaCafe.sort((a, b) => b.preco - a.preco)[0];
-            if (precoEscolhido) {
-              melhoresPrecos.set(key, precoEscolhido);
-              console.log(`☕ CAFÉ CORTESIA: Usando preço específico R$${precoEscolhido.preco} para café (produto_base_id: ${key})`);
-              continue;
-            }
+          if (!precosAgrupados.has(key)) {
+            precosAgrupados.set(key, []);
           }
-          
-          // Lógica normal para outros produtos/receitas
-          if (!melhoresPrecos.has(key)) {
-            melhoresPrecos.set(key, preco);
+          precosAgrupados.get(key).push(preco);
+        }
+        
+        // Calcular média e criar mapa de melhores preços
+        const melhoresPrecos = new Map();
+        for (const [produtoBaseId, precos] of precosAgrupados) {
+          if (precos.length === 1) {
+            // Único fornecedor, usar preço direto
+            melhoresPrecos.set(produtoBaseId, precos[0]);
+          } else {
+            // Múltiplos fornecedores, calcular média
+            const somaPrecos = precos.reduce((sum, p) => sum + p.preco, 0);
+            const precoMedio = somaPrecos / precos.length;
+            
+            // Criar objeto com preço médio baseado no primeiro produto
+            const precoMedioObj = {
+              ...precos[0],
+              preco: precoMedio
+            };
+            
+            melhoresPrecos.set(produtoBaseId, precoMedioObj);
+            console.log(`📊 Produto ${produtoBaseId}: ${precos.length} fornecedores, preço médio R$${precoMedio.toFixed(2)} (preços: ${precos.map(p => `R$${p.preco}`).join(', ')})`);
           }
         }
 
