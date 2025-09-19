@@ -288,8 +288,7 @@ export function MenuDayCarousel({ menu }: MenuDayCarouselProps) {
       { name: 'CAFÉ COMPLEMENTAR', cost: 0.34, slot: 'coffee' },   // 0.67 ÷ 2
       { name: 'KIT DESCARTÁVEL', cost: 0.08, slot: 'disposable_kit' }, // 0.16 ÷ 2
       { name: 'KIT LIMPEZA', cost: 0.03, slot: 'cleaning_kit' },   // 0.05 ÷ 2
-      { name: 'KIT TEMPEROS MESA', cost: 0.05, slot: 'seasoning_kit' }, // 0.09 ÷ 2
-      { name: 'PÃO FRANCÊS MINI', cost: 0.03, slot: 'bread' }      // 0.06 ÷ 2
+      { name: 'KIT TEMPEROS MESA', cost: 0.05, slot: 'seasoning_kit' } // 0.09 ÷ 2
     ];
 
     // Get existing base items and deduplicate by slot
