@@ -229,8 +229,8 @@ Deno.serve(async (req) => {
       console.log(`📦 Calculando custos em batch para ${categoria}: ${receitas.length} receitas (${mealQuantity} porções)`);
       const resultados = new Map<string, number>();
       
-      // Limitar a 15 receitas por categoria para controlar timeout
-      const receitasLimitadas = receitas.slice(0, 15);
+      // Limitar a 10 receitas por categoria para otimizar velocidade
+      const receitasLimitadas = receitas.slice(0, 10);
       
       // Buscar todos os ingredientes de uma vez
       const receitaIds = receitasLimitadas.map(r => r.id);
@@ -318,8 +318,8 @@ Deno.serve(async (req) => {
       const stepStart = Date.now();
       console.log(`🎯 [${categoria}] Iniciando seleção - ${receitasDisponiveis?.length || 0} receitas disponíveis`);
       
-      // Verificar timeout antes de iniciar
-      if (timeoutStart && (Date.now() - timeoutStart) > 18000) {
+      // Verificar timeout antes de iniciar (reduzido para 25 segundos)
+      if (timeoutStart && (Date.now() - timeoutStart) > 25000) {
         console.log(`⏰ [${categoria}] Timeout preventivo - usando primeira receita disponível`);
         if (receitasDisponiveis && receitasDisponiveis.length > 0) {
           const primeiraReceita = receitasDisponiveis[0];
@@ -341,8 +341,8 @@ Deno.serve(async (req) => {
         const custosBatch = await calcularCustosBatch(receitasDisponiveis, categoria, mealQuantity);
         console.log(`💰 [${categoria}] Custos calculados: ${custosBatch.size} receitas`);
         
-        // Verificar timeout após cálculo de custos
-        if (timeoutStart && (Date.now() - timeoutStart) > 18000) {
+        // Verificar timeout após cálculo de custos (reduzido para 25 segundos)
+        if (timeoutStart && (Date.now() - timeoutStart) > 25000) {
           console.log(`⏰ [${categoria}] Timeout após cálculo de custos - usando receita mais barata`);
           const receitaComCusto = receitasDisponiveis.find(r => custosBatch.has(r.id));
           if (receitaComCusto) {
@@ -474,9 +474,9 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Função com timeout para evitar CPU exceeded (reduzido e com logs)
+    // Função com timeout para evitar CPU exceeded (otimizado)
     async function gerarCardapioComTimeout(proteinConfig = {}, includeWeekends = false, budgetPerMeal = null, mealQuantity = 50) {
-      const TIMEOUT_MS = 45000; // 45 segundos para permitir processamento completo
+      const TIMEOUT_MS = 90000; // 90 segundos - timeout dobrado
       const startTime = Date.now();
       console.log(`⏰ Iniciando geração com timeout de ${TIMEOUT_MS}ms`);
       
@@ -485,7 +485,7 @@ Deno.serve(async (req) => {
         new Promise((_, reject) => 
           setTimeout(() => {
             console.log(`💥 TIMEOUT! Geração excedeu ${TIMEOUT_MS}ms`);
-            reject(new Error('Timeout na geração do cardápio'));
+            reject(new Error('Timeout na geração do cardápio - tente um período menor'));
           }, TIMEOUT_MS)
         )
       ]);
