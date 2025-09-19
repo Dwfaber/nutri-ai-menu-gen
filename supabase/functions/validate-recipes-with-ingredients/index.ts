@@ -662,20 +662,17 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Fallback: Gerar cardápio padrão
-    const proteinConfig = requestData.protein_config || {};
-    const includeWeekends = requestData.include_weekends || false;
-    const budgetPerMeal = requestData.budgetPerMeal || null;
-    const mealQuantity = requestData.meal_quantity || 50;
-    const cardapioValidado = await gerarCardapioComTimeout(proteinConfig, includeWeekends, budgetPerMeal, mealQuantity);
-
+    // Se chegou aqui, action não foi reconhecida
     return new Response(
       JSON.stringify({
-        success: true,
-        cardapio: cardapioValidado,
+        success: false,
+        error: `Ação não reconhecida: ${action}`,
         timestamp: new Date().toISOString()
       }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      { 
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 400
+      }
     );
 
   } catch (error) {
