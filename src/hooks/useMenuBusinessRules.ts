@@ -13,7 +13,7 @@ export interface MenuBusinessRules {
 }
 
 export interface MenuViolation {
-  type: 'protein_consecutive' | 'red_meat_limit' | 'monday_processing' | 'structure_incomplete' | 'ingredient_missing' | 'ingredient_substituted' | 'ingredient_zero_cost';
+  type: 'protein_consecutive' | 'red_meat_limit' | 'protein_duplicate_same_day' | 'monday_processing' | 'structure_incomplete' | 'ingredient_missing' | 'ingredient_substituted' | 'ingredient_zero_cost';
   message: string;
   day?: string;
   recipes?: string[];
@@ -234,6 +234,34 @@ export const useMenuBusinessRules = () => {
       }
     });
 
+    // Check for duplicate protein types on the same day
+    days.forEach(day => {
+      const dayRecipes = recipesByDay[day] || [];
+      const mainDishes = dayRecipes.filter(r => isPrincipal(r));
+      
+      if (mainDishes.length >= 2) {
+        const proteinTypes = mainDishes.map(r => classifyProtein(r.nome || r.name).type);
+        const proteinCounts: { [key: string]: number } = {};
+        
+        proteinTypes.forEach(type => {
+          proteinCounts[type] = (proteinCounts[type] || 0) + 1;
+        });
+        
+        Object.entries(proteinCounts).forEach(([type, count]) => {
+          if (count > 1) {
+            violations.push({
+              type: 'protein_duplicate_same_day',
+              message: `Proteína duplicada no mesmo dia (${type}): ${day}`,
+              day,
+              recipes: mainDishes
+                .filter(r => classifyProtein(r.nome || r.name).type === type)
+                .map(r => r.nome || r.name)
+            });
+          }
+        });
+      }
+    });
+
     return violations;
   };
 
@@ -303,7 +331,7 @@ export const useMenuBusinessRules = () => {
     ];
 
     return {
-      proteinVariety: !allViolations.some(v => v.type === 'protein_consecutive' || v.type === 'red_meat_limit'),
+      proteinVariety: !allViolations.some(v => v.type === 'protein_consecutive' || v.type === 'red_meat_limit' || v.type === 'protein_duplicate_same_day'),
       redMeatLimit: !allViolations.some(v => v.type === 'red_meat_limit'),
       mondayProcessing: !allViolations.some(v => v.type === 'monday_processing'),
       requiredStructure: !allViolations.some(v => v.type === 'structure_incomplete')
@@ -321,7 +349,7 @@ export const useMenuBusinessRules = () => {
     setViolations(allViolations);
 
     return {
-      proteinVariety: !allViolations.some(v => v.type === 'protein_consecutive' || v.type === 'red_meat_limit'),
+      proteinVariety: !allViolations.some(v => v.type === 'protein_consecutive' || v.type === 'red_meat_limit' || v.type === 'protein_duplicate_same_day'),
       redMeatLimit: !allViolations.some(v => v.type === 'red_meat_limit'),
       mondayProcessing: !allViolations.some(v => v.type === 'monday_processing'),
       requiredStructure: !allViolations.some(v => v.type === 'structure_incomplete')

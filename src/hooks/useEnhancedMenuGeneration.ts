@@ -59,7 +59,7 @@ export const useEnhancedMenuGeneration = () => {
   const [error, setError] = useState<string | null>(null);
   
   const { selectedClient } = useSelectedClient();
-  const { validateMenu, violations } = useMenuBusinessRules();
+  const { validateMenu, violations, classifyProtein } = useMenuBusinessRules();
   const { toast } = useToast();
 
   // Generate intelligent weekly menu
@@ -120,9 +120,9 @@ export const useEnhancedMenuGeneration = () => {
         
         console.log(`📅 Gerando cardápio para ${dayName}...`);
 
-        // Select recipes using categoria_descricao directly
+        // Select recipes using categoria_descricao directly with protein variety logic
         const selectedPP1 = selectRecipeByCategory(proteinRecipes, weeklyRecipes, 'Prato Principal 1');
-        const selectedPP2 = selectRecipeByCategory(proteinRecipes, weeklyRecipes, 'Prato Principal 2');
+        const selectedPP2 = selectRecipeByCategory(proteinRecipes, weeklyRecipes, 'Prato Principal 2', undefined, selectedPP1);
         const selectedGarnish = selectRecipeByCategory(garnishRecipes, weeklyRecipes, 'Guarnição');
 
         // Select salads with variety logic
@@ -248,9 +248,19 @@ export const useEnhancedMenuGeneration = () => {
   };
 
   // Generic function to select recipes by categoria_descricao
-  const selectRecipeByCategory = (availableRecipes: any[], usedRecipes: any[], targetCategory: string, fallback?: any) => {
+  const selectRecipeByCategory = (availableRecipes: any[], usedRecipes: any[], targetCategory: string, fallback?: any, avoidSameProteinAs?: any) => {
     // Filter recipes by categoria_descricao directly
-    const categoryRecipes = availableRecipes.filter(r => r.categoria_descricao === targetCategory);
+    let categoryRecipes = availableRecipes.filter(r => r.categoria_descricao === targetCategory);
+    
+    // If this is PP2 and we have PP1, avoid same protein type
+    if (avoidSameProteinAs && targetCategory === 'Prato Principal 2') {
+      const pp1ProteinType = classifyProtein(avoidSameProteinAs.nome).type;
+      
+      categoryRecipes = categoryRecipes.filter(recipe => {
+        const recipeProteinType = classifyProtein(recipe.nome_receita).type;
+        return recipeProteinType !== pp1ProteinType;
+      });
+    }
     
     if (categoryRecipes.length === 0) {
       return fallback || null;
