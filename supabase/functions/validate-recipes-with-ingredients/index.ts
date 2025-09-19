@@ -313,107 +313,180 @@ Deno.serve(async (req) => {
       return resultados;
     }
 
-    // Função para selecionar receita com controle de variedade (otimizada)
-    async function selecionarReceitaComVariedade(receitasDisponiveis: any[], categoria: string, receitasUsadas: Set<string>, receitasDoDia: any[], budgetPerMeal?: number, mealQuantity: number = 50): Promise<any> {
-      console.log(`🎯 Selecionando receita para ${categoria}, disponíveis: ${receitasDisponiveis.length}`);
+    // Função para selecionar receita com controle de variedade (com timeout e logs detalhados)
+    async function selecionarReceitaComVariedade(receitasDisponiveis: any[], categoria: string, receitasUsadas: Set<string>, receitasDoDia: any[], budgetPerMeal?: number, mealQuantity: number = 50, timeoutStart?: number): Promise<any> {
+      const stepStart = Date.now();
+      console.log(`🎯 [${categoria}] Iniciando seleção - ${receitasDisponiveis?.length || 0} receitas disponíveis`);
       
-      // Calcular custos em batch primeiro com quantidade correta
-      const custosBatch = await calcularCustosBatch(receitasDisponiveis, categoria, mealQuantity);
-      
-      // Filtrar apenas receitas com custos calculáveis
-      let candidatas = receitasDisponiveis.filter(receita => 
-        custosBatch.has(receita.id) && !receitasUsadas.has(receita.id)
-      );
-      
-      // Se todas foram usadas, usar todas com custos calculáveis
-      if (candidatas.length === 0) {
-        candidatas = receitasDisponiveis.filter(receita => custosBatch.has(receita.id));
-        console.log(`♻️ Reiniciando pool para ${categoria}: ${candidatas.length} receitas`);
-      }
-      
-      if (candidatas.length === 0) {
-        console.log(`❌ Nenhuma receita calculável para ${categoria}`);
+      // Verificar timeout antes de iniciar
+      if (timeoutStart && (Date.now() - timeoutStart) > 18000) {
+        console.log(`⏰ [${categoria}] Timeout preventivo - usando primeira receita disponível`);
+        if (receitasDisponiveis && receitasDisponiveis.length > 0) {
+          const primeiraReceita = receitasDisponiveis[0];
+          return {
+            id: primeiraReceita.receita_id_legado,
+            nome: primeiraReceita.nome_receita,
+            category: categoria,
+            cost: 1.00 // Custo fallback
+          };
+        }
         return null;
       }
 
-      // Aplicar filtro de orçamento
-      if (budgetPerMeal) {
-        const custoMaximoCategoria = getCustoMaximoCategoria(categoria, budgetPerMeal);
-        console.log(`💰 Orçamento máximo para ${categoria}: R$ ${custoMaximoCategoria.toFixed(2)}`);
+      try {
+        console.log(`🎯 [${categoria}] Selecionando receita, disponíveis: ${receitasDisponiveis.length}`);
         
-        const candidatasDentroOrcamento = candidatas.filter(receita => {
-          const custo = custosBatch.get(receita.id)!;
-          return custo <= custoMaximoCategoria;
-        });
+        // Calcular custos em batch primeiro com quantidade correta
+        console.log(`💰 [${categoria}] Calculando custos em batch...`);
+        const custosBatch = await calcularCustosBatch(receitasDisponiveis, categoria, mealQuantity);
+        console.log(`💰 [${categoria}] Custos calculados: ${custosBatch.size} receitas`);
         
-        if (candidatasDentroOrcamento.length > 0) {
-          candidatas = candidatasDentroOrcamento;
-          console.log(`💰 ${candidatasDentroOrcamento.length} receitas dentro do orçamento`);
-        } else {
-          console.log(`⚠️ Usando orçamento flexível para ${categoria}`);
+        // Verificar timeout após cálculo de custos
+        if (timeoutStart && (Date.now() - timeoutStart) > 18000) {
+          console.log(`⏰ [${categoria}] Timeout após cálculo de custos - usando receita mais barata`);
+          const receitaComCusto = receitasDisponiveis.find(r => custosBatch.has(r.id));
+          if (receitaComCusto) {
+            const custo = custosBatch.get(receitaComCusto.id) || 1.00;
+            return {
+              id: receitaComCusto.id,
+              nome: receitaComCusto.nome,
+              category: categoria,
+              cost: custo
+            };
+          }
+          return null;
         }
-      }
-
-      // Controle especial para proteínas para evitar repetição no mesmo dia
-      if (categoria === 'Prato Principal 1' || categoria === 'Prato Principal 2') {
-        const proteinaOposta = categoria === 'Prato Principal 1' ? 'Prato Principal 2' : 'Prato Principal 1';
-        const proteinaOpostaDoMesmodia = receitasDoDia.find(r => r.category === proteinaOposta);
         
-        if (proteinaOpostaDoMesmodia) {
-          const tipoProteinaOposta = getProteinType(proteinaOpostaDoMesmodia.name);
-          console.log(`🥩 Proteína oposta: ${proteinaOpostaDoMesmodia.name} (tipo: ${tipoProteinaOposta})`);
+        // Filtrar apenas receitas com custos calculáveis
+        let candidatas = receitasDisponiveis.filter(receita => 
+          custosBatch.has(receita.id) && !receitasUsadas.has(receita.id)
+        );
+        
+        // Se todas foram usadas, usar todas com custos calculáveis
+        if (candidatas.length === 0) {
+          candidatas = receitasDisponiveis.filter(receita => custosBatch.has(receita.id));
+          console.log(`♻️ [${categoria}] Reiniciando pool: ${candidatas.length} receitas`);
+        }
+        
+        if (candidatas.length === 0) {
+          console.log(`❌ [${categoria}] Nenhuma receita calculável`);
+          return null;
+        }
+
+        console.log(`✅ [${categoria}] ${candidatas.length} candidatas inicial`);
+
+        // Aplicar filtro de orçamento
+        if (budgetPerMeal) {
+          const custoMaximoCategoria = getCustoMaximoCategoria(categoria, budgetPerMeal);
+          console.log(`💰 [${categoria}] Orçamento máximo: R$ ${custoMaximoCategoria.toFixed(2)}`);
           
-          // Filtrar para evitar mesmo tipo de proteína
-          const candidatasDiferentesTipo = candidatas.filter(receita => {
-            const tipo = getProteinType(receita.nome);
-            return tipo !== tipoProteinaOposta;
+          const candidatasDentroOrcamento = candidatas.filter(receita => {
+            const custo = custosBatch.get(receita.id)!;
+            return custo <= custoMaximoCategoria;
           });
           
-          if (candidatasDiferentesTipo.length > 0) {
-            candidatas = candidatasDiferentesTipo;
-            console.log(`✅ Filtrado para tipo diferente de proteína: ${candidatas.length} opções`);
+          if (candidatasDentroOrcamento.length > 0) {
+            candidatas = candidatasDentroOrcamento;
+            console.log(`💰 [${categoria}] ${candidatasDentroOrcamento.length} receitas dentro do orçamento`);
           } else {
-            console.log(`⚠️ Não foi possível evitar repetição de tipo de proteína`);
+            console.log(`⚠️ [${categoria}] Usando orçamento flexível`);
           }
         }
-      }
 
-      // Controle especial para saladas para evitar repetição
-      if (categoria === 'Salada 1' || categoria === 'Salada 2') {
-        const saladaOposta = categoria === 'Salada 1' ? 'Salada 2' : 'Salada 1';
-        const saladaOpostaDoMesmoDia = receitasDoDia.find(r => r.category === saladaOposta);
+        // Controle especial para proteínas para evitar repetição no mesmo dia
+        if (categoria === 'Prato Principal 1' || categoria === 'Prato Principal 2') {
+          const proteinaOposta = categoria === 'Prato Principal 1' ? 'Prato Principal 2' : 'Prato Principal 1';
+          const proteinaOpostaDoMesmodia = receitasDoDia.find(r => r.category === proteinaOposta);
+          
+          if (proteinaOpostaDoMesmodia) {
+            const tipoProteinaOposta = getProteinType(proteinaOpostaDoMesmodia.name);
+            console.log(`🥩 [${categoria}] Proteína oposta: ${proteinaOpostaDoMesmodia.name} (tipo: ${tipoProteinaOposta})`);
+            
+            // Filtrar para evitar mesmo tipo de proteína
+            const candidatasDiferentesTipo = candidatas.filter(receita => {
+              const tipo = getProteinType(receita.nome);
+              return tipo !== tipoProteinaOposta;
+            });
+            
+            if (candidatasDiferentesTipo.length > 0) {
+              candidatas = candidatasDiferentesTipo;
+              console.log(`✅ [${categoria}] Filtrado para tipo diferente de proteína: ${candidatas.length} opções`);
+            } else {
+              console.log(`⚠️ [${categoria}] Não foi possível evitar repetição de tipo de proteína`);
+            }
+          }
+        }
+
+        // Controle especial para saladas para evitar repetição
+        if (categoria === 'Salada 1' || categoria === 'Salada 2') {
+          const saladaOposta = categoria === 'Salada 1' ? 'Salada 2' : 'Salada 1';
+          const saladaOpostaDoMesmoDia = receitasDoDia.find(r => r.category === saladaOposta);
+          
+          if (saladaOpostaDoMesmoDia) {
+            console.log(`🥗 [${categoria}] Salada oposta: ${saladaOpostaDoMesmoDia.name}`);
+            
+            // Filtrar para evitar salada idêntica no mesmo dia
+            const candidatasDiferentes = candidatas.filter(receita => 
+              receita.nome.toLowerCase() !== saladaOpostaDoMesmoDia.name.toLowerCase()
+            );
+            
+            if (candidatasDiferentes.length > 0) {
+              candidatas = candidatasDiferentes;
+              console.log(`✅ [${categoria}] Filtrado para salada diferente: ${candidatas.length} opções`);
+            }
+          }
+        }
+
+        console.log(`🔄 [${categoria}] Candidatas finais: ${candidatas.length}`);
+
+        // Selecionar da lista filtrada (priorizar por custo)
+        const receitaSelecionada = candidatas.sort((a, b) => {
+          const custoA = custosBatch.get(a.id) || 999;
+          const custoB = custosBatch.get(b.id) || 999;
+          return custoA - custoB; // Mais barata primeiro
+        })[0];
         
-        if (saladaOpostaDoMesmoDia) {
-          console.log(`🥗 Salada oposta: ${saladaOpostaDoMesmoDia.name}`);
-          
-          // Filtrar para evitar salada idêntica no mesmo dia
-          const candidatasDiferentes = candidatas.filter(receita => 
-            receita.nome.toLowerCase() !== saladaOpostaDoMesmoDia.name.toLowerCase()
-          );
-          
-          if (candidatasDiferentes.length > 0) {
-            candidatas = candidatasDiferentes;
-            console.log(`✅ Filtrado para salada diferente: ${candidatas.length} opções`);
-          }
+        if (receitaSelecionada) {
+          const tempoProcessamento = Date.now() - stepStart;
+          console.log(`✅ [${categoria}] Selecionada: ${receitaSelecionada.nome} (${tempoProcessamento}ms)`);
+          return receitaSelecionada;
         }
-      }
 
-      // Selecionar aleatoriamente da lista filtrada
-      const receitaSelecionada = candidatas[Math.floor(Math.random() * candidatas.length)];
-      console.log(`✅ Selecionada: ${receitaSelecionada.nome} para ${categoria}`);
-      
-      return receitaSelecionada;
+        console.log(`❌ [${categoria}] Falha na seleção`);
+        return null;
+        
+      } catch (error) {
+        console.error(`💥 [${categoria}] Erro na seleção:`, error);
+        
+        // Fallback: usar primeira receita disponível
+        if (receitasDisponiveis && receitasDisponiveis.length > 0) {
+          const receitaFallback = receitasDisponiveis[0];
+          console.log(`🆘 [${categoria}] Usando receita fallback: ${receitaFallback.nome}`);
+          return {
+            id: receitaFallback.receita_id_legado || receitaFallback.id,
+            nome: receitaFallback.nome_receita || receitaFallback.nome,
+            category: categoria,
+            cost: 1.00 // Custo fallback
+          };
+        }
+        
+        return null;
+      }
     }
 
-    // Função com timeout para evitar CPU exceeded
+    // Função com timeout para evitar CPU exceeded (reduzido e com logs)
     async function gerarCardapioComTimeout(proteinConfig = {}, includeWeekends = false, budgetPerMeal = null, mealQuantity = 50) {
-      const TIMEOUT_MS = 25000; // 25 segundos
+      const TIMEOUT_MS = 23000; // 23 segundos para dar margem
       const startTime = Date.now();
+      console.log(`⏰ Iniciando geração com timeout de ${TIMEOUT_MS}ms`);
       
       return Promise.race([
         gerarCardapioValidado(proteinConfig, includeWeekends, budgetPerMeal, mealQuantity),
         new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('Timeout na geração do cardápio')), TIMEOUT_MS)
+          setTimeout(() => {
+            console.log(`💥 TIMEOUT! Geração excedeu ${TIMEOUT_MS}ms`);
+            reject(new Error('Timeout na geração do cardápio'));
+          }, TIMEOUT_MS)
         )
       ]);
     }
@@ -459,73 +532,106 @@ Deno.serve(async (req) => {
       const cardapioSemanal = [];
 
       for (const dia of diasSemana) {
-        console.log(`📅 Gerando cardápio para ${dia}`);
+        console.log(`📅 [DIA] Gerando cardápio para ${dia}`);
         const receitasDia = [];
+
+        // Verificar timeout antes de cada dia
+        if (Date.now() - startTime > 20000) {
+          console.log(`⏰ [DIA] Timeout antes de ${dia}, finalizando cardápio`);
+          break;
+        }
 
         // Selecionar uma receita de cada categoria (ou fallback se não houver)
         for (const categoria of categorias) {
+          console.log(`🔄 [DIA] ${dia} - Processando categoria: ${categoria}`);
           const receitasDisponiveis = receitasPorCategoria[categoria];
           
+          // Verificar timeout durante processamento de categorias
+          if (Date.now() - startTime > 21000) {
+            console.log(`⏰ [DIA] Timeout durante ${categoria} em ${dia}, finalizando`);
+            break;
+          }
+          
           if (receitasDisponiveis && receitasDisponiveis.length > 0) {
-            // Usar seleção inteligente com controle de variedade
-            const receitaSelecionada = await selecionarReceitaComVariedade(
-              receitasDisponiveis, 
-              categoria, 
-              receitasUsadas, 
-              receitasDia, 
-              budgetPerMeal,
-              mealQuantity
-            );
-            
-            // Marcar receita como usada
-            receitasUsadas.add(receitaSelecionada.id);
-            
-            // Obter custo do batch cache (já calculado por porção)
-            const custosBatch = await calcularCustosBatch(receitasDisponiveis, categoria, mealQuantity);
-            const custoReal = custosBatch.get(receitaSelecionada.id);
-            
-            if (custoReal === undefined) {
-              console.log(`❌ PULANDO receita ${receitaSelecionada.nome} - custo não calculável`);
+            try {
+              // Usar seleção inteligente com controle de variedade e timeout
+              const receitaSelecionada = await selecionarReceitaComVariedade(
+                receitasDisponiveis, 
+                categoria, 
+                receitasUsadas, 
+                receitasDia, 
+                budgetPerMeal,
+                mealQuantity,
+                startTime // Passar tempo inicial para verificação de timeout
+              );
+              
+              if (!receitaSelecionada) {
+                console.log(`❌ [DIA] ${dia} - Não foi possível selecionar receita para ${categoria}`);
+                continue;
+              }
+              
+              // Marcar receita como usada
+              receitasUsadas.add(receitaSelecionada.id);
+              
+              // Obter custo do batch cache (já calculado por porção)
+              const custosBatch = await calcularCustosBatch(receitasDisponiveis, categoria, mealQuantity);
+              const custoReal = custosBatch.get(receitaSelecionada.id);
+              
+              if (custoReal === undefined) {
+                console.log(`❌ [DIA] ${dia} - PULANDO receita ${receitaSelecionada.nome} - custo não calculável`);
+                continue;
+              }
+              
+              let custoAjustado = custoReal;
+              console.log(`💰 [DIA] ${dia} - Usando custo real para ${receitaSelecionada.nome}: R$ ${custoReal.toFixed(2)}`);
+              
+              // Aplicar gramagem das proteínas
+              let displayName = receitaSelecionada.nome;
+              
+              if (categoria === 'Prato Principal 1' && proteinConfig.protein_grams_pp1) {
+                displayName = `${receitaSelecionada.nome} ${proteinConfig.protein_grams_pp1}G`;
+                // Ajustar custo baseado na gramagem (100g = custo base, 90g = 10% menor)
+                if (proteinConfig.protein_grams_pp1 === 90) {
+                  custoAjustado = custoAjustado * 0.9;
+                }
+              } else if (categoria === 'Prato Principal 2' && proteinConfig.protein_grams_pp2) {
+                displayName = `${receitaSelecionada.nome} ${proteinConfig.protein_grams_pp2}G`;
+                // Ajustar custo baseado na gramagem (100g = custo base, 90g = 10% menor)
+                if (proteinConfig.protein_grams_pp2 === 90) {
+                  custoAjustado = custoAjustado * 0.9;
+                }
+              }
+              
+              receitasDia.push({
+                id: receitaSelecionada.id,
+                name: displayName,
+                category: categoria,
+                day: dia,
+                cost: custoAjustado
+              });
+              
+              console.log(`✅ [DIA] ${dia} - ${categoria}: ${displayName} (R$ ${custoAjustado.toFixed(2)})`);
+              
+            } catch (error) {
+              console.error(`💥 [DIA] ${dia} - Erro ao processar ${categoria}:`, error);
+              // Continuar com próxima categoria
               continue;
             }
-            
-            let custoAjustado = custoReal;
-            console.log(`💰 Usando custo real para ${receitaSelecionada.nome}: R$ ${custoReal.toFixed(2)}`);
-            
-            // Aplicar gramagem das proteínas
-            let displayName = receitaSelecionada.nome;
-            
-            if (categoria === 'Prato Principal 1' && proteinConfig.protein_grams_pp1) {
-              displayName = `${receitaSelecionada.nome} ${proteinConfig.protein_grams_pp1}G`;
-              // Ajustar custo baseado na gramagem (100g = custo base, 90g = 10% menor)
-              if (proteinConfig.protein_grams_pp1 === 90) {
-                custoAjustado = custoAjustado * 0.9;
-              }
-            } else if (categoria === 'Prato Principal 2' && proteinConfig.protein_grams_pp2) {
-              displayName = `${receitaSelecionada.nome} ${proteinConfig.protein_grams_pp2}G`;
-              // Ajustar custo baseado na gramagem (100g = custo base, 90g = 10% menor)
-              if (proteinConfig.protein_grams_pp2 === 90) {
-                custoAjustado = custoAjustado * 0.9;
-              }
-            }
-            
-            receitasDia.push({
-              id: receitaSelecionada.id,
-              name: displayName,
-              category: categoria,
-              day: dia,
-              cost: custoAjustado
-            });
           } else {
             // PULAR categoria se não houver receitas com ingredientes calculáveis
-            console.log(`❌ PULANDO categoria ${categoria} - sem receitas com custos calculáveis`);
+            console.log(`❌ [DIA] ${dia} - PULANDO categoria ${categoria} - sem receitas com custos calculáveis`);
           }
         }
 
-        // Verificar timeout durante geração
+        // Verificar timeout após cada dia
         if (Date.now() - startTime > 22000) {
-          console.log('⏰ Timeout detectado durante geração do dia, finalizando');
+          console.log(`⏰ [DIA] Timeout após ${dia}, finalizando cardápio`);
           break;
+        }
+        
+        console.log(`✅ [DIA] ${dia} finalizado - ${receitasDia.length} receitas selecionadas`);
+        if (receitasDia.length > 0) {
+          cardapioSemanal.push({ dia, receitas: receitasDia });
         }
 
         // Verificar se o custo total do dia está dentro do orçamento
