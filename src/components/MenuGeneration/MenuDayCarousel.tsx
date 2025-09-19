@@ -575,16 +575,28 @@ export function MenuDayCarousel({ menu, optimizationResult }: MenuDayCarouselPro
       return correction.cost;
     }
     
+    // PRIORITY: Kit costs - aplicar ANTES de qualquer validação
+    const kitCosts: { [key: string]: number } = {
+      'CAFÉ COMPLEMENTAR': 0.12,
+      'CAFÉ CORTESIA': 0.12,
+      'KIT DESCARTÁVEL': 0.08,
+      'KIT LIMPEZA': 0.03,
+      'KIT TEMPEROS MESA': 0.05,
+      'PÃO FRANCÊS MINI': 0.03
+    };
+    
+    // Detectar kits primeiro - não pode ser sobrescrito
+    if (kitCosts[recipeName]) {
+      console.log(`🎯 Kit detectado - custo fixo: R$ ${kitCosts[recipeName].toFixed(2)}`);
+      return kitCosts[recipeName];
+    }
+
     // Enhanced fallback system com custos otimizados conhecidos
     const hardcodedOptimizedCosts: { [key: string]: number } = {
       'FEIJÃO CARIOCA': 0.85,
       'FEIJÃO (SÓ CARIOCA)': 0.85,
       'MACARRÃO SIMPLES': 0.45,
-      'FRANGO GRELHADO': 1.20,
-      'CAFÉ COMPLEMENTAR': 0.15,
-      'KIT DESCARTÁVEL': 0.30,
-      'KIT LIMPEZA': 0.25,
-      'KIT TEMPEROS MESA': 0.20
+      'FRANGO GRELHADO': 1.20
     };
     
     if (hardcodedOptimizedCosts[recipeName]) {
