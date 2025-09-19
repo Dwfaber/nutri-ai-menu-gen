@@ -304,24 +304,46 @@ Deno.serve(async (req) => {
         }
         
         const ingredientesUnicos = Array.from(ingredientesAgrupados.values());
+        
+        // Filtrar ingredientes duplicados na receita 580 (arroz) - manter apenas produto 558
+        let ingredientesFiltrados = ingredientesUnicos;
+        if (receita.id === '580') {
+          ingredientesFiltrados = ingredientesUnicos.filter(ing => ing.produto_base_id !== 38); // Remover Arroz emergência
+          console.log(`🍚 Batch Receita 580: Removido produto 38 (Arroz emergência), mantendo apenas produto 558`);
+        }
+
+        // Fator de escala baseado em receitas para 100 pessoas
+        const fatorEscala = mealQuantity / 100;
         let custoTotal = 0;
         let ingredientesComPreco = 0;
         
-        for (const ingrediente of ingredientesUnicos) {
+        for (const ingrediente of ingredientesFiltrados) {
+          // Tratamento especial para água (produto_base_id = 17)
+          if (ingrediente.produto_base_id === 17) {
+            const custoAgua = 0.01 * fatorEscala; // Custo simbólico para água escalado
+            custoTotal += custoAgua;
+            ingredientesComPreco++;
+            console.log(`  💧 ${ingrediente.produto_base_id}: Água - custo simbólico R$${custoAgua.toFixed(2)} (escala ${fatorEscala})`);
+            continue;
+          }
+
           const melhorPreco = melhoresPrecos.get(ingrediente.produto_base_id);
           if (melhorPreco && melhorPreco.preco > 0) {
             const quantidadeEmbalagem = melhorPreco.produto_base_quantidade_embalagem || 1000;
-            const custoIngrediente = (ingrediente.quantidade / quantidadeEmbalagem) * melhorPreco.preco;
+            // Aplicar fator de escala na quantidade
+            const quantidadeEscalada = ingrediente.quantidade * fatorEscala;
+            const custoIngrediente = (quantidadeEscalada / quantidadeEmbalagem) * melhorPreco.preco;
             const custoFinal = melhorPreco.em_promocao_sim_nao ? custoIngrediente * 0.9 : custoIngrediente;
             custoTotal += custoFinal;
             ingredientesComPreco++;
+            console.log(`  📊 ${ingrediente.produto_base_id}: ${quantidadeEscalada.toFixed(2)}/${quantidadeEmbalagem} * R$${melhorPreco.preco} = R$${custoFinal.toFixed(2)} `);
           }
         }
         
-        // Só aceitar se conseguiu calcular pelo menos 80% dos ingredientes únicos
-        const percentualCalculado = (ingredientesComPreco / ingredientesUnicos.length) * 100;
+        // Só aceitar se conseguiu calcular pelo menos 80% dos ingredientes filtrados
+        const percentualCalculado = (ingredientesComPreco / ingredientesFiltrados.length) * 100;
         if (percentualCalculado >= 80) {
-          // CRÍTICO: Dividir pelo número correto de porções
+          // Custo por porção já está correto pois aplicamos o fator de escala nos ingredientes
           const custoPorPorcao = custoTotal / mealQuantity;
           resultados.set(receita.id, custoPorPorcao);
           console.log(`✅ ${receita.id}: R$ ${custoTotal.toFixed(2)} ÷ ${mealQuantity} = R$ ${custoPorPorcao.toFixed(2)} por porção`);
