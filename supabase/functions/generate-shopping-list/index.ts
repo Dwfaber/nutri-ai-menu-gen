@@ -275,7 +275,7 @@ class ShoppingListGeneratorFixed {
       
       for (const [produtoId, ingrediente] of ingredientesConsolidados) {
         // Para itens placeholder, criar direto sem buscar no mercado
-        if (produtoId.startsWith('placeholder_')) {
+        if (String(produtoId).startsWith('placeholder_')) {
           const valorItem = ingrediente.valor_categoria || (budgetPredicted * 0.2);
           
           const itemPlaceholder = {
