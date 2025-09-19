@@ -262,8 +262,10 @@ export function useSimplifiedMenuGeneration() {
       const businessRules = validateMenu(allRecipes);
 
       // === Calcular custos totais das receitas geradas
-      const calculatedTotalCost = allRecipes.reduce((sum, recipe) => sum + (recipe.cost || 0), 0);
-      const calculatedCostPerMeal = calculatedTotalCost / (mealQuantity || 1);
+      const totalRecipeCost = allRecipes.reduce((sum, recipe) => sum + (recipe.cost || 0), 0);
+      const actualPeriodDays = Array.from(new Set(allRecipes.map(r => r.day))).length || periodDays;
+      const calculatedCostPerMeal = totalRecipeCost / actualPeriodDays;
+      const calculatedTotalCost = calculatedCostPerMeal * (mealQuantity || 1) * actualPeriodDays;
 
       // === Resultado final
       const menu: GeneratedMenu = {

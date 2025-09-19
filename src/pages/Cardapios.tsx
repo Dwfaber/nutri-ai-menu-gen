@@ -52,13 +52,14 @@ const Cardapios = () => {
     const client = clients.find(c => c.id === menu.clientId);
     if (!client) return 'unknown';
     
-    // Calculate cost from recipes if menu.costPerMeal is 0
+    // Calculate cost from recipes using correct logic
     let costPerMeal = menu.costPerMeal || 0;
     if (costPerMeal === 0 && menu.recipes && menu.recipes.length > 0) {
-      const totalCost = menu.recipes.reduce((sum: number, recipe: any) => {
+      const totalRecipeCost = menu.recipes.reduce((sum: number, recipe: any) => {
         return sum + (Number(recipe.cost || recipe.custo || recipe.custo_por_refeicao || 0));
       }, 0);
-      costPerMeal = totalCost / (menu.mealsPerDay || 50);
+      const periodDays = Array.from(new Set(menu.recipes.map(r => r.day))).length || 5;
+      costPerMeal = totalRecipeCost / periodDays;
     }
     
     if (costPerMeal === 0) return 'unknown';
@@ -205,9 +206,28 @@ const Cardapios = () => {
                    <CardContent className="flex items-center justify-between">
                      <div>
                        <p className="text-sm">Custo total</p>
-                       <p className="font-semibold">R$ {Number(menu.totalCost || (menu.costPerMeal || 0) * (menu.mealsPerDay || 50)).toFixed(2)}</p>
+                       <p className="font-semibold">R$ {(() => {
+                         if (menu.recipes && menu.recipes.length > 0) {
+                           const totalRecipeCost = menu.recipes.reduce((sum: number, recipe: any) => 
+                             sum + (Number(recipe.cost || recipe.custo || recipe.custo_por_refeicao || 0)), 0
+                           );
+                           const periodDays = Array.from(new Set(menu.recipes.map(r => r.day))).length || 5;
+                           const costPerMeal = totalRecipeCost / periodDays;
+                           return (costPerMeal * (menu.mealsPerDay || 1) * periodDays).toFixed(2);
+                         }
+                         return Number(menu.totalCost || 0).toFixed(2);
+                       })()}</p>
                        <p className="text-xs text-muted-foreground">
-                         R$ {Number(menu.costPerMeal || 0).toFixed(2)}/refeição
+                         R$ {(() => {
+                           if (menu.recipes && menu.recipes.length > 0) {
+                             const totalRecipeCost = menu.recipes.reduce((sum: number, recipe: any) => 
+                               sum + (Number(recipe.cost || recipe.custo || recipe.custo_por_refeicao || 0)), 0
+                             );
+                             const periodDays = Array.from(new Set(menu.recipes.map(r => r.day))).length || 5;
+                             return (totalRecipeCost / periodDays).toFixed(2);
+                           }
+                           return Number(menu.costPerMeal || 0).toFixed(2);
+                         })()}/refeição
                        </p>
                      </div>
                     <div className="flex gap-2">
