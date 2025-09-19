@@ -497,7 +497,7 @@ Deno.serve(async (req) => {
       console.log(`⏰ Iniciando geração com timeout de ${TIMEOUT_MS}ms`);
       
       return Promise.race([
-        gerarCardapioValidado(proteinConfig, includeWeekends, budgetPerMeal, mealQuantity),
+        gerarCardapioValidado(proteinConfig, includeWeekends, budgetPerMeal, mealQuantity, {}),
         new Promise((_, reject) => 
           setTimeout(() => {
             console.log(`💥 TIMEOUT! Geração excedeu ${TIMEOUT_MS}ms`);
@@ -508,9 +508,18 @@ Deno.serve(async (req) => {
     }
 
     // Gerar cardápio usando apenas receitas com ingredientes (otimizado)
-    async function gerarCardapioValidado(proteinConfig = {}, includeWeekends = false, budgetPerMeal = null, mealQuantity = 50) {
+    async function gerarCardapioValidado(proteinConfig = {}, includeWeekends = false, budgetPerMeal = null, mealQuantity = 50, receitasFixas = {}) {
       const startTime = Date.now();
       console.log(`🚀 Iniciando geração de cardápio otimizada para ${mealQuantity} porções`);
+      
+      // Receitas fixas padrão para arroz e feijão
+      const fixedRecipes = {
+        'Arroz Branco': { id: '580', nome: 'ARROZ' },
+        'Feijão': { id: '581', nome: 'FEIJÃO MIX (CARIOCA + BANDINHA) 50%' },
+        ...receitasFixas
+      };
+      
+      console.log('🔒 Receitas fixas configuradas:', fixedRecipes);
       
       const categorias = [
         'Prato Principal 1',
@@ -560,6 +569,31 @@ Deno.serve(async (req) => {
         // Selecionar uma receita de cada categoria (ou fallback se não houver)
         for (const categoria of categorias) {
           console.log(`🔄 [DIA] ${dia} - Processando categoria: ${categoria}`);
+          
+          // Verificar se há receita fixa para esta categoria
+          if (fixedRecipes[categoria]) {
+            const receitaFixa = fixedRecipes[categoria];
+            console.log(`🔒 [DIA] ${dia} - Usando receita fixa para ${categoria}: ${receitaFixa.nome} (ID: ${receitaFixa.id})`);
+            
+            // Calcular custo da receita fixa
+            const custoReal = await calcularCustoReal(receitaFixa.id, mealQuantity);
+            
+            if (custoReal && custoReal > 0) {
+              receitasDia.push({
+                id: receitaFixa.id,
+                name: receitaFixa.nome,
+                category: categoria,
+                day: dia,
+                cost: custoReal
+              });
+              
+              console.log(`✅ [DIA] ${dia} - ${categoria}: ${receitaFixa.nome} (R$ ${custoReal.toFixed(2)})`);
+              continue; // Pular para próxima categoria
+            } else {
+              console.log(`⚠️ [DIA] ${dia} - Receita fixa ${receitaFixa.nome} não tem custo calculável, usando seleção normal`);
+            }
+          }
+          
           const receitasDisponiveis = receitasPorCategoria[categoria];
           
           // Verificar timeout durante processamento de categorias

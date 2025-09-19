@@ -1213,7 +1213,7 @@ Deno.serve(async (req) => {
         // ====== OUTRAS CATEGORIAS ======
         const outrasCategoriasConfig = [
           { codigo: 'ARROZ', categoria: 'Arroz Branco', receita_id: 580 },
-          { codigo: 'FEIJAO', categoria: 'Feijão', receita_id: 1600 },
+          { codigo: 'FEIJAO', categoria: 'Feijão', receita_id: 581 },
           { codigo: 'GUARNICAO', categoria: 'Guarnição' },
           { codigo: 'SALADA1', categoria: 'Salada 1' },
           { codigo: 'SALADA2', categoria: 'Salada 2' },
@@ -1897,7 +1897,7 @@ Deno.serve(async (req) => {
         periodo_dias: periodDays,
         refeicoes_por_dia: mealQuantity,
         orcamento_por_refeicao: budgetPerMeal || 5.0,
-        receitas_fixas: [580, 1600], // arroz e feijão sempre incluídos
+        receitas_fixas: [580, 581], // arroz e feijão sempre incluídos
         receitas_sugeridas: selectedRecipes
       };
 
