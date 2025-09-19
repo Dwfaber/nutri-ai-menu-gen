@@ -554,10 +554,11 @@ Deno.serve(async (req) => {
       const startTime = Date.now();
       console.log(`🚀 Iniciando geração de cardápio otimizada para ${mealQuantity} porções`);
       
-      // Receitas fixas padrão para arroz e feijão
+      // Receitas fixas padrão para arroz, feijão e café
       const fixedRecipes = {
         'Arroz Branco': { id: '580', nome: 'ARROZ' },
         'Feijão': { id: '581', nome: 'FEIJÃO MIX (CARIOCA + BANDINHA) 50%' },
+        'Base': { id: '1724', nome: 'CAFÉ CORTESIA' },
         ...receitasFixas
       };
       
@@ -568,6 +569,7 @@ Deno.serve(async (req) => {
         'Prato Principal 2', 
         'Arroz Branco',
         'Feijão',
+        'Base',  // Café cortesia
         'Sobremesa',  // Movida para antes para evitar timeout
         'Guarnição',
         'Salada 1',
@@ -772,7 +774,7 @@ Deno.serve(async (req) => {
 
     if (action === 'check_recipes_with_ingredients') {
       // Retornar apenas estatísticas sobre receitas com ingredientes
-      const categorias = ['Prato Principal 1', 'Prato Principal 2', 'Arroz Branco', 'Feijão', 'Guarnição', 'Salada 1', 'Salada 2', 'Suco 1', 'Suco 2', 'Sobremesa'];
+      const categorias = ['Prato Principal 1', 'Prato Principal 2', 'Arroz Branco', 'Feijão', 'Base', 'Guarnição', 'Salada 1', 'Salada 2', 'Suco 1', 'Suco 2', 'Sobremesa'];
       const resultado = {};
       
       for (const categoria of categorias) {
