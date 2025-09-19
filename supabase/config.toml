@@ -73,8 +73,5 @@ verify_jwt = false
 [functions.validate-recipes-with-ingredients]
 verify_jwt = false
 
-[functions.optimize-menu-purchases]
-verify_jwt = false
-
 [edge-runtime]
 inspector_port = 8083

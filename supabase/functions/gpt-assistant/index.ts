@@ -212,52 +212,37 @@ Deno.serve(async (req) => {
 
   try {
     const startTime = Date.now();
-    console.log('🔧 [GPT-ASSISTANT] Recebendo requisição...');
+    const requestData = await req.json();
     
-    // Add timeout for the entire function
-    const timeoutPromise = new Promise((_, reject) => {
-      setTimeout(() => reject(new Error('Function timeout after 55 seconds')), 55000);
+    console.log('📥 REQUEST:', requestData.action, requestData.filialIdLegado || requestData.filial_id || 'sem filial');
+    console.log('🔍 CLIENT_ID DEBUG:', {
+      client_id: requestData.client_id,
+      clientId: requestData.clientId, 
+      filial_id: requestData.filial_id,
+      filialIdLegado: requestData.filialIdLegado,
+      client_data: requestData.client_data
     });
+
+    // Validate client IDs early
+    const hasValidId = requestData.client_id || requestData.clientId || 
+                      requestData.client_data?.id || requestData.client_data?.cliente_id_legado;
     
-    const processRequest = async () => {
-      const requestData = await req.json();
-      
-      console.log('📥 REQUEST:', requestData.action, requestData.filialIdLegado || requestData.filial_id || 'sem filial');
-      console.log('🔍 CLIENT_ID DEBUG:', {
-        client_id: requestData.client_id,
-        clientId: requestData.clientId, 
-        filial_id: requestData.filial_id,
-        filialIdLegado: requestData.filialIdLegado,
-        client_data: requestData.client_data
-      });
-
-      // Validate client IDs early
-      const hasValidId = requestData.client_id || requestData.clientId || 
-                        requestData.client_data?.id || requestData.client_data?.cliente_id_legado;
-      
-      if (!hasValidId && requestData.action === 'generate_recipes_only') {
-        console.error('❌ No valid client ID found in request');
-        return new Response(
-          JSON.stringify({ 
-            error: 'Cliente não identificado: IDs ausentes no request',
-            debug: { client_id: requestData.client_id, clientId: requestData.clientId },
-            recipes: []
-          }),
-          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
-        );
-      }
-      
-      const supabase = createClient(
-        Deno.env.get('SUPABASE_URL') ?? '',
-        Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+    if (!hasValidId && requestData.action === 'generate_recipes_only') {
+      console.error('❌ No valid client ID found in request');
+      return new Response(
+        JSON.stringify({ 
+          error: 'Cliente não identificado: IDs ausentes no request',
+          debug: { client_id: requestData.client_id, clientId: requestData.clientId },
+          recipes: []
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
       );
-
-      console.log('🔗 Supabase client initialized');
-
-      // Add a simple validation of supabase connection
-      if (!Deno.env.get('SUPABASE_URL') || !Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')) {
-        throw new Error('Supabase credentials not configured');
-      }
+    }
+    
+    const supabase = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+    );
 
     // ========== FUNÇÕES DE CATEGORIA - NOVA ESTRUTURA ==========
     
@@ -583,7 +568,7 @@ Deno.serve(async (req) => {
         const { data: ingredients, error } = await supabase
           .from('receita_ingredientes')
           .select('*')
-          .eq('receita_id_legado', String(recipeId))
+          .eq('receita_id_legado', recipeId)
           .limit(20);
         
         if (error || !ingredients || ingredients.length === 0) {
@@ -2083,35 +2068,28 @@ Deno.serve(async (req) => {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         });
       }
-    };
+    }
 
-    // Execute the processRequest function with timeout
-    return await Promise.race([processRequest(), timeoutPromise]);
+    // Default
+    return new Response(
+      JSON.stringify({
+        success: true,
+        version: 'CORRIGIDA-FINAL-v3.0',
+        message: 'Sistema de cardápio funcionando - versão final corrigida'
+      }),
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
 
   } catch (error) {
-    const executionTime = Date.now() - startTime;
-    console.error('❌ ERRO GERAL na Edge Function:', {
-      error: error.message,
-      stack: error.stack,
-      executionTime: `${executionTime}ms`,
-      timestamp: new Date().toISOString()
-    });
+    console.error('❌ ERRO GERAL:', error);
     
-    // Improved error response with more details
     return new Response(
       JSON.stringify({
         success: false,
-        error: 'Erro interno da Edge Function',
-        details: error.message,
-        type: error.name || 'UnknownError',
-        timestamp: new Date().toISOString(),
-        version: 'CORRIGIDA-TIMEOUT-v1.0',
-        executionTime: `${executionTime}ms`
+        erro: error.message,
+        version: 'CORRIGIDA-FINAL-v3.0'
       }),
-      { 
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }, 
-        status: error.message.includes('timeout') ? 504 : 500
-      }
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
     );
   }
 });

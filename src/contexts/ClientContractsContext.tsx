@@ -61,10 +61,10 @@ export const ClientContractsProvider = ({ children }: { children: ReactNode }) =
       setIsLoading(true);
       setError(null);
 
-      // Loading clients with optional search - using separate queries to avoid relationship issues
+      // Loading clients with optional search
 
-      // Step 1: Get basic client data from custos_filiais
-      let clientQuery = supabase
+      // Buscar dados otimizados da tabela custos_filiais
+      let query = supabase
         .from('custos_filiais')
         .select(`
           id,
@@ -91,73 +91,33 @@ export const ClientContractsProvider = ({ children }: { children: ReactNode }) =
       // Estratégia diferente para busca vs. carregamento inicial
       if (searchTerm && searchTerm.trim()) {
         // Na busca, usar filtro e ordenação alfabética
-        clientQuery = clientQuery
+        query = query
           .or(`nome_fantasia.ilike.%${searchTerm}%,razao_social.ilike.%${searchTerm}%,nome_filial.ilike.%${searchTerm}%`)
           .order('nome_fantasia')
           .limit(limit || 1000);
       } else {
         // No carregamento inicial, pegar amostra diversificada
-        clientQuery = clientQuery
+        query = query
           .order('cliente_id_legado')
           .limit(limit || 2000);
       }
 
-      const { data: clientData, error: fetchError } = await clientQuery;
+      const { data, error: fetchError } = await query;
 
       if (fetchError) {
         throw fetchError;
       }
 
-      if (!clientData || clientData.length === 0) {
-        setClients([]);
-        setClientsWithCosts([]);
-        return;
-      }
-
-      // Step 2: Get juice configurations from contratos_corporativos
-      const filialIds = [...new Set(clientData.map(item => item.filial_id).filter((id): id is number => id !== null && id !== undefined))];
-      
-      let contractData = null;
-      let contractError = null;
-      
-      if (filialIds.length > 0) {
-        const { data, error } = await supabase
-          .from('contratos_corporativos')
-          .select(`
-            filial_id_legado,
-            use_pro_mix,
-            use_pro_vita,
-            use_suco_diet,
-            use_suco_natural,
-            protein_grams_pp1,
-            protein_grams_pp2
-          `)
-          .in('filial_id_legado', filialIds);
-        
-        contractData = data;
-        contractError = error;
-      }
-
-      if (contractError) {
-        console.warn('Erro ao carregar configurações de contrato:', contractError);
-      }
-
-      // Create a map for quick lookup of juice configurations
-      const contractMap = new Map();
-      (contractData || []).forEach(contract => {
-        contractMap.set(contract.filial_id_legado, contract);
-      });
+      // Data fetched successfully
 
       // Transform data to match ContractClient interface - with null safety
-      const transformedData: ContractClient[] = clientData
-        .filter((item: any) => {
+      const transformedData: ContractClient[] = (data || [])
+        .filter(item => {
           // Filter out invalid clients
           const isValid = item.nome_fantasia || item.cliente_id_legado || item.id;
           return isValid;
         })
-        .map((item: any) => {
-          const juiceConfig = contractMap.get(item.filial_id) || {};
-
+        .map(item => {
           const client = {
             id: item.id,
             filial_id: item.filial_id !== null ? item.filial_id : 0, // Garantir que seja número
@@ -178,15 +138,7 @@ export const ClientContractsProvider = ({ children }: { children: ReactNode }) =
             usa_validacao_media: Boolean(item.QtdeRefeicoesUsarMediaValidarSimNao),
             limite_percentual_acima_media: Number(item.PorcentagemLimiteAcimaMedia || 0),
             created_at: item.created_at || new Date().toISOString(),
-            updated_at: item.updated_at || new Date().toISOString(),
-            // Configurações de sucos do contrato corporativo
-            use_pro_mix: juiceConfig?.use_pro_mix || false,
-            use_pro_vita: juiceConfig?.use_pro_vita || false,
-            use_suco_diet: juiceConfig?.use_suco_diet || false,
-            use_suco_natural: juiceConfig?.use_suco_natural || true, // Default para natural
-            // Configurações de proteínas
-            protein_grams_pp1: juiceConfig?.protein_grams_pp1 || 100,
-            protein_grams_pp2: juiceConfig?.protein_grams_pp2 || 90
+            updated_at: item.updated_at || new Date().toISOString()
           };
           
           console.log('✅ Cliente transformado:', { 
@@ -276,7 +228,6 @@ export const ClientContractsProvider = ({ children }: { children: ReactNode }) =
 
   const getClientContract = async (clientId: string): Promise<ContractClient | null> => {
     try {
-      // Step 1: Get client data
       const { data, error } = await supabase
         .from('custos_filiais')
         .select('*')
@@ -288,27 +239,6 @@ export const ClientContractsProvider = ({ children }: { children: ReactNode }) =
       }
 
       if (!data) return null;
-
-      // Step 2: Get juice configuration if filial_id exists
-      let juiceConfig: any = {};
-      if (data.filial_id) {
-        const { data: contractData, error: contractError } = await supabase
-          .from('contratos_corporativos')
-          .select(`
-            use_pro_mix,
-            use_pro_vita,
-            use_suco_diet,
-            use_suco_natural,
-            protein_grams_pp1,
-            protein_grams_pp2
-          `)
-          .eq('filial_id_legado', data.filial_id)
-          .maybeSingle();
-
-        if (!contractError && contractData) {
-          juiceConfig = contractData;
-        }
-      }
 
       // Transform single record to match ContractClient interface usando dados reais
       return {
@@ -331,15 +261,7 @@ export const ClientContractsProvider = ({ children }: { children: ReactNode }) =
         usa_validacao_media: !!data.QtdeRefeicoesUsarMediaValidarSimNao,
         limite_percentual_acima_media: Number(data.PorcentagemLimiteAcimaMedia || 0),
         created_at: data.created_at || new Date().toISOString(),
-        updated_at: data.updated_at || new Date().toISOString(),
-        // Configurações de sucos do contrato corporativo
-        use_pro_mix: juiceConfig?.use_pro_mix || false,
-        use_pro_vita: juiceConfig?.use_pro_vita || false,
-        use_suco_diet: juiceConfig?.use_suco_diet || false,
-        use_suco_natural: juiceConfig?.use_suco_natural || true,
-        // Configurações de proteínas
-        protein_grams_pp1: juiceConfig?.protein_grams_pp1 || 100,
-        protein_grams_pp2: juiceConfig?.protein_grams_pp2 || 90
+        updated_at: data.updated_at || new Date().toISOString()
       };
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Erro ao buscar contrato do cliente';

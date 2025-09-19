@@ -7,8 +7,7 @@ import {
   BarChart3, 
   Settings,
   Brain,
-  History,
-  BookOpen
+  History
 } from 'lucide-react';
 import logo from "@/assets/nutris-logo.png";
 
@@ -16,7 +15,6 @@ const Sidebar = () => {
   const navItems = [
     { path: '/', icon: LayoutDashboard, label: 'Dashboard' },
     { path: '/cardapios', icon: ChefHat, label: 'Cardápios' },
-    { path: '/receitas', icon: BookOpen, label: 'Receitas' },
     { path: '/compras', icon: ShoppingCart, label: 'Lista de Compras' },
     { path: '/relatorios', icon: BarChart3, label: 'Relatórios' },
     { path: '/atualizacoes', icon: History, label: 'Atualizações' },

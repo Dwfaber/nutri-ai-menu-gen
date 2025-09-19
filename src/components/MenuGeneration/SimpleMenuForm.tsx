@@ -89,7 +89,7 @@ export const SimpleMenuForm: React.FC<SimpleMenuFormProps> = ({
       preferences: preferences.trim() ? [preferences.trim()] : undefined,
       juiceConfig: selectedJuices,
       proteinGrams: selectedProteinGrams,
-      diasUteis: incluirFimDeSemana // Corrigido: true se incluir fins de semana
+      diasUteis: !incluirFimDeSemana // Enviar true se excluir fins de semana
     };
 
     try {

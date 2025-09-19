@@ -15,7 +15,6 @@ import Sidebar from "./components/Sidebar/Sidebar";
 import { AuthProvider } from "@/contexts/AuthContext";
 import Dashboard from "./pages/Dashboard";
 import Cardapios from "./pages/Cardapios";
-import Receitas from "./pages/Receitas";
 import Compras from "./pages/Compras";
 import Relatorios from "./pages/Relatorios";
 import NotFound from "./pages/NotFound";
@@ -58,17 +57,16 @@ const App = () => {
                         <div className="flex-1 flex flex-col">
                           <UserHeader />
                           <main className="flex-1 p-6 overflow-auto">
-                            <Routes>
-                              <Route path="/" element={<Dashboard />} />
-                              <Route path="/cardapios" element={<Cardapios />} />
-                              <Route path="/receitas" element={<Receitas />} />
-                              <Route path="/compras" element={<Compras />} />
-                              <Route path="/relatorios" element={<Relatorios />} />
-                              <Route path="/atualizacoes" element={<Updates />} />
-                              <Route path="/configuracoes" element={<Configuracoes />} />
-                              <Route path="/welcome" element={<Index />} />
-                              <Route path="*" element={<NotFound />} />
-                            </Routes>
+                           <Routes>
+                             <Route path="/" element={<Dashboard />} />
+                             <Route path="/cardapios" element={<Cardapios />} />
+                             <Route path="/compras" element={<Compras />} />
+                             <Route path="/relatorios" element={<Relatorios />} />
+                             <Route path="/atualizacoes" element={<Updates />} />
+                             <Route path="/configuracoes" element={<Configuracoes />} />
+                             <Route path="/welcome" element={<Index />} />
+                             <Route path="*" element={<NotFound />} />
+                           </Routes>
                           </main>
                         </div>
                       </div>

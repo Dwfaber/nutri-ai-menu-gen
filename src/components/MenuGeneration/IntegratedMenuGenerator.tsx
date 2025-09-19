@@ -6,18 +6,14 @@ import { Separator } from '@/components/ui/separator';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { ChefHat, Calendar, CheckCircle, XCircle, ShoppingCart, DollarSign, Users, Plus, Wifi, WifiOff, Calculator, Package } from 'lucide-react';
+import { ChefHat, Calendar, CheckCircle, XCircle, ShoppingCart, DollarSign, Users, Plus, Wifi, WifiOff } from 'lucide-react';
 import { useIntegratedMenuGeneration } from '@/hooks/useIntegratedMenuGeneration';
 import { useSelectedClient } from '@/contexts/SelectedClientContext';
-import { useMenuOptimization } from '@/hooks/useMenuOptimization';
-import { OptimizedPurchasesSummary } from '@/components/Optimization/OptimizedPurchasesSummary';
-import { OptimizedPurchasesTable } from '@/components/Optimization/OptimizedPurchasesTable';
 import WeeklyMenuView from "@/components/MenuGeneration/WeeklyMenuView";
 import { SimpleMenuForm, SimpleMenuFormData } from '@/components/MenuGeneration/SimpleMenuForm';
 import MenuValidationPanel from '@/components/MenuGeneration/MenuValidationPanel';
 import MenuApprovalPanel from '@/components/MenuGeneration/MenuApprovalPanel';
 import { testEdgeFunctionConnectivity, testMenuGeneration } from '@/utils/edgeFunctionTest';
-import { transformMenuForOptimization, validateMenuForOptimization } from '@/utils/menuOptimizationUtils';
 import { useToast } from '@/hooks/use-toast';
 
 const IntegratedMenuGenerator = () => {
@@ -26,16 +22,9 @@ const IntegratedMenuGenerator = () => {
   const [rejectionReason, setRejectionReason] = useState('');
   const [isTesting, setIsTesting] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<'unknown' | 'healthy' | 'error'>('unknown');
-  const [showOptimization, setShowOptimization] = useState(false);
   
   const { toast } = useToast();
   const { selectedClient } = useSelectedClient();
-  const { 
-    isOptimizing, 
-    optimizationResult, 
-    optimizeMenuPurchases, 
-    resetOptimization 
-  } = useMenuOptimization();
   const {
     isGenerating,
     generatedMenu,
@@ -65,45 +54,8 @@ const IntegratedMenuGenerator = () => {
   }, [generatedMenu?.recipes]);
 
   const handleGenerateMenu = async (formData: SimpleMenuFormData) => {
-    console.log('🎯 Iniciando geração de cardápio...');
-    const menu = await generateMenuWithFormData(formData);
+    await generateMenuWithFormData(formData);
     setShowForm(false);
-    
-    console.log('📝 Cardápio gerado:', menu);
-    
-    // Automaticamente executar otimização de compras após gerar o cardápio
-    if (menu?.menu) {
-      try {
-        console.log('🔄 Iniciando otimização automática...');
-        
-        // Validar menu antes da otimização
-        const validationErrors = validateMenuForOptimization(menu);
-        if (validationErrors.length > 0) {
-          console.warn('⚠️ Problemas no menu:', validationErrors);
-          toast({
-            title: "⚠️ Aviso na Otimização",
-            description: `Menu tem problemas: ${validationErrors.join(', ')}`,
-            variant: "destructive"
-          });
-          return;
-        }
-
-        // Transformar menu para otimização
-        const { menuDays, totalMeals } = transformMenuForOptimization(menu, formData.mealsPerDay);
-        
-        console.log('📊 Menu para otimização:', { menuDays, totalMeals });
-        await optimizeMenuPurchases(menuDays, totalMeals);
-        setShowOptimization(true);
-        console.log('✅ Otimização concluída');
-      } catch (error) {
-        console.error('❌ Erro na otimização automática:', error);
-        toast({
-          title: "❌ Erro na Otimização",
-          description: error instanceof Error ? error.message : "Erro na otimização automática",
-          variant: "destructive"
-        });
-      }
-    }
   };
 
   const handleShowForm = () => setShowForm(true);
@@ -157,45 +109,6 @@ const IntegratedMenuGenerator = () => {
   const handleGenerateShoppingList = async () => {
     if (generatedMenu) {
       await generateShoppingListFromMenu(generatedMenu);
-    }
-  };
-
-  const handleOptimizePurchases = async () => {
-    if (!generatedMenu?.menu) {
-      toast({
-        title: "❌ Erro",
-        description: "Nenhum menu encontrado para otimizar",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    try {
-      // Validar menu antes da otimização
-      const validationErrors = validateMenuForOptimization(generatedMenu);
-      if (validationErrors.length > 0) {
-        console.warn('⚠️ Problemas no menu:', validationErrors);
-        toast({
-          title: "⚠️ Menu Inválido",
-          description: `Problemas encontrados: ${validationErrors.join(', ')}`,
-          variant: "destructive"
-        });
-        return;
-      }
-
-      // Transformar menu usando função utilitária
-      const { menuDays, totalMeals } = transformMenuForOptimization(generatedMenu);
-      
-      console.log('📊 Executando otimização manual:', { menuDays, totalMeals });
-      await optimizeMenuPurchases(menuDays, totalMeals);
-      setShowOptimization(true);
-    } catch (error) {
-      console.error('❌ Erro na otimização manual:', error);
-      toast({
-        title: "❌ Erro na Otimização",
-        description: error instanceof Error ? error.message : "Erro na otimização",
-        variant: "destructive"
-      });
     }
   };
 
@@ -388,11 +301,7 @@ const IntegratedMenuGenerator = () => {
 
             {/* Visão semanal */}
             {generatedMenu.menu ? (
-              <WeeklyMenuView 
-                menu={generatedMenu.menu} 
-                optimizationResult={optimizationResult}
-                onGenerateShoppingList={handleGenerateShoppingList}
-              />
+              <WeeklyMenuView menu={generatedMenu.menu} />
             ) : (
               <div className="p-8 text-center text-gray-500">
                 <ChefHat className="w-12 h-12 mx-auto mb-3 text-gray-300" />
@@ -401,48 +310,6 @@ const IntegratedMenuGenerator = () => {
             )}
 
             <Separator />
-
-            {/* Status da Otimização */}
-            {(isOptimizing || optimizationResult) && (
-              <Card className="bg-primary/5 border-primary/20">
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Calculator className="h-5 w-5 text-primary" />
-                    Sistema de Otimização de Compras Inteligente
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  {isOptimizing ? (
-                    <div className="flex items-center justify-center space-x-2 py-4">
-                      <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-primary"></div>
-                      <span className="text-muted-foreground">Analisando embalagens e otimizando custos...</span>
-                    </div>
-                  ) : optimizationResult ? (
-                    <div className="space-y-2">
-                      <p className="text-sm text-muted-foreground">
-                        ✅ Otimização concluída! Custos calculados considerando embalagens reais e distribuição de sobras.
-                      </p>
-                      <div className="flex items-center gap-4 text-sm">
-                        <span className="font-medium text-green-600">
-                          Economia: R$ {optimizationResult.summary.estimated_savings.toFixed(2)}
-                        </span>
-                        <span className="text-muted-foreground">
-                          ({optimizationResult.summary.savings_percentage.toFixed(1)}%)
-                        </span>
-                      </div>
-                    </div>
-                  ) : null}
-                </CardContent>
-              </Card>
-            )}
-
-            {/* Resultados da Otimização */}
-            {showOptimization && optimizationResult && (
-              <div className="space-y-4">
-                <OptimizedPurchasesSummary summary={optimizationResult.summary} />
-                <OptimizedPurchasesTable purchases={optimizationResult.optimized_purchases} />
-              </div>
-            )}
 
             {/* Menu Approval Panel */}
             <MenuApprovalPanel

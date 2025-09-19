@@ -10,9 +10,6 @@ export interface WeeklyMenuViewProps {
   refeicoesPorDia?: number;
   orcamentoPorRefeicao?: number;
   menu?: MenuResult | any; // Can receive any menu format (saved or generated)
-  optimizationResult?: any; // Results from intelligent purchase optimization
-  onGenerateShoppingList?: (menu: any) => void;
-  className?: string;
 }
 
 const WeeklyMenuView: React.FC<WeeklyMenuViewProps> = ({
@@ -21,9 +18,6 @@ const WeeklyMenuView: React.FC<WeeklyMenuViewProps> = ({
   refeicoesPorDia = 50,
   orcamentoPorRefeicao = 7,
   menu,
-  optimizationResult,
-  onGenerateShoppingList,
-  className,
 }) => {
   const [generatedMenu, setGeneratedMenu] = useState<MenuResult | null>(null);
   const [loading, setLoading] = useState(false);
@@ -200,7 +194,6 @@ const WeeklyMenuView: React.FC<WeeklyMenuViewProps> = ({
               weekPeriod: generatedMenu.periodo,
               cardapio: (generatedMenu as any).cardapio
             }}
-            optimizationResult={optimizationResult}
           />
         </div>
       </div>

@@ -1,12 +1,8 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
-import { useRealTimeCosts } from '@/hooks/useRealTimeCosts';
-import { correctRecipeCost, isInjectedRecipe } from '@/utils/recipeMapping';
-import { useJuiceConfiguration } from '@/hooks/useJuiceConfiguration';
-import { useSelectedClient } from '@/contexts/SelectedClientContext';
 
 interface Recipe {
   id: string | number;
@@ -19,7 +15,6 @@ interface Recipe {
   custo?: number; // Portuguese version
   custo_por_refeicao?: number; // Portuguese version
   day?: string;
-  produto_base_id?: number; // Base product ID for cost calculation
 }
 
 interface MenuDay {
@@ -36,7 +31,6 @@ interface MenuDayCarouselProps {
     cardapio?: MenuDay[];
     recipes?: Recipe[];
   };
-  optimizationResult?: any;
 }
 
 const CATEGORY_ORDER = [
@@ -53,11 +47,8 @@ const WEEK_DAYS = [
   'Sexta-feira'
 ];
 
-export function MenuDayCarousel({ menu, optimizationResult }: MenuDayCarouselProps) {
+export function MenuDayCarousel({ menu }: MenuDayCarouselProps) {
   const [currentDayIndex, setCurrentDayIndex] = useState(0);
-  const { calculateRecipeCost, getCachedCost } = useRealTimeCosts();
-  const { availableJuices } = useJuiceConfiguration();
-  const { selectedClient } = useSelectedClient();
 
   // Convert flat recipes array to daily structure if needed
   const menuDays: MenuDay[] = React.useMemo(() => {
@@ -94,24 +85,6 @@ export function MenuDayCarousel({ menu, optimizationResult }: MenuDayCarouselPro
   }, [menu]);
 
   const currentDay = menuDays[currentDayIndex];
-
-  // Group available juices by type from database
-  const juicesByType = useMemo(() => {
-    const types: { [key: string]: typeof availableJuices } = {
-      pro_mix: [],
-      vita_suco: [],
-      diet: [],
-      natural: []
-    };
-    
-    availableJuices.forEach(juice => {
-      if (types[juice.tipo]) {
-        types[juice.tipo].push(juice);
-      }
-    });
-    
-    return types;
-  }, [availableJuices]);
 
   const nextDay = () => {
     setCurrentDayIndex((prev) => (prev + 1) % menuDays.length);
@@ -310,12 +283,13 @@ export function MenuDayCarousel({ menu, optimizationResult }: MenuDayCarouselPro
     
     // Always complete Base category with required items using slot-based deduplication
     const baseRequired = [
-      { name: 'ARROZ BRANCO', slot: 'rice' },
-      { name: currentDayBeanVariant, slot: 'bean' },
-      { name: 'CAFÉ COMPLEMENTAR', slot: 'coffee' },
-      { name: 'KIT DESCARTÁVEL', slot: 'disposable_kit' },
-      { name: 'KIT LIMPEZA', slot: 'cleaning_kit' },
-      { name: 'KIT TEMPEROS MESA', slot: 'seasoning_kit' }
+      { name: 'ARROZ BRANCO', cost: 0.32, slot: 'rice' },         // 0.64 ÷ 2
+      { name: currentDayBeanVariant, cost: currentBeanCost, slot: 'bean' },
+      { name: 'CAFÉ COMPLEMENTAR', cost: 0.34, slot: 'coffee' },   // 0.67 ÷ 2
+      { name: 'KIT DESCARTÁVEL', cost: 0.08, slot: 'disposable_kit' }, // 0.16 ÷ 2
+      { name: 'KIT LIMPEZA', cost: 0.03, slot: 'cleaning_kit' },   // 0.05 ÷ 2
+      { name: 'KIT TEMPEROS MESA', cost: 0.05, slot: 'seasoning_kit' }, // 0.09 ÷ 2
+      { name: 'PÃO FRANCÊS MINI', cost: 0.03, slot: 'bread' }      // 0.06 ÷ 2
     ];
 
     // Get existing base items and deduplicate by slot
@@ -343,7 +317,8 @@ export function MenuDayCarousel({ menu, optimizationResult }: MenuDayCarouselPro
         deduplicatedBaseItems.push({
           id: `base-injected-${index}`,
           name: requiredItem.name,
-          category: 'Base'
+          category: 'Base',
+          cost: requiredItem.cost
         });
         slotOccupied.add(requiredItem.slot);
       }
@@ -351,335 +326,75 @@ export function MenuDayCarousel({ menu, optimizationResult }: MenuDayCarouselPro
 
     grouped['Base'] = deduplicatedBaseItems;
 
-    // Smart juice injection based on client configuration and business rules
+    // Always inject juices if missing (1 juice per category)
     const existingSuco1 = grouped['SUCO1'] || [];
     const existingSuco2 = grouped['SUCO2'] || [];
     const allExistingJuices = [...existingSuco1, ...existingSuco2];
     const juiceNames = allExistingJuices.map(j => normalizeString(j.name || j.nome || ''));
     
-    
-    // Get client juice configuration from selectedClient or infer from menu data
-    let clientJuiceConfig;
-    if (selectedClient) {
-      clientJuiceConfig = {
-        use_pro_mix: selectedClient.use_pro_mix || false,
-        use_pro_vita: selectedClient.use_pro_vita || false,
-        use_suco_diet: selectedClient.use_suco_diet || false,
-        use_suco_natural: selectedClient.use_suco_natural || false
-      };
-    } else {
-      // Try to infer from menu data if available
-      const menuData = (menu as any).menu_data;
-      const tiposConfigurados = menuData?.tipos_configurados || [];
-      clientJuiceConfig = {
-        use_pro_mix: tiposConfigurados.includes('pro_mix'),
-        use_pro_vita: tiposConfigurados.includes('vita_suco'),
-        use_suco_diet: tiposConfigurados.includes('diet'),
-        use_suco_natural: tiposConfigurados.includes('natural') || tiposConfigurados.length === 0
-      };
-    }
-    
-    console.log('Juice configuration applied:', clientJuiceConfig);
-    
-    // Select juices based on configuration with strict priority rules
-    const selectJuices = () => {
-      const selectedJuices: { suco1?: any, suco2?: any } = {};
-      
-      // Helper function to get available juices from a type (not already used)
-      const getAvailableJuicesFromType = (type: string) => 
-        juicesByType[type]?.filter(j => !juiceNames.includes(normalizeString(j.nome))) || [];
-      
-      // Helper function to select juice by priority (Pró Mix > Vita Suco > Diet > Natural)
-      const selectByPriority = (excludeTypes: string[] = []) => {
-        const priorityOrder = ['pro_mix', 'vita_suco', 'diet', 'natural'];
-        
-        for (const type of priorityOrder) {
-          if (excludeTypes.includes(type)) continue;
-          
-          const isTypeEnabled = 
-            (type === 'pro_mix' && clientJuiceConfig.use_pro_mix) ||
-            (type === 'vita_suco' && clientJuiceConfig.use_pro_vita) ||
-            (type === 'diet' && clientJuiceConfig.use_suco_diet) ||
-            (type === 'natural' && clientJuiceConfig.use_suco_natural);
-            
-          if (isTypeEnabled) {
-            const availableJuices = getAvailableJuicesFromType(type);
-            if (availableJuices.length > 0) {
-              // Select first available (consistent selection, no randomness)
-              return availableJuices[0];
-            }
-          }
-        }
-        return null;
-      };
-      
-      // BUSINESS RULE: If diet is enabled, one juice must be diet and other non-diet
-      if (clientJuiceConfig.use_suco_diet && getAvailableJuicesFromType('diet').length > 0) {
-        // SUCO1 = Diet juice (first available)
-        const dietJuices = getAvailableJuicesFromType('diet');
-        selectedJuices.suco1 = dietJuices[0];
-        console.log('Selected Diet for SUCO1:', selectedJuices.suco1?.nome);
-        
-        // SUCO2 = Non-diet juice (priority: Pro Mix > Vita > Natural)
-        selectedJuices.suco2 = selectByPriority(['diet']);
-        console.log('Selected Non-Diet for SUCO2:', selectedJuices.suco2?.nome);
-        
-      } else {
-        // Normal selection: Apply strict priority for both juices
-        
-        // Special case: If only Vita Suco is enabled, select two different Vita Suco
-        const enabledTypes = [
-          clientJuiceConfig.use_pro_mix && 'pro_mix',
-          clientJuiceConfig.use_pro_vita && 'vita_suco',
-          clientJuiceConfig.use_suco_diet && 'diet',
-          clientJuiceConfig.use_suco_natural && 'natural'
-        ].filter(Boolean);
-        
-        if (enabledTypes.length === 1 && enabledTypes[0] === 'vita_suco') {
-          const vitaJuices = getAvailableJuicesFromType('vita_suco');
-          if (vitaJuices.length >= 2) {
-            selectedJuices.suco1 = vitaJuices[0];
-            selectedJuices.suco2 = vitaJuices[1];
-            console.log('Selected two Vita Suco:', selectedJuices.suco1?.nome, selectedJuices.suco2?.nome);
-          } else if (vitaJuices.length === 1) {
-            selectedJuices.suco1 = vitaJuices[0];
-            // Don't fallback to other types if only Vita Suco is enabled
-            console.log('Only one Vita Suco available:', selectedJuices.suco1?.nome);
-          }
-        } else {
-          // Normal priority selection
-          selectedJuices.suco1 = selectByPriority();
-          console.log('Selected SUCO1 by priority:', selectedJuices.suco1?.nome);
-          
-          // For SUCO2, exclude the type already used for SUCO1 if possible
-          const suco1Type = selectedJuices.suco1 ? 
-            Object.keys(juicesByType).find(type => 
-              juicesByType[type].some(j => j.produto_base_id === selectedJuices.suco1.produto_base_id)
-            ) : null;
-          
-          const suco1TypeJuices = suco1Type ? getAvailableJuicesFromType(suco1Type) : [];
-          if (suco1TypeJuices.length > 1) {
-            // Use second juice from same type if available
-            selectedJuices.suco2 = suco1TypeJuices[1];
-          } else {
-            // Otherwise select from other types by priority
-            selectedJuices.suco2 = selectByPriority(suco1Type ? [suco1Type] : []);
-          }
-          console.log('Selected SUCO2 by priority:', selectedJuices.suco2?.nome);
-        }
-      }
-      
-      return selectedJuices;
+    // Juice pools by preference (Pro Mix preferred)
+    const juicePools = {
+      proMix: ['SUCO PRO MIX LARANJA', 'SUCO PRO MIX UVA', 'SUCO PRO MIX MARACUJÁ', 'SUCO PRO MIX MANGA'],
+      vita: ['SUCO VITA LARANJA', 'SUCO VITA UVA', 'SUCO VITA ABACAXI', 'SUCO VITA PÊSSEGO'],
+      diet: ['SUCO DIET LARANJA', 'SUCO DIET UVA', 'SUCO DIET LIMÃO'],
+      natural: ['SUCO NATURAL LARANJA', 'SUCO NATURAL LIMÃO', 'SUCO NATURAL MARACUJÁ']
     };
+
+    // Select two distinct juices (prefer Pro Mix)
+    const availableJuices = [...juicePools.proMix, ...juicePools.vita];
     
-    const selectedJuices = selectJuices();
-    
-    // Only inject juices if they are missing (respect pre-defined juices from menu)
-    if (existingSuco1.length === 0 && selectedJuices.suco1) {
-      console.log('Injecting SUCO1:', selectedJuices.suco1.nome);
-      grouped['SUCO1'] = [{
-        id: `juice-${selectedJuices.suco1.produto_base_id}`,
-        name: selectedJuices.suco1.nome,
-        category: 'SUCO1',
-        produto_base_id: selectedJuices.suco1.produto_base_id
-      }];
-    } else if (existingSuco1.length > 0) {
-      console.log('Using existing SUCO1 from menu:', existingSuco1[0].name || existingSuco1[0].nome);
+    // Inject juice in SUCO1 if missing
+    if (existingSuco1.length === 0 && availableJuices.length > 0) {
+      const juiceName = availableJuices[0];
+      if (!juiceNames.includes(normalizeString(juiceName))) {
+        grouped['SUCO1'] = [{
+          id: 'juice-injected-suco1',
+          name: juiceName,
+          category: 'SUCO1',
+          cost: 0.05
+        }];
+      }
     }
     
-    if (existingSuco2.length === 0 && selectedJuices.suco2) {
-      console.log('Injecting SUCO2:', selectedJuices.suco2.nome);
-      grouped['SUCO2'] = [{
-        id: `juice-${selectedJuices.suco2.produto_base_id}`,
-        name: selectedJuices.suco2.nome,
-        category: 'SUCO2',
-        produto_base_id: selectedJuices.suco2.produto_base_id
-      }];
-    } else if (existingSuco2.length > 0) {
-      console.log('Using existing SUCO2 from menu:', existingSuco2[0].name || existingSuco2[0].nome);
+    // Inject juice in SUCO2 if missing
+    if (existingSuco2.length === 0 && availableJuices.length > 1) {
+      const juiceName = availableJuices[1];
+      if (!juiceNames.includes(normalizeString(juiceName))) {
+        grouped['SUCO2'] = [{
+          id: 'juice-injected-suco2',
+          name: juiceName,
+          category: 'SUCO2',
+          cost: 0.05
+        }];
+      }
     }
     
     return grouped;
-  }, [currentDay, juicesByType, selectedClient, availableJuices]);
-
-  // Calculate real-time costs for recipes
-  const [realCosts, setRealCosts] = useState<Record<string, number>>({});
-  
-  // Load real costs for visible recipes
-  useEffect(() => {
-    const loadCosts = async () => {
-      const allRecipes = Object.values(recipesByCategory).flat();
-      const mealsPerDay = 50; // Default, could be from menu config
-      
-      for (const recipe of allRecipes) {
-        const recipeId = recipe.id?.toString() || '';
-        const produtoBaseId = recipe.produto_base_id?.toString() || '';
-        
-        // For injected juices, use produto_base_id; for regular recipes, use recipe ID
-        const idToUse = produtoBaseId || recipeId;
-        
-        if (idToUse && !realCosts[idToUse]) {
-          // First try cache
-          const cachedCost = getCachedCost(idToUse, mealsPerDay);
-          if (cachedCost !== null) {
-            setRealCosts(prev => ({ ...prev, [idToUse]: cachedCost }));
-          } else {
-            // Calculate if not cached
-            const result = await calculateRecipeCost(idToUse, mealsPerDay);
-            if (result) {
-              setRealCosts(prev => ({ ...prev, [idToUse]: result.custo_por_porcao }));
-            }
-          }
-        }
-      }
-    };
-    
-    loadCosts();
-  }, [recipesByCategory, calculateRecipeCost, getCachedCost, realCosts]);
-
-  // Get real cost for a recipe with comprehensive validation
-  const getRealCost = (recipe: any): number => {
-    console.log(`💰 Calculando custo para receita: ${recipe.name || recipe.nome}`, recipe);
-    
-    const recipeId = recipe.id?.toString() || '';
-    const recipeName = recipe.name || recipe.nome || '';
-    const produtoBaseId = recipe.produto_base_id?.toString() || '';
-    
-    // Para arroz, sempre usar o custo otimizado conhecido
-    if (recipeName === 'ARROZ BRANCO SIMPLES' || recipeName === 'ARROZ BRANCO') {
-      console.log(`🍚 Arroz detectado - usando custo otimizado: R$ 0.62`);
-      return 0.62;
-    }
-    
-    // Try recipe ID first, then produto_base_id
-    const realCost = realCosts[recipeId] || realCosts[produtoBaseId];
-    
-    if (realCost !== undefined && realCost > 0) {
-      // Validate even real costs from API
-      const correction = correctRecipeCost(
-        realCost,
-        recipe.category || 'default',
-        recipeName,
-        recipeId
-      );
-      
-      if (correction.wasAdjusted) {
-        console.warn('⚠️ Custo real ajustado no frontend:', {
-          recipeId,
-          originalCost: realCost,
-          adjustedCost: correction.cost,
-          reason: correction.reason
-        });
-      }
-      
-      return correction.cost;
-    }
-    
-    // PRIORITY: Kit costs - aplicar ANTES de qualquer validação
-    const kitCosts: { [key: string]: number } = {
-      'CAFÉ COMPLEMENTAR': 0.12,
-      'CAFÉ CORTESIA': 0.12,
-      'KIT DESCARTÁVEL': 0.08,
-      'KIT LIMPEZA': 0.03,
-      'KIT TEMPEROS MESA': 0.05,
-      'PÃO FRANCÊS MINI': 0.03
-    };
-    
-    // Detectar kits primeiro - não pode ser sobrescrito
-    if (kitCosts[recipeName]) {
-      console.log(`🎯 Kit detectado - custo fixo: R$ ${kitCosts[recipeName].toFixed(2)}`);
-      return kitCosts[recipeName];
-    }
-
-    // Enhanced fallback system com custos otimizados conhecidos
-    const hardcodedOptimizedCosts: { [key: string]: number } = {
-      'FEIJÃO CARIOCA': 0.85,
-      'FEIJÃO (SÓ CARIOCA)': 0.85,
-      'MACARRÃO SIMPLES': 0.45,
-      'FRANGO GRELHADO': 1.20
-    };
-    
-    if (hardcodedOptimizedCosts[recipeName]) {
-      console.log(`🎯 Custo otimizado hardcoded: R$ ${hardcodedOptimizedCosts[recipeName].toFixed(2)}`);
-      return hardcodedOptimizedCosts[recipeName];
-    }
-    
-    // Use correction system for fallback
-    const originalCost = recipe.cost || recipe.custo || recipe.custo_por_refeicao || 2.50;
-    
-    const correction = correctRecipeCost(
-      originalCost,
-      recipe.category || 'default',
-      recipeName,
-      recipeId
-    );
-    
-    console.log(`⚠️ Usando custo padrão corrigido: R$ ${correction.cost.toFixed(2)}`);
-    return correction.cost;
-  };
+  }, [currentDay]);
 
   // Calculate costs separately for Base (fixed) and Variable Menu
-  const { baseCost, variableCost, totalCost } = useMemo(() => {
+  const { baseCost, variableCost, totalCost } = React.useMemo(() => {
     // Include injected base items in cost calculation
     const baseItems = recipesByCategory['Base'] || [];
-    const base = baseItems.reduce((sum, recipe) => sum + getRealCost(recipe), 0);
+    const base = baseItems.reduce((sum, recipe) => sum + (recipe.cost || recipe.custo || recipe.custo_por_refeicao || 0), 0);
     
     const allVariableRecipes = CATEGORY_ORDER
       .filter(cat => cat !== 'Base')
       .flatMap(cat => recipesByCategory[cat] || []);
     
-    const variable = allVariableRecipes.reduce((sum, recipe) => sum + getRealCost(recipe), 0);
+    const variable = allVariableRecipes.reduce((sum, recipe) => sum + (recipe.cost || recipe.custo || recipe.custo_por_refeicao || 0), 0);
     
     return {
       baseCost: base,
       variableCost: variable,
       totalCost: base + variable
     };
-  }, [recipesByCategory, realCosts]);
-
-  // Get active juice types for display
-  const activeJuiceTypes = useMemo(() => {
-    // Get client juice configuration from selectedClient or infer from menu data
-    let config;
-    if (selectedClient) {
-      config = {
-        use_pro_mix: selectedClient.use_pro_mix || false,
-        use_pro_vita: selectedClient.use_pro_vita || false,
-        use_suco_diet: selectedClient.use_suco_diet || false,
-        use_suco_natural: selectedClient.use_suco_natural || false
-      };
-    } else {
-      // Try to infer from menu data if available
-      const menuData = (menu as any).menu_data;
-      const tiposConfigurados = menuData?.tipos_configurados || [];
-      config = {
-        use_pro_mix: tiposConfigurados.includes('pro_mix'),
-        use_pro_vita: tiposConfigurados.includes('vita_suco'),
-        use_suco_diet: tiposConfigurados.includes('diet'),
-        use_suco_natural: tiposConfigurados.includes('natural') || tiposConfigurados.length === 0
-      };
-    }
-    
-    const types = [];
-    if (config.use_pro_mix) types.push('Pró Mix');
-    if (config.use_pro_vita) types.push('Vita Suco');
-    if (config.use_suco_diet) types.push('Diet');
-    if (config.use_suco_natural) types.push('Natural');
-    return types;
-  }, [selectedClient, menu]);
+  }, [recipesByCategory]);
 
   return (
     <div className="w-full max-w-4xl mx-auto bg-white rounded-lg shadow-sm border p-6 space-y-6">
       {/* Header */}
       <div className="text-center space-y-3">
-        {/* Juice Configuration Display */}
-        {activeJuiceTypes.length > 0 && (
-          <div className="flex justify-center gap-2 mb-2">
-            <Badge variant="secondary" className="text-xs">
-              Sucos ativos: {activeJuiceTypes.join(', ')}
-            </Badge>
-          </div>
-        )}
         <h2 className="text-xl font-medium text-gray-600">
           Semana 1 - {menu.clientName}
         </h2>
@@ -699,7 +414,7 @@ export function MenuDayCarousel({ menu, optimizationResult }: MenuDayCarouselPro
       <div className="grid grid-cols-3 gap-4">
         {CATEGORY_ORDER.map((category) => {
           const recipes = recipesByCategory[category] || [];
-          const categoryTotal = recipes.reduce((sum, recipe) => sum + getRealCost(recipe), 0);
+          const categoryTotal = recipes.reduce((sum, recipe) => sum + (recipe.cost || recipe.custo || recipe.custo_por_refeicao || 0), 0);
           const isBaseCategory = category === 'Base';
           
           return (
@@ -724,7 +439,7 @@ export function MenuDayCarousel({ menu, optimizationResult }: MenuDayCarouselPro
                           {recipe.name || recipe.nome || 'Nome não definido'}
                         </h4>
                         <p className="text-base font-semibold text-green-600">
-                          R$ {getRealCost(recipe).toFixed(2)}
+                          R$ {(recipe.cost || recipe.custo || recipe.custo_por_refeicao || 0).toFixed(2)}
                         </p>
                       </div>
                     ))
