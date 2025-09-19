@@ -95,16 +95,51 @@ Deno.serve(async (req) => {
         console.log(`♻️ Todas as receitas de ${categoria} já foram usadas, reiniciando pool`);
       }
 
-      // Aplicar filtro de orçamento se especificado
+      // Aplicar filtro de orçamento se especificado (usar custo real calculado)
       if (budgetPerMeal) {
         const custoMaximoCategoria = getCustoMaximoCategoria(categoria, budgetPerMeal);
-        const candidatasDentroOrcamento = candidatas.filter(receita => {
-          const custoEstimado = getCustoEstimado(categoria);
-          return custoEstimado <= custoMaximoCategoria;
-        });
+        console.log(`💰 Orçamento máximo para ${categoria}: R$ ${custoMaximoCategoria.toFixed(2)}`);
+        
+        // Verificar custo real das receitas candidatas
+        const candidatasDentroOrcamento = [];
+        
+        for (const receita of candidatas.slice(0, Math.min(candidatas.length, 20))) { // Limitar a 20 para performance
+          try {
+            const custoReal = await calcularCustoRealReceita(receita.receita_id_legado, categoria);
+            if (custoReal <= custoMaximoCategoria) {
+              candidatasDentroOrcamento.push({...receita, custoCalculado: custoReal});
+            }
+          } catch (error) {
+            // Em caso de erro, usar fallback e adicionar à lista
+            const custoFallback = getCustoEstimadoFallback(categoria);
+            if (custoFallback <= custoMaximoCategoria) {
+              candidatasDentroOrcamento.push({...receita, custoCalculado: custoFallback});
+            }
+          }
+        }
         
         if (candidatasDentroOrcamento.length > 0) {
           candidatas = candidatasDentroOrcamento;
+          console.log(`💰 ${candidatasDentroOrcamento.length} receitas dentro do orçamento para ${categoria}`);
+        } else {
+          // Se nenhuma receita está no orçamento, pegar a mais barata
+          console.log(`⚠️ Nenhuma receita de ${categoria} no orçamento, selecionando a mais barata`);
+          let receitaMaisBarata = candidatas[0];
+          let menorCusto = Infinity;
+          
+          for (const receita of candidatas.slice(0, 10)) { // Verificar apenas 10 para performance
+            try {
+              const custo = await calcularCustoRealReceita(receita.receita_id_legado, categoria);
+              if (custo < menorCusto) {
+                menorCusto = custo;
+                receitaMaisBarata = {...receita, custoCalculado: custo};
+              }
+            } catch (error) {
+              // Continuar para próxima receita em caso de erro
+            }
+          }
+          
+          candidatas = [receitaMaisBarata];
         }
       }
 
@@ -211,9 +246,16 @@ Deno.serve(async (req) => {
             // Marcar receita como usada
             receitasUsadas.add(receitaSelecionada.id);
             
+            // Calcular custo real da receita
+            let custoAjustado;
+            if (receitaSelecionada.custoCalculado !== undefined) {
+              custoAjustado = receitaSelecionada.custoCalculado; // Usar custo já calculado se disponível
+            } else {
+              custoAjustado = await calcularCustoRealReceita(receitaSelecionada.receita_id_legado, categoria);
+            }
+            
             // Aplicar gramagem das proteínas
             let displayName = receitaSelecionada.nome;
-            let custoAjustado = getCustoEstimado(categoria);
             
             if (categoria === 'Prato Principal 1' && proteinConfig.protein_grams_pp1) {
               displayName = `${receitaSelecionada.nome} ${proteinConfig.protein_grams_pp1}G`;
@@ -312,7 +354,89 @@ Deno.serve(async (req) => {
       };
     }
 
-    function getCustoEstimado(categoria: string): number {
+    // Função para calcular custo real da receita baseado nos ingredientes
+    async function calcularCustoRealReceita(receitaId: string, categoria: string): Promise<number> {
+      try {
+        // Buscar ingredientes da receita
+        const { data: ingredientes, error: ingredientesError } = await supabase
+          .from('receita_ingredientes')
+          .select('produto_base_id, quantidade, unidade')
+          .eq('receita_id_legado', receitaId);
+
+        if (ingredientesError || !ingredientes?.length) {
+          console.log(`⚠️ Ingredientes não encontrados para receita ${receitaId}, usando custo estimado`);
+          return getCustoEstimadoFallback(categoria);
+        }
+
+        // Buscar preços dos produtos base
+        const produtoBaseIds = ingredientes.map(i => i.produto_base_id).filter(Boolean);
+        
+        if (!produtoBaseIds.length) {
+          console.log(`⚠️ Nenhum produto_base_id válido para receita ${receitaId}`);
+          return getCustoEstimadoFallback(categoria);
+        }
+
+        const { data: precos, error: precosError } = await supabase
+          .from('co_solicitacao_produto_listagem')
+          .select('produto_base_id, preco, per_capita, em_promocao_sim_nao, produto_base_quantidade_embalagem')
+          .in('produto_base_id', produtoBaseIds)
+          .order('preco', { ascending: true });
+
+        if (precosError || !precos?.length) {
+          console.log(`⚠️ Preços não encontrados para ingredientes da receita ${receitaId}`);
+          return getCustoEstimadoFallback(categoria);
+        }
+
+        // Calcular custo total
+        let custoTotal = 0;
+        let ingredientesCalculados = 0;
+
+        for (const ingrediente of ingredientes) {
+          if (!ingrediente.produto_base_id) continue;
+
+          // Encontrar o melhor preço para este produto (considerando promoções)
+          const precosDisponiveis = precos.filter(p => p.produto_base_id === ingrediente.produto_base_id);
+          
+          if (precosDisponiveis.length === 0) continue;
+
+          // Priorizar produtos em promoção, depois pelo menor preço
+          const melhorPreco = precosDisponiveis.sort((a, b) => {
+            if (a.em_promocao_sim_nao && !b.em_promocao_sim_nao) return -1;
+            if (!a.em_promocao_sim_nao && b.em_promocao_sim_nao) return 1;
+            return (a.preco || 0) - (b.preco || 0);
+          })[0];
+
+          // Calcular custo do ingrediente
+          const quantidade = ingrediente.quantidade || 1;
+          const precoUnitario = melhorPreco.preco || 0;
+          const perCapita = melhorPreco.per_capita || 1;
+          
+          // Usar per_capita se disponível, senão usar quantidade direta
+          const custoIngrediente = perCapita > 0 ? precoUnitario * (quantidade / perCapita) : precoUnitario * quantidade;
+          
+          custoTotal += custoIngrediente;
+          ingredientesCalculados++;
+        }
+
+        if (ingredientesCalculados === 0) {
+          console.log(`⚠️ Nenhum ingrediente teve custo calculado para receita ${receitaId}`);
+          return getCustoEstimadoFallback(categoria);
+        }
+
+        // Ajustar para 50 porções (padrão do sistema)
+        const custoPor50Porcoes = custoTotal;
+        
+        console.log(`💰 Custo calculado para receita ${receitaId}: R$ ${custoPor50Porcoes.toFixed(2)} (${ingredientesCalculados} ingredientes)`);
+        
+        return Math.max(custoPor50Porcoes, 0.10); // Mínimo de R$ 0,10
+
+      } catch (error) {
+        console.error(`❌ Erro ao calcular custo da receita ${receitaId}:`, error);
+        return getCustoEstimadoFallback(categoria);
+      }
+    }
+
+    function getCustoEstimadoFallback(categoria: string): number {
       const custos = {
         'Prato Principal 1': 2.50,
         'Prato Principal 2': 2.00,
