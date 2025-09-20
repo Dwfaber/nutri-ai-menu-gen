@@ -98,7 +98,7 @@ Deno.serve(async (req) => {
     // Cache para custos calculados durante a execução
     const costCache = new Map<string, number>();
 
-    // Função para calcular custo real da receita com quantidade de refeições
+    // 🚀 Função OTIMIZADA para calcular custo usando custos pré-calculados
     async function calcularCustoReal(receitaId: string, mealQuantity: number = 50): Promise<number | null> {
       const cacheKey = `cost_${receitaId}_${mealQuantity}`;
       
@@ -108,7 +108,26 @@ Deno.serve(async (req) => {
       }
 
       try {
-        console.log(`💰 Calculando custo real para receita ${receitaId} (${mealQuantity} porções)`);
+        // 💰 NOVA LÓGICA: Verificar se existe custo pré-calculado
+        const { data: receitaCompleta } = await supabase
+          .from('receitas_legado')
+          .select('custo_total, porcoes, nome_receita')
+          .eq('receita_id_legado', receitaId)
+          .single();
+
+        // Se tem custo pré-calculado (para 100 pessoas), fazer ajuste proporcional
+        if (receitaCompleta?.custo_total && receitaCompleta.custo_total > 0) {
+          const custoBase = receitaCompleta.custo_total; // Custo para 100 pessoas
+          const custoPorPorcao = (custoBase * mealQuantity) / (100 * mealQuantity); // = custoBase / 100
+          
+          console.log(`💰 PRÉ-CALCULADO: ${receitaCompleta.nome_receita} - R$ ${custoPorPorcao.toFixed(4)} por porção (base: R$ ${custoBase.toFixed(2)}/100 pessoas)`);
+          
+          costCache.set(cacheKey, custoPorPorcao);
+          return custoPorPorcao;
+        }
+
+        // 🔄 FALLBACK: Cálculo em tempo real (compatibilidade)
+        console.log(`⚡ FALLBACK - Calculando custo em tempo real para receita ${receitaId} (${mealQuantity} porções) - custo_total = ${receitaCompleta?.custo_total || 'NULL'}`);
         
         // Buscar ingredientes da receita
         const { data: ingredientes, error: ingredientesError } = await supabase

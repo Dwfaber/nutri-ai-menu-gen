@@ -128,6 +128,24 @@ serve(async (req) => {
       retry_attempts: result.retryAttempts || 0
     })
 
+    // 🚀 NOVO: Após sincronização bem-sucedida, recalcular custos automaticamente
+    try {
+      console.log('🔄 Iniciando recálculo automático de custos após sincronização...');
+      
+      const { data: recalcResult, error: recalcError } = await supabase.functions.invoke('recalculate-recipe-costs', {
+        body: { trigger_source: 'n8n_sync' }
+      });
+
+      if (recalcError) {
+        console.error('❌ Erro no recálculo de custos:', recalcError);
+      } else {
+        console.log('✅ Recálculo de custos concluído:', recalcResult);
+      }
+    } catch (recalcError) {
+      console.error('❌ Erro ao chamar recálculo de custos:', recalcError);
+      // Não falhar a sincronização por causa do recálculo
+    }
+
     return new Response(
       JSON.stringify({
         success: true,
