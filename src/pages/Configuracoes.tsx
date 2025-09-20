@@ -1,6 +1,7 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { OptimizationSettings } from "@/components/Optimization";
+import { RecipeCostManager } from "@/components/RecipeCostManager";
 import { Settings, Zap, User, Globe } from "lucide-react";
 
 export default function Configuracoes() {
@@ -68,19 +69,7 @@ export default function Configuracoes() {
         </TabsContent>
 
         <TabsContent value="advanced" className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Configurações Avançadas</CardTitle>
-              <CardDescription>
-                Configurações técnicas e opções avançadas do sistema
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <p className="text-muted-foreground">
-                Em desenvolvimento - configurações avançadas serão implementadas em breve.
-              </p>
-            </CardContent>
-          </Card>
+          <RecipeCostManager />
         </TabsContent>
       </Tabs>
     </div>
