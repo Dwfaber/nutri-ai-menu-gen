@@ -69,7 +69,7 @@ serve(async (req) => {
 
     console.log(`🛒 Total de produtos com preço encontrados: ${produtos?.length || 0}`);
 
-    // Buscar todos os ingredientes uma única vez
+    // Buscar todos os ingredientes (sem join complexo para evitar erro de schema cache)
     const { data: todosIngredientes, error: ingredientesError } = await supabase
       .from('receita_ingredientes')
       .select(`
@@ -77,21 +77,25 @@ serve(async (req) => {
         produto_base_id,
         quantidade,
         unidade,
-        nome,
-        receitas_legado!inner(inativa)
+        nome
       `)
-      .eq('receitas_legado.inativa', false)
       .not('produto_base_id', 'is', null);
 
     if (ingredientesError) {
       throw new Error(`Erro ao buscar ingredientes: ${ingredientesError.message}`);
     }
 
-    console.log(`🥘 Total de ingredientes encontrados: ${todosIngredientes?.length || 0}`);
+    // Filtrar apenas ingredientes de receitas ativas
+    const receitasAtivasIds = new Set(receitas?.map(r => r.receita_id_legado) || []);
+    const ingredientesAtivos = todosIngredientes?.filter(ing => 
+      receitasAtivasIds.has(ing.receita_id_legado)
+    ) || [];
+
+    console.log(`🥘 Total de ingredientes encontrados: ${ingredientesAtivos.length}`);
 
     // Agrupar ingredientes por receita
     const ingredientesPorReceita = new Map<string, IngredientData[]>();
-    todosIngredientes?.forEach(ing => {
+    ingredientesAtivos.forEach(ing => {
       if (!ingredientesPorReceita.has(ing.receita_id_legado)) {
         ingredientesPorReceita.set(ing.receita_id_legado, []);
       }
