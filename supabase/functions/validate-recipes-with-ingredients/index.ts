@@ -33,15 +33,18 @@ Deno.serve(async (req) => {
         }
         
         // Buscar receitas que têm ingredientes na tabela receita_ingredientes
+        // JOIN com receitas_legado para filtrar apenas receitas ativas
         const { data: receitasComIngredientes, error } = await supabase
           .from('receita_ingredientes')
           .select(`
             receita_id_legado,
             nome,
             categoria_descricao,
-            produto_base_id
+            produto_base_id,
+            receitas_legado!inner(inativa)
           `)
           .eq('categoria_descricao', categoriaMapeada)
+          .eq('receitas_legado.inativa', false)
           .not('produto_base_id', 'is', null)
           .order('receita_id_legado');
 
@@ -63,7 +66,7 @@ Deno.serve(async (req) => {
         });
 
         const receitas = Array.from(receitasUnicas.values());
-        console.log(`✅ ${categoria}: ${receitas.length} receitas com ingredientes encontradas`);
+        console.log(`✅ ${categoria}: ${receitas.length} receitas ATIVAS com ingredientes encontradas`);
         return receitas;
       } catch (error) {
         console.error(`❌ Erro ao buscar receitas com ingredientes para ${categoria}:`, error);
@@ -277,12 +280,20 @@ Deno.serve(async (req) => {
       // Limitar a 10 receitas por categoria para otimizar velocidade
       const receitasLimitadas = receitas.slice(0, 10);
       
-      // Buscar todos os ingredientes de uma vez
+      // Buscar todos os ingredientes de uma vez (apenas receitas ativas)
       const receitaIds = receitasLimitadas.map(r => r.id);
       const { data: todosIngredientes } = await supabase
         .from('receita_ingredientes')
-        .select('receita_id_legado, produto_base_id, quantidade, unidade, nome')
-        .in('receita_id_legado', receitaIds);
+        .select(`
+          receita_id_legado, 
+          produto_base_id, 
+          quantidade, 
+          unidade, 
+          nome,
+          receitas_legado!inner(inativa)
+        `)
+        .in('receita_id_legado', receitaIds)
+        .eq('receitas_legado.inativa', false);
       
       if (!todosIngredientes?.length) {
         batchCache.set(cacheKey, resultados);
