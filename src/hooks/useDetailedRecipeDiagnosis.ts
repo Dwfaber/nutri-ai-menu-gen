@@ -213,11 +213,12 @@ export const useDetailedRecipeDiagnosis = () => {
   };
 
   useEffect(() => {
-    const fetchAndAnalyze = async () => {
+  const fetchAndAnalyze = async () => {
       try {
         setLoading(true);
         setError(null);
 
+        // Buscar receitas e ingredientes
         const { data: recipesData, error: fetchError } = await supabase
           .from('receitas_legado')
           .select('*')
@@ -227,16 +228,36 @@ export const useDetailedRecipeDiagnosis = () => {
           throw fetchError;
         }
 
+        // Buscar ingredientes separadamente
+        const { data: ingredientsData } = await supabase
+          .from('receita_ingredientes')
+          .select('receita_id_legado, produto_base_id, quantidade, unidade');
+
+        // Agrupar ingredientes por receita
+        const ingredientsByRecipe = (ingredientsData || []).reduce((acc, ingredient) => {
+          if (!acc[ingredient.receita_id_legado]) {
+            acc[ingredient.receita_id_legado] = [];
+          }
+          acc[ingredient.receita_id_legado].push(ingredient);
+          return acc;
+        }, {} as Record<string, any[]>);
+
         const detailedDiagnoses: DetailedDiagnosis[] = (recipesData || []).map(recipe => {
-          const problems = diagnoseProblem(recipe);
+          // Usar ingredientes da tabela separada se disponível
+          const recipeWithIngredients = {
+            ...recipe,
+            ingredientes: ingredientsByRecipe[recipe.receita_id_legado] || recipe.ingredientes || []
+          };
+          
+          const problems = diagnoseProblem(recipeWithIngredients);
           const qualityScore = calculateQualityScore(problems);
           const severity = getSeverity(problems);
-          const businessImpact = getBusinessImpact(problems, recipe);
+          const businessImpact = getBusinessImpact(problems, recipeWithIngredients);
           const estimatedFixTime = getEstimatedFixTime(problems);
           const canBeUsed = canRecipeBeUsed(problems);
 
           return {
-            recipe,
+            recipe: recipeWithIngredients,
             problems,
             qualityScore,
             severity,
