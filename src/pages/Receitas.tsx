@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Search, Book, Filter, AlertTriangle, CheckCircle, XCircle, Clock, DollarSign, Users, TrendingUp, AlertCircle, Target, Zap, Settings } from 'lucide-react';
+import { Search, Book, Filter, AlertTriangle, CheckCircle, XCircle, Clock, DollarSign, Users, TrendingUp, AlertCircle, Target, Zap, Settings, Calculator, RefreshCw } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -10,6 +10,7 @@ import { Progress } from '@/components/ui/progress';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useRecipeAnalysis } from '@/hooks/useRecipeAnalysis';
 import { useDetailedRecipeDiagnosis } from '@/hooks/useDetailedRecipeDiagnosis';
+import { useRecipeCosting } from '@/hooks/useRecipeCosting';
 
 const Receitas = () => {
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
@@ -36,6 +37,13 @@ const Receitas = () => {
     getDiagnosesByFilter,
     refetch: refetchDiagnosis
   } = useDetailedRecipeDiagnosis();
+
+  const { 
+    isRecalculating, 
+    stats: costStats, 
+    logs: costLogs, 
+    triggerRecalculation 
+  } = useRecipeCosting();
 
   const filteredRecipes = recipes.filter(recipe => {
     const matchesCategory = selectedCategory === 'all' || recipe.categoria_descricao === selectedCategory;
@@ -429,6 +437,76 @@ const Receitas = () => {
                   </Card>
                 </div>
               )}
+
+              {/* Sistema de Recálculo de Custos */}
+              <Card className="border-primary/20 bg-primary/5">
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Calculator className="h-5 w-5 text-primary" />
+                      <CardTitle>Recálculo Automático de Custos</CardTitle>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        onClick={async () => {
+                          await triggerRecalculation();
+                          refetchDiagnosis();
+                        }}
+                        disabled={isRecalculating}
+                        className="flex items-center gap-2"
+                      >
+                        {isRecalculating ? (
+                          <>
+                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white" />
+                            Recalculando...
+                          </>
+                        ) : (
+                          <>
+                            <Calculator className="h-4 w-4" />
+                            Recalcular Custos
+                          </>
+                        )}
+                      </Button>
+                      <Button
+                        onClick={refetchDiagnosis}
+                        variant="outline"
+                        size="sm"
+                        disabled={diagnosisLoading}
+                      >
+                        <RefreshCw className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  {costStats && (
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                      <div className="text-center p-3 bg-background rounded-lg border">
+                        <div className="text-2xl font-bold">{costStats.total_recipes}</div>
+                        <div className="text-sm text-muted-foreground">Total de Receitas</div>
+                      </div>
+                      <div className="text-center p-3 bg-green-50 dark:bg-green-950/20 rounded-lg border border-green-200 dark:border-green-800">
+                        <div className="text-2xl font-bold text-green-600">{costStats.recipes_with_cost}</div>
+                        <div className="text-sm text-green-700 dark:text-green-300">Com Custo Calculado</div>
+                      </div>
+                      <div className="text-center p-3 bg-orange-50 dark:bg-orange-950/20 rounded-lg border border-orange-200 dark:border-orange-800">
+                        <div className="text-2xl font-bold text-orange-600">{costStats.recipes_without_cost}</div>
+                        <div className="text-sm text-orange-700 dark:text-orange-300">Sem Custo</div>
+                      </div>
+                    </div>
+                  )}
+                  
+                  {costStats && costStats.recipes_without_cost > 0 && (
+                    <Alert className="border-orange-200 bg-orange-50 dark:bg-orange-950/20">
+                      <AlertTriangle className="h-4 w-4 text-orange-600" />
+                      <AlertDescription className="text-orange-800 dark:text-orange-200">
+                        <strong>{costStats.recipes_without_cost} receitas</strong> podem ter seus custos calculados automaticamente.
+                        Execute o recálculo para processar receitas que têm ingredientes mas ainda não têm custo definido.
+                      </AlertDescription>
+                    </Alert>
+                  )}
+                </CardContent>
+              </Card>
 
               {/* Filtros de Diagnóstico */}
               <Card>

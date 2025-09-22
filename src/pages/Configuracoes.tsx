@@ -1,7 +1,6 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { OptimizationSettings } from "@/components/Optimization";
-import { RecipeCostManager } from "@/components/RecipeCostManager";
 import { Settings, Zap, User, Globe } from "lucide-react";
 
 export default function Configuracoes() {
@@ -69,7 +68,27 @@ export default function Configuracoes() {
         </TabsContent>
 
         <TabsContent value="advanced" className="space-y-6">
-          <RecipeCostManager />
+          <Card>
+            <CardHeader>
+              <CardTitle>Configurações Avançadas</CardTitle>
+              <CardDescription>
+                Funcionalidades avançadas do sistema foram movidas para seções específicas
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                <div className="p-4 bg-muted/50 rounded-lg">
+                  <h4 className="font-medium mb-2">📊 Gestão de Custos de Receitas</h4>
+                  <p className="text-sm text-muted-foreground mb-3">
+                    O sistema de recálculo de custos foi integrado diretamente na análise de receitas.
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Acesse: <strong>Receitas → Diagnóstico Detalhado</strong>
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
         </TabsContent>
       </Tabs>
     </div>
