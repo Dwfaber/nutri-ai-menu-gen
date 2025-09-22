@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Search, Book, Filter, AlertTriangle, CheckCircle, XCircle, Clock, DollarSign, Users, TrendingUp, AlertCircle } from 'lucide-react';
+import { Search, Book, Filter, AlertTriangle, CheckCircle, XCircle, Clock, DollarSign, Users, TrendingUp, AlertCircle, Target, Zap, Settings } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -9,6 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Progress } from '@/components/ui/progress';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useRecipeAnalysis } from '@/hooks/useRecipeAnalysis';
+import { useDetailedRecipeDiagnosis } from '@/hooks/useDetailedRecipeDiagnosis';
 
 const Receitas = () => {
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
@@ -26,6 +27,14 @@ const Receitas = () => {
     getRecipeStatus, 
     getRecipesByStatus 
   } = useRecipeAnalysis();
+
+  const {
+    diagnoses,
+    metrics,
+    loading: diagnosisLoading,
+    error: diagnosisError,
+    getDiagnosesByFilter
+  } = useDetailedRecipeDiagnosis();
 
   const filteredRecipes = recipes.filter(recipe => {
     const matchesCategory = selectedCategory === 'all' || recipe.categoria_descricao === selectedCategory;
@@ -213,10 +222,11 @@ const Receitas = () => {
 
       {/* Tabs para diferentes visualizações */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid w-full grid-cols-4">
+        <TabsList className="grid w-full grid-cols-5">
           <TabsTrigger value="overview">Visão Geral</TabsTrigger>
           <TabsTrigger value="categories">Por Categoria</TabsTrigger>
           <TabsTrigger value="problematic">Problemáticas</TabsTrigger>
+          <TabsTrigger value="diagnosis">Diagnóstico Detalhado</TabsTrigger>
           <TabsTrigger value="detailed">Lista Detalhada</TabsTrigger>
         </TabsList>
 
@@ -350,6 +360,268 @@ const Receitas = () => {
               </div>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="diagnosis" className="space-y-4">
+          {diagnosisLoading ? (
+            <div className="flex items-center justify-center h-32">
+              <div className="text-lg text-muted-foreground">Analisando receitas...</div>
+            </div>
+          ) : diagnosisError ? (
+            <Alert className="border-destructive">
+              <AlertTriangle className="h-4 w-4" />
+              <AlertDescription>Erro ao carregar diagnóstico: {diagnosisError}</AlertDescription>
+            </Alert>
+          ) : (
+            <>
+              {/* Métricas de Qualidade dos Dados */}
+              {metrics && (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+                  <Card>
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                      <CardTitle className="text-sm font-medium">Score Médio de Qualidade</CardTitle>
+                      <Target className="h-4 w-4 text-muted-foreground" />
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-2xl font-bold">{metrics.averageQualityScore.toFixed(1)}%</div>
+                      <Progress value={metrics.averageQualityScore} className="mt-2" />
+                    </CardContent>
+                  </Card>
+
+                  <Card>
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                      <CardTitle className="text-sm font-medium">Receitas Bloqueadas</CardTitle>
+                      <XCircle className="h-4 w-4 text-destructive" />
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-2xl font-bold text-destructive">{metrics.blockedRecipes}</div>
+                      <p className="text-xs text-muted-foreground">
+                        {((metrics.blockedRecipes / metrics.totalRecipes) * 100).toFixed(1)}% do total
+                      </p>
+                    </CardContent>
+                  </Card>
+
+                  <Card>
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                      <CardTitle className="text-sm font-medium">Receitas Usáveis</CardTitle>
+                      <CheckCircle className="h-4 w-4 text-green-600" />
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-2xl font-bold text-green-600">{metrics.usableRecipes}</div>
+                      <p className="text-xs text-muted-foreground">
+                        {((metrics.usableRecipes / metrics.totalRecipes) * 100).toFixed(1)}% do total
+                      </p>
+                    </CardContent>
+                  </Card>
+
+                  <Card>
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                      <CardTitle className="text-sm font-medium">Problemas Críticos</CardTitle>
+                      <AlertTriangle className="h-4 w-4 text-destructive" />
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-2xl font-bold text-destructive">{metrics.criticalProblems}</div>
+                      <p className="text-xs text-muted-foreground">
+                        Precisam atenção imediata
+                      </p>
+                    </CardContent>
+                  </Card>
+                </div>
+              )}
+
+              {/* Filtros de Diagnóstico */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>Filtros por Problema</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {/* TODO: Implementar filtro */}}
+                      className="text-xs"
+                    >
+                      🔴 Críticos ({metrics?.criticalProblems || 0})
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {/* TODO: Implementar filtro */}}
+                      className="text-xs"
+                    >
+                      🟠 Sem Custo ({getDiagnosesByFilter('no_cost').length})
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {/* TODO: Implementar filtro */}}
+                      className="text-xs"
+                    >
+                      🔴 Sem Ingredientes ({getDiagnosesByFilter('no_ingredients').length})
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {/* TODO: Implementar filtro */}}
+                      className="text-xs"
+                    >
+                      ❌ Bloqueadas ({getDiagnosesByFilter('blocked').length})
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {/* TODO: Implementar filtro */}}
+                      className="text-xs"
+                    >
+                      📉 Baixa Qualidade ({getDiagnosesByFilter('low_quality').length})
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Diagnóstico Detalhado por Receita */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Settings className="h-5 w-5" />
+                    Diagnóstico Individual Detalhado
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Receita</TableHead>
+                        <TableHead>Score</TableHead>
+                        <TableHead>Problemas Identificados</TableHead>
+                        <TableHead>Ação Requerida</TableHead>
+                        <TableHead>Impacto no Negócio</TableHead>
+                        <TableHead>Tempo p/ Correção</TableHead>
+                        <TableHead>Status</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {diagnoses.slice(0, 50).map((diagnosis) => (
+                        <TableRow key={diagnosis.recipe.id}>
+                          <TableCell>
+                            <div>
+                              <div className="font-medium">{diagnosis.recipe.nome_receita}</div>
+                              <div className="text-sm text-muted-foreground">
+                                {diagnosis.recipe.categoria_descricao || 'Sem categoria'}
+                              </div>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              <span className="text-lg font-bold">{diagnosis.qualityScore}%</span>
+                              <Progress value={diagnosis.qualityScore} className="w-16 h-2" />
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div className="space-y-1">
+                              {diagnosis.problems.slice(0, 3).map((problem, index) => (
+                                <div key={index} className="flex items-center gap-1 text-xs">
+                                  <span>{problem.icon}</span>
+                                  <span>{problem.description}</span>
+                                </div>
+                              ))}
+                              {diagnosis.problems.length > 3 && (
+                                <div className="text-xs text-muted-foreground">
+                                  +{diagnosis.problems.length - 3} problemas...
+                                </div>
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div className="space-y-1">
+                              {diagnosis.problems.slice(0, 2).map((problem, index) => (
+                                <div key={index} className="text-xs">
+                                  • {problem.action}
+                                </div>
+                              ))}
+                              {diagnosis.problems.length > 2 && (
+                                <Button variant="outline" size="sm" className="h-6 text-xs">
+                                  Ver todas ações
+                                </Button>
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div className="text-xs">
+                              {diagnosis.businessImpact}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="outline" className="text-xs">
+                              {diagnosis.estimatedFixTime}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            {diagnosis.canBeUsed ? (
+                              <Badge variant="default" className="bg-green-600">
+                                Usável
+                              </Badge>
+                            ) : (
+                              <Badge variant="destructive">
+                                Bloqueada
+                              </Badge>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                  {diagnoses.length > 50 && (
+                    <div className="text-center text-muted-foreground text-sm mt-4">
+                      Mostrando 50 de {diagnoses.length} receitas. Use os filtros para refinar a busca.
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Painel de Ações Corretivas em Massa */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Zap className="h-5 w-5" />
+                    Ações Corretivas em Massa
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="space-y-2">
+                      <h4 className="font-semibold text-destructive">🔴 Ações Urgentes</h4>
+                      <Button variant="destructive" size="sm" className="w-full">
+                        Corrigir {getDiagnosesByFilter('no_ingredients').length} receitas sem ingredientes
+                      </Button>
+                      <Button variant="destructive" size="sm" className="w-full">
+                        Reativar receitas inativas úteis
+                      </Button>
+                    </div>
+                    <div className="space-y-2">
+                      <h4 className="font-semibold text-orange-600">🟠 Ações Importantes</h4>
+                      <Button variant="outline" size="sm" className="w-full border-orange-600">
+                        Recalcular {getDiagnosesByFilter('no_cost').length} custos zerados
+                      </Button>
+                      <Button variant="outline" size="sm" className="w-full border-orange-600">
+                        Revisar custos muito altos
+                      </Button>
+                    </div>
+                    <div className="space-y-2">
+                      <h4 className="font-semibold text-yellow-600">🟡 Melhorias</h4>
+                      <Button variant="outline" size="sm" className="w-full border-yellow-600">
+                        Definir categorias em falta
+                      </Button>
+                      <Button variant="outline" size="sm" className="w-full border-yellow-600">
+                        Completar modos de preparo
+                      </Button>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </>
+          )}
         </TabsContent>
 
         <TabsContent value="detailed" className="space-y-4">
