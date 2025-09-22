@@ -33,7 +33,8 @@ const Receitas = () => {
     metrics,
     loading: diagnosisLoading,
     error: diagnosisError,
-    getDiagnosesByFilter
+    getDiagnosesByFilter,
+    refetch: refetchDiagnosis
   } = useDetailedRecipeDiagnosis();
 
   const filteredRecipes = recipes.filter(recipe => {
@@ -483,10 +484,20 @@ const Receitas = () => {
               {/* Diagnóstico Detalhado por Receita */}
               <Card>
                 <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Settings className="h-5 w-5" />
-                    Diagnóstico Individual Detalhado
-                  </CardTitle>
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="flex items-center gap-2">
+                      <Settings className="h-5 w-5" />
+                      Diagnóstico Individual Detalhado
+                    </CardTitle>
+                    <Button
+                      onClick={refetchDiagnosis}
+                      variant="outline"
+                      size="sm"
+                      disabled={diagnosisLoading}
+                    >
+                      {diagnosisLoading ? 'Atualizando...' : 'Atualizar Diagnósticos'}
+                    </Button>
+                  </div>
                 </CardHeader>
                 <CardContent>
                   <Table>

@@ -212,101 +212,101 @@ export const useDetailedRecipeDiagnosis = () => {
     return !problems.some(p => p.type === 'critical');
   };
 
-  useEffect(() => {
   const fetchAndAnalyze = async () => {
-      try {
-        setLoading(true);
-        setError(null);
+    try {
+      setLoading(true);
+      setError(null);
 
-        // Buscar receitas e ingredientes
-        const { data: recipesData, error: fetchError } = await supabase
-          .from('receitas_legado')
-          .select('*')
-          .order('nome_receita');
+      // Buscar receitas e ingredientes
+      const { data: recipesData, error: fetchError } = await supabase
+        .from('receitas_legado')
+        .select('*')
+        .order('nome_receita');
 
-        if (fetchError) {
-          throw fetchError;
-        }
-
-        // Buscar ingredientes separadamente
-        const { data: ingredientsData } = await supabase
-          .from('receita_ingredientes')
-          .select('receita_id_legado, produto_base_id, quantidade, unidade');
-
-        // Agrupar ingredientes por receita
-        const ingredientsByRecipe = (ingredientsData || []).reduce((acc, ingredient) => {
-          if (!acc[ingredient.receita_id_legado]) {
-            acc[ingredient.receita_id_legado] = [];
-          }
-          acc[ingredient.receita_id_legado].push(ingredient);
-          return acc;
-        }, {} as Record<string, any[]>);
-
-        const detailedDiagnoses: DetailedDiagnosis[] = (recipesData || []).map(recipe => {
-          // Usar ingredientes da tabela separada se disponível
-          const recipeWithIngredients = {
-            ...recipe,
-            ingredientes: ingredientsByRecipe[recipe.receita_id_legado] || recipe.ingredientes || []
-          };
-          
-          const problems = diagnoseProblem(recipeWithIngredients);
-          const qualityScore = calculateQualityScore(problems);
-          const severity = getSeverity(problems);
-          const businessImpact = getBusinessImpact(problems, recipeWithIngredients);
-          const estimatedFixTime = getEstimatedFixTime(problems);
-          const canBeUsed = canRecipeBeUsed(problems);
-
-          return {
-            recipe: recipeWithIngredients,
-            problems,
-            qualityScore,
-            severity,
-            businessImpact,
-            estimatedFixTime,
-            canBeUsed
-          };
-        });
-
-        setDiagnoses(detailedDiagnoses);
-
-        // Calcular métricas agregadas
-        const totalRecipes = detailedDiagnoses.length;
-        const averageQualityScore = detailedDiagnoses.reduce((sum, d) => sum + d.qualityScore, 0) / totalRecipes;
-        const criticalProblems = detailedDiagnoses.filter(d => d.severity === 'critical').length;
-        const highProblems = detailedDiagnoses.filter(d => d.severity === 'high').length;
-        const mediumProblems = detailedDiagnoses.filter(d => d.severity === 'medium').length;
-        const lowProblems = detailedDiagnoses.filter(d => d.severity === 'low').length;
-        const blockedRecipes = detailedDiagnoses.filter(d => !d.canBeUsed).length;
-        const usableRecipes = detailedDiagnoses.filter(d => d.canBeUsed).length;
-
-        const problemsByCategory: Record<string, number> = {};
-        detailedDiagnoses.forEach(diagnosis => {
-          diagnosis.problems.forEach(problem => {
-            problemsByCategory[problem.category] = (problemsByCategory[problem.category] || 0) + 1;
-          });
-        });
-
-        const calculatedMetrics: DiagnosisMetrics = {
-          totalRecipes,
-          averageQualityScore,
-          criticalProblems,
-          highProblems,
-          mediumProblems,
-          lowProblems,
-          blockedRecipes,
-          usableRecipes,
-          problemsByCategory
-        };
-
-        setMetrics(calculatedMetrics);
-      } catch (err) {
-        console.error('Erro ao analisar receitas:', err);
-        setError(err instanceof Error ? err.message : 'Erro desconhecido');
-      } finally {
-        setLoading(false);
+      if (fetchError) {
+        throw fetchError;
       }
-    };
 
+      // Buscar ingredientes separadamente
+      const { data: ingredientsData } = await supabase
+        .from('receita_ingredientes')
+        .select('receita_id_legado, produto_base_id, quantidade, unidade');
+
+      // Agrupar ingredientes por receita
+      const ingredientsByRecipe = (ingredientsData || []).reduce((acc, ingredient) => {
+        if (!acc[ingredient.receita_id_legado]) {
+          acc[ingredient.receita_id_legado] = [];
+        }
+        acc[ingredient.receita_id_legado].push(ingredient);
+        return acc;
+      }, {} as Record<string, any[]>);
+
+      const detailedDiagnoses: DetailedDiagnosis[] = (recipesData || []).map(recipe => {
+        // Usar ingredientes da tabela separada se disponível
+        const recipeWithIngredients = {
+          ...recipe,
+          ingredientes: ingredientsByRecipe[recipe.receita_id_legado] || recipe.ingredientes || []
+        };
+        
+        const problems = diagnoseProblem(recipeWithIngredients);
+        const qualityScore = calculateQualityScore(problems);
+        const severity = getSeverity(problems);
+        const businessImpact = getBusinessImpact(problems, recipeWithIngredients);
+        const estimatedFixTime = getEstimatedFixTime(problems);
+        const canBeUsed = canRecipeBeUsed(problems);
+
+        return {
+          recipe: recipeWithIngredients,
+          problems,
+          qualityScore,
+          severity,
+          businessImpact,
+          estimatedFixTime,
+          canBeUsed
+        };
+      });
+
+      setDiagnoses(detailedDiagnoses);
+
+      // Calcular métricas agregadas
+      const totalRecipes = detailedDiagnoses.length;
+      const averageQualityScore = detailedDiagnoses.reduce((sum, d) => sum + d.qualityScore, 0) / totalRecipes;
+      const criticalProblems = detailedDiagnoses.filter(d => d.severity === 'critical').length;
+      const highProblems = detailedDiagnoses.filter(d => d.severity === 'high').length;
+      const mediumProblems = detailedDiagnoses.filter(d => d.severity === 'medium').length;
+      const lowProblems = detailedDiagnoses.filter(d => d.severity === 'low').length;
+      const blockedRecipes = detailedDiagnoses.filter(d => !d.canBeUsed).length;
+      const usableRecipes = detailedDiagnoses.filter(d => d.canBeUsed).length;
+
+      const problemsByCategory: Record<string, number> = {};
+      detailedDiagnoses.forEach(diagnosis => {
+        diagnosis.problems.forEach(problem => {
+          problemsByCategory[problem.category] = (problemsByCategory[problem.category] || 0) + 1;
+        });
+      });
+
+      const calculatedMetrics: DiagnosisMetrics = {
+        totalRecipes,
+        averageQualityScore,
+        criticalProblems,
+        highProblems,
+        mediumProblems,
+        lowProblems,
+        blockedRecipes,
+        usableRecipes,
+        problemsByCategory
+      };
+
+      setMetrics(calculatedMetrics);
+    } catch (err) {
+      console.error('Erro ao analisar receitas:', err);
+      setError(err instanceof Error ? err.message : 'Erro desconhecido');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
     fetchAndAnalyze();
   }, []);
 
@@ -337,6 +337,16 @@ export const useDetailedRecipeDiagnosis = () => {
     }
   };
 
+  const refetch = () => {
+    setDiagnoses([]);
+    setMetrics(null);
+    setLoading(true);
+    setError(null);
+    
+    // Trigger the useEffect to run again
+    fetchAndAnalyze();
+  };
+
   return {
     diagnoses,
     metrics,
@@ -344,6 +354,7 @@ export const useDetailedRecipeDiagnosis = () => {
     error,
     getDiagnosesByFilter,
     diagnoseProblem,
-    calculateQualityScore
+    calculateQualityScore,
+    refetch
   };
 };
