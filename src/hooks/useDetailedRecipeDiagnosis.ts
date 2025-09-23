@@ -332,6 +332,14 @@ export const useDetailedRecipeDiagnosis = () => {
         return diagnoses.filter(d => d.qualityScore >= 80);
       case 'low_quality':
         return diagnoses.filter(d => d.qualityScore < 50);
+      case 'sem-ingredientes':
+        return diagnoses.filter(d => d.problems.some(p => p.category === 'Ingredientes'));
+      case 'erros-cadastro':
+        return diagnoses.filter(d => d.problems.some(p => 
+          ['Categoria', 'Porções', 'Preparo', 'Tempo'].includes(p.category)
+        ));
+      case 'problemas-custo':
+        return diagnoses.filter(d => d.problems.some(p => p.category === 'Custo'));
       default:
         return diagnoses;
     }

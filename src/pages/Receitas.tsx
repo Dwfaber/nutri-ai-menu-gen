@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Search, Book, Filter, AlertTriangle, CheckCircle, XCircle, Clock, DollarSign, Users, TrendingUp, AlertCircle, Target, Zap, Settings, Calculator, RefreshCw } from 'lucide-react';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -508,56 +509,295 @@ const Receitas = () => {
                 </CardContent>
               </Card>
 
-              {/* Filtros de Diagnóstico */}
-              <Card>
-                <CardHeader>
-                  <CardTitle>Filtros por Problema</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="flex flex-wrap gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => {/* TODO: Implementar filtro */}}
-                      className="text-xs"
-                    >
-                      🔴 Críticos ({metrics?.criticalProblems || 0})
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => {/* TODO: Implementar filtro */}}
-                      className="text-xs"
-                    >
-                      🟠 Sem Custo ({getDiagnosesByFilter('no_cost').length})
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => {/* TODO: Implementar filtro */}}
-                      className="text-xs"
-                    >
-                      🔴 Sem Ingredientes ({getDiagnosesByFilter('no_ingredients').length})
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => {/* TODO: Implementar filtro */}}
-                      className="text-xs"
-                    >
-                      ❌ Bloqueadas ({getDiagnosesByFilter('blocked').length})
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => {/* TODO: Implementar filtro */}}
-                      className="text-xs"
-                    >
-                      📉 Baixa Qualidade ({getDiagnosesByFilter('low_quality').length})
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
+              {/* Categorias de Problemas Separadas */}
+              <div className="space-y-6">
+                {/* CRÍTICO - Receitas Bloqueadas (Sem Ingredientes) */}
+                <Collapsible>
+                  <CollapsibleTrigger asChild>
+                    <Card className="border-destructive bg-destructive/5 hover:bg-destructive/10 cursor-pointer transition-colors">
+                      <CardHeader className="pb-4">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <div className="w-3 h-3 rounded-full bg-destructive"></div>
+                            <CardTitle className="text-lg text-destructive">
+                              🔴 CRÍTICO - Receitas Bloqueadas (Sem Ingredientes)
+                            </CardTitle>
+                          </div>
+                          <Badge variant="destructive">
+                            {getDiagnosesByFilter('sem-ingredientes').length}
+                          </Badge>
+                        </div>
+                      </CardHeader>
+                    </Card>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent>
+                    <Card className="mt-2">
+                      <CardContent className="pt-6">
+                        {getDiagnosesByFilter('sem-ingredientes').length > 0 ? (
+                          <div className="space-y-4">
+                            <div className="overflow-x-auto">
+                              <Table>
+                                <TableHeader>
+                                  <TableRow>
+                                    <TableHead>Receita</TableHead>
+                                    <TableHead>Problemas</TableHead>
+                                    <TableHead>Ação Necessária</TableHead>
+                                    <TableHead>Impacto no Negócio</TableHead>
+                                  </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                  {getDiagnosesByFilter('sem-ingredientes').slice(0, 20).map((diagnosis) => (
+                                    <TableRow key={diagnosis.recipe.id}>
+                                      <TableCell>
+                                        <div className="font-medium">{diagnosis.recipe.nome_receita}</div>
+                                        <div className="text-sm text-muted-foreground">
+                                          ID: {diagnosis.recipe.receita_id_legado}
+                                        </div>
+                                      </TableCell>
+                                      <TableCell>
+                                        <div className="space-y-1">
+                                          {diagnosis.problems.filter(p => p.category === 'Ingredientes').map((problem, idx) => (
+                                            <div key={idx} className="flex items-center gap-2">
+                                              <span>{problem.icon}</span>
+                                              <span className="text-sm">{problem.description}</span>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      </TableCell>
+                                      <TableCell>
+                                        <div className="space-y-1">
+                                          {diagnosis.problems.filter(p => p.category === 'Ingredientes').map((problem, idx) => (
+                                            <div key={idx} className="text-sm text-muted-foreground">
+                                              {problem.action}
+                                            </div>
+                                          ))}
+                                        </div>
+                                      </TableCell>
+                                      <TableCell>
+                                        <Badge variant="destructive" className="text-xs">
+                                          {diagnosis.businessImpact}
+                                        </Badge>
+                                      </TableCell>
+                                    </TableRow>
+                                  ))}
+                                </TableBody>
+                              </Table>
+                            </div>
+                            {getDiagnosesByFilter('sem-ingredientes').length > 20 && (
+                              <p className="text-sm text-muted-foreground text-center">
+                                Mostrando 20 de {getDiagnosesByFilter('sem-ingredientes').length} receitas. 
+                                Use a aba "Lista Detalhada" para ver todas.
+                              </p>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="text-center py-8 text-muted-foreground">
+                            <CheckCircle className="h-12 w-12 mx-auto mb-4 text-green-500" />
+                            <p>Nenhuma receita com problemas críticos de ingredientes!</p>
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+                  </CollapsibleContent>
+                </Collapsible>
+
+                {/* ERROS DE CADASTRO - Informações Incompletas */}
+                <Collapsible>
+                  <CollapsibleTrigger asChild>
+                    <Card className="border-orange-500 bg-orange-50 hover:bg-orange-100 cursor-pointer transition-colors">
+                      <CardHeader className="pb-4">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <div className="w-3 h-3 rounded-full bg-orange-500"></div>
+                            <CardTitle className="text-lg text-orange-700">
+                              🟠 ERROS DE CADASTRO (Informações Incompletas)
+                            </CardTitle>
+                          </div>
+                          <Badge variant="secondary" className="bg-orange-100 text-orange-700">
+                            {getDiagnosesByFilter('erros-cadastro').length}
+                          </Badge>
+                        </div>
+                      </CardHeader>
+                    </Card>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent>
+                    <Card className="mt-2">
+                      <CardContent className="pt-6">
+                        {getDiagnosesByFilter('erros-cadastro').length > 0 ? (
+                          <div className="space-y-4">
+                            <div className="overflow-x-auto">
+                              <Table>
+                                <TableHeader>
+                                  <TableRow>
+                                    <TableHead>Receita</TableHead>
+                                    <TableHead>Problemas de Cadastro</TableHead>
+                                    <TableHead>Ação Necessária</TableHead>
+                                    <TableHead>Prioridade</TableHead>
+                                  </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                  {getDiagnosesByFilter('erros-cadastro').slice(0, 20).map((diagnosis) => (
+                                    <TableRow key={diagnosis.recipe.id}>
+                                      <TableCell>
+                                        <div className="font-medium">{diagnosis.recipe.nome_receita}</div>
+                                        <div className="text-sm text-muted-foreground">
+                                          Custo: {diagnosis.recipe.custo_total ? `R$ ${diagnosis.recipe.custo_total.toFixed(2)}` : 'N/A'}
+                                        </div>
+                                      </TableCell>
+                                      <TableCell>
+                                        <div className="space-y-1">
+                                          {diagnosis.problems.filter(p => 
+                                            ['Categoria', 'Porções', 'Preparo', 'Tempo'].includes(p.category)
+                                          ).map((problem, idx) => (
+                                            <div key={idx} className="flex items-center gap-2">
+                                              <span>{problem.icon}</span>
+                                              <span className="text-sm">{problem.description}</span>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      </TableCell>
+                                      <TableCell>
+                                        <div className="space-y-1">
+                                          {diagnosis.problems.filter(p => 
+                                            ['Categoria', 'Porções', 'Preparo', 'Tempo'].includes(p.category)
+                                          ).map((problem, idx) => (
+                                            <div key={idx} className="text-sm text-muted-foreground">
+                                              {problem.action}
+                                            </div>
+                                          ))}
+                                        </div>
+                                      </TableCell>
+                                      <TableCell>
+                                        <Badge variant="secondary" className="text-xs">
+                                          {diagnosis.severity.toUpperCase()}
+                                        </Badge>
+                                      </TableCell>
+                                    </TableRow>
+                                  ))}
+                                </TableBody>
+                              </Table>
+                            </div>
+                            {getDiagnosesByFilter('erros-cadastro').length > 20 && (
+                              <p className="text-sm text-muted-foreground text-center">
+                                Mostrando 20 de {getDiagnosesByFilter('erros-cadastro').length} receitas. 
+                                Use a aba "Lista Detalhada" para ver todas.
+                              </p>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="text-center py-8 text-muted-foreground">
+                            <CheckCircle className="h-12 w-12 mx-auto mb-4 text-green-500" />
+                            <p>Nenhuma receita com erros de cadastro!</p>
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+                  </CollapsibleContent>
+                </Collapsible>
+
+                {/* PROBLEMAS DE CUSTO - Ingredientes OK, Custo Pendente */}
+                <Collapsible>
+                  <CollapsibleTrigger asChild>
+                    <Card className="border-yellow-500 bg-yellow-50 hover:bg-yellow-100 cursor-pointer transition-colors">
+                      <CardHeader className="pb-4">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <div className="w-3 h-3 rounded-full bg-yellow-500"></div>
+                            <CardTitle className="text-lg text-yellow-700">
+                              🟡 PROBLEMAS DE CUSTO (Ingredientes OK, Custo Pendente)
+                            </CardTitle>
+                          </div>
+                          <Badge variant="secondary" className="bg-yellow-100 text-yellow-700">
+                            {getDiagnosesByFilter('problemas-custo').length}
+                          </Badge>
+                        </div>
+                      </CardHeader>
+                    </Card>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent>
+                    <Card className="mt-2">
+                      <CardContent className="pt-6">
+                        {getDiagnosesByFilter('problemas-custo').length > 0 ? (
+                          <div className="space-y-4">
+                            <div className="flex gap-2 mb-4">
+                              <Button 
+                                onClick={async () => {
+                                  await triggerRecalculation();
+                                  refetchDiagnosis();
+                                }}
+                                disabled={isRecalculating}
+                                className="flex items-center gap-2"
+                              >
+                                {isRecalculating ? (
+                                  <RefreshCw className="h-4 w-4 animate-spin" />
+                                ) : (
+                                  <Calculator className="h-4 w-4" />
+                                )}
+                                Recalcular Custos de Todas
+                              </Button>
+                            </div>
+                            <div className="overflow-x-auto">
+                              <Table>
+                                <TableHeader>
+                                  <TableRow>
+                                    <TableHead>Receita</TableHead>
+                                    <TableHead>Problema de Custo</TableHead>
+                                    <TableHead>Status dos Ingredientes</TableHead>
+                                    <TableHead>Ação</TableHead>
+                                  </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                  {getDiagnosesByFilter('problemas-custo').slice(0, 20).map((diagnosis) => (
+                                    <TableRow key={diagnosis.recipe.id}>
+                                      <TableCell>
+                                        <div className="font-medium">{diagnosis.recipe.nome_receita}</div>
+                                        <div className="text-sm text-muted-foreground">
+                                          Categoria: {diagnosis.recipe.categoria_descricao || 'Não definida'}
+                                        </div>
+                                      </TableCell>
+                                      <TableCell>
+                                        <div className="space-y-1">
+                                          {diagnosis.problems.filter(p => p.category === 'Custo').map((problem, idx) => (
+                                            <div key={idx} className="flex items-center gap-2">
+                                              <span>{problem.icon}</span>
+                                              <span className="text-sm">{problem.description}</span>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      </TableCell>
+                                      <TableCell>
+                                        <Badge variant="outline" className="text-green-700 border-green-700">
+                                          Ingredientes OK
+                                        </Badge>
+                                      </TableCell>
+                                      <TableCell>
+                                        <Button variant="outline" size="sm" className="text-xs">
+                                          Recalcular Individual
+                                        </Button>
+                                      </TableCell>
+                                    </TableRow>
+                                  ))}
+                                </TableBody>
+                              </Table>
+                            </div>
+                            {getDiagnosesByFilter('problemas-custo').length > 20 && (
+                              <p className="text-sm text-muted-foreground text-center">
+                                Mostrando 20 de {getDiagnosesByFilter('problemas-custo').length} receitas. 
+                                Use a aba "Lista Detalhada" para ver todas.
+                              </p>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="text-center py-8 text-muted-foreground">
+                            <CheckCircle className="h-12 w-12 mx-auto mb-4 text-green-500" />
+                            <p>Nenhuma receita com problemas de custo!</p>
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+                  </CollapsibleContent>
+                </Collapsible>
+              </div>
 
               {/* Diagnóstico Detalhado por Receita */}
               <Card>
