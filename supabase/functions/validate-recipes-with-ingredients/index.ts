@@ -33,23 +33,26 @@ Deno.serve(async (req) => {
         }
         
         // Buscar receitas que têm ingredientes na tabela receita_ingredientes
-        // JOIN com receitas_legado para filtrar apenas receitas ativas
+        // Primeiro buscar as receitas com ingredientes
         const { data: receitasComIngredientes, error } = await supabase
           .from('receita_ingredientes')
           .select(`
             receita_id_legado,
             nome,
             categoria_descricao,
-            produto_base_id,
-            receitas_legado!inner(inativa)
+            produto_base_id
           `)
           .eq('categoria_descricao', categoriaMapeada)
-          .eq('receitas_legado.inativa', false)
           .not('produto_base_id', 'is', null)
           .order('receita_id_legado');
 
         if (error) {
           console.error(`❌ Erro ao buscar receitas para ${categoria}:`, error);
+          return [];
+        }
+
+        if (!receitasComIngredientes || receitasComIngredientes.length === 0) {
+          console.log(`⚠️ Nenhuma receita com ingredientes encontrada para ${categoria}`);
           return [];
         }
 
@@ -65,7 +68,22 @@ Deno.serve(async (req) => {
           }
         });
 
-        const receitas = Array.from(receitasUnicas.values());
+        // Filtrar apenas receitas ativas
+        const receitasIds = Array.from(receitasUnicas.keys());
+        const { data: receitasAtivas, error: errorAtivas } = await supabase
+          .from('receitas_legado')
+          .select('receita_id_legado')
+          .in('receita_id_legado', receitasIds)
+          .eq('inativa', false);
+
+        if (errorAtivas) {
+          console.error(`❌ Erro ao verificar receitas ativas para ${categoria}:`, errorAtivas);
+          return Array.from(receitasUnicas.values()); // Retorna todas se houver erro
+        }
+
+        const receitasAtivasIds = new Set(receitasAtivas?.map(r => r.receita_id_legado) || []);
+        const receitas = Array.from(receitasUnicas.values()).filter(r => receitasAtivasIds.has(r.id));
+        
         console.log(`✅ ${categoria}: ${receitas.length} receitas ATIVAS com ingredientes encontradas`);
         return receitas;
       } catch (error) {
@@ -609,11 +627,10 @@ Deno.serve(async (req) => {
       const startTime = Date.now();
       console.log(`🚀 Iniciando geração de cardápio otimizada para ${mealQuantity} porções`);
       
-      // Receitas fixas padrão para arroz, feijão e café
+      // Receitas fixas padrão para arroz e feijão
       const fixedRecipes = {
         'Arroz Branco': { id: '580', nome: 'ARROZ' },
         'Feijão': { id: '581', nome: 'FEIJÃO MIX (CARIOCA + BANDINHA) 50%' },
-        'Base': { id: '1724', nome: 'CAFÉ CORTESIA' },
         ...receitasFixas
       };
       
@@ -624,7 +641,6 @@ Deno.serve(async (req) => {
         'Prato Principal 2', 
         'Arroz Branco',
         'Feijão',
-        'Base',  // Café cortesia
         'Sobremesa',  // Movida para antes para evitar timeout
         'Guarnição',
         'Salada 1',
