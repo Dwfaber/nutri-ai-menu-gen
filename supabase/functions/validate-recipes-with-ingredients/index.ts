@@ -136,7 +136,7 @@ Deno.serve(async (req) => {
         // Se tem custo pré-calculado (para 100 pessoas), fazer ajuste proporcional
         if (receitaCompleta?.custo_total && receitaCompleta.custo_total > 0) {
           const custoBase = receitaCompleta.custo_total; // Custo para 100 pessoas
-          const custoPorPorcao = (custoBase * mealQuantity) / (100 * mealQuantity); // = custoBase / 100
+          const custoPorPorcao = custoBase / 100; // Custo por pessoa individual
           
           console.log(`💰 PRÉ-CALCULADO: ${receitaCompleta.nome_receita} - R$ ${custoPorPorcao.toFixed(4)} por porção (base: R$ ${custoBase.toFixed(2)}/100 pessoas)`);
           
@@ -262,9 +262,9 @@ Deno.serve(async (req) => {
           }
         }
 
-        // Só aceitar se conseguiu calcular pelo menos 80% dos ingredientes filtrados
+        // Só aceitar se conseguiu calcular pelo menos 50% dos ingredientes filtrados
         const percentualCalculado = (ingredientesComPreco / ingredientesFiltrados.length) * 100;
-        if (percentualCalculado < 80) {
+        if (percentualCalculado < 50) {
           console.log(`❌ PULANDO receita ${receitaId} - apenas ${percentualCalculado.toFixed(1)}% dos ingredientes têm preço`);
           return null;
         }
