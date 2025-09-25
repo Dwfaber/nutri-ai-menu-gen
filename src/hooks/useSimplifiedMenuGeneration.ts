@@ -148,8 +148,8 @@ export function useSimplifiedMenuGeneration() {
 
       const weekPeriod = period || `${format(new Date(), 'dd/MM/yyyy')} - ${format(addDays(new Date(), periodDays - 1), 'dd/MM/yyyy')}`;
 
-      // CORREÇÃO: Usar apenas receitas que têm ingredientes - Nova Edge Function
-      const { data: response, error: menuError } = await supabase.functions.invoke('validate-recipes-with-ingredients', {
+      // CORREÇÃO: Usar quick-worker - Nova Edge Function otimizada
+      const { data: response, error: menuError } = await supabase.functions.invoke('quick-worker', {
         body: {
           action: 'generate_validated_menu',
           client_id: clientToUse.id,

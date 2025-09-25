@@ -4,7 +4,7 @@ export async function testMenuGeneration() {
   try {
     console.log('🧪 Testando geração de cardápio...');
     
-    const { data, error } = await supabase.functions.invoke('validate-recipes-with-ingredients', {
+    const { data, error } = await supabase.functions.invoke('quick-worker', {
       body: {
         action: 'generate_validated_menu',
         client_id: 'test',
