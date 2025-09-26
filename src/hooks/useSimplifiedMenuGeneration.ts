@@ -182,19 +182,19 @@ export function useSimplifiedMenuGeneration() {
         throw new Error(response?.error || 'Falha na geração do cardápio');
       }
 
-      // Priorizar response.cardapio, fallback para response.data
-      const cardapioValidado = response?.cardapio || response?.data;
-      console.log('✅ Cardápio Validado recebido:', {
+      // CORREÇÃO: Quick-worker retorna response.cardapio_semanal diretamente
+      const cardapioValidado = response?.cardapio_semanal || response?.data || response?.cardapio;
+      console.log('✅ Cardápio Validado recebido (quick-worker):', {
         cardapioValidado,
-        diasSemana: cardapioValidado?.cardapio_semanal?.length || 0,
-        categoriasComReceitas: cardapioValidado?.resumo?.categorias_com_receitas || 0,
-        totalCategorias: cardapioValidado?.resumo?.total_categorias || 0
+        diasArray: cardapioValidado?.dias?.length || 0,
+        estruturaCompleta: cardapioValidado ? Object.keys(cardapioValidado) : [],
+        primeiroItem: cardapioValidado?.dias?.[0] || null
       });
 
-      // === Flatten receitas do cardápio semanal (com fallback para response.recipes)
+      // === Flatten receitas do cardápio semanal 
       const allRecipesRaw: any[] = [];
-      if (cardapioValidado?.cardapio_semanal?.length) {
-        cardapioValidado.cardapio_semanal.forEach((dia: any) => {
+      if (cardapioValidado?.dias?.length) {
+        cardapioValidado.dias.forEach((dia: any) => {
           dia?.receitas?.forEach((receita: any) => {
             allRecipesRaw.push({
               ...receita,
@@ -212,9 +212,10 @@ export function useSimplifiedMenuGeneration() {
         });
       }
 
-      console.log('📊 Receitas encontradas:', {
+      console.log('📊 Receitas encontradas (quick-worker):', {
         total: allRecipesRaw.length,
-        porDia: cardapioValidado?.cardapio_semanal?.map((d: any) => `${d.dia}: ${d.receitas?.length || 0}`).join(', ')
+        porDia: cardapioValidado?.dias?.map((d: any) => `${d.dia}: ${d.receitas?.length || 0}`).join(', '),
+        estruturaDias: cardapioValidado?.dias?.length ? 'OK' : 'FALHOU'
       });
 
       // === Categorias para UI
