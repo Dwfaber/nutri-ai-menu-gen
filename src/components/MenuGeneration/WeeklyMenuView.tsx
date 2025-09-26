@@ -87,6 +87,34 @@ const WeeklyMenuView: React.FC<WeeklyMenuViewProps> = ({
       );
     }
     
+    // Check for quick-worker format: menu.dias (direct dias array)
+    const quickWorkerDias = (menu as any)?.dias;
+    if (quickWorkerDias && Array.isArray(quickWorkerDias)) {
+      console.log('Found quick-worker dias format:', quickWorkerDias);
+      return (
+        <div className="min-h-screen bg-gray-100 py-8">
+          <div className="container mx-auto px-4">
+            <MenuDayCarousel 
+              menu={{
+                clientName: menu.cliente || menu.clientName || 'Cliente',
+                weekPeriod: menu.periodo || menu.weekPeriod || 'Período',
+                cardapio: quickWorkerDias.map((dia: any) => ({
+                  day: dia.dia_semana || dia.dia,
+                  recipes: dia.receitas?.map((receita: any) => ({
+                    id: receita.receita_id?.toString() || receita.id,
+                    name: receita.nome,
+                    category: receita.categoria,
+                    cost: receita.custo_por_refeicao || receita.cost,
+                    servings: receita.porcoes || receita.servings || 50
+                  })) || []
+                }))
+              }}
+            />
+          </div>
+        </div>
+      );
+    }
+
     // Check if we have the new cardapio format or GeneratedMenu format
     const cardapio = (menu as any).cardapio || (menu as any).menu?.cardapio || (menu as any).menu_data?.cardapio;
     const recipes = (menu as any).recipes;
