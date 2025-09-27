@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+import { supabase } from '../integrations/supabase/client';
 import { useSimplifiedMenuGeneration, GeneratedMenu } from './useSimplifiedMenuGeneration';
 import { useMenuBusinessRules } from './useMenuBusinessRules';
-import { useSelectedClient } from '@/contexts/SelectedClientContext';
+import { useSelectedClient } from '../contexts/SelectedClientContext';
 import { useShoppingList } from './useShoppingList';
 
 // Re-export type for consumers

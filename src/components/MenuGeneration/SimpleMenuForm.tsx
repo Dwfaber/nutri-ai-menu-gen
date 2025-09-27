@@ -1,13 +1,13 @@
 import React, { useState } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
+import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
+import { Button } from '../ui/button';
+import { Input } from '../ui/input';
+import { Label } from '../ui/label';
+import { Textarea } from '../ui/textarea';
 import { ChefHat, X, Loader2 } from 'lucide-react';
-import { Checkbox } from '@/components/ui/checkbox';
-import { useSelectedClient } from '@/contexts/SelectedClientContext';
-import { PeriodSelector, SelectedPeriod } from '@/components/ui/period-selector';
+import { Checkbox } from '../ui/checkbox';
+import { useSelectedClient } from '../../contexts/SelectedClientContext';
+import { PeriodSelector, SelectedPeriod } from '../ui/period-selector';
 
 export interface SimpleMenuFormData {
   clientId: string;

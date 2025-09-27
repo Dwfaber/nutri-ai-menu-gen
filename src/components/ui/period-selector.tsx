@@ -1,7 +1,7 @@
 import React from 'react';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Label } from '@/components/ui/label';
-import { Card } from '@/components/ui/card';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './select';
+import { Label } from './label';
+import { Card } from './card';
 import { Calendar, Clock, Users } from 'lucide-react';
 
 export type PeriodType = 'week' | 'fortnight' | 'month' | 'custom';
