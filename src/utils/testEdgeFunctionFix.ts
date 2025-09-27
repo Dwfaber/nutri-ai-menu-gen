@@ -2,7 +2,7 @@
  * Teste rápido para verificar se o erro 503 foi corrigido
  */
 
-import { supabase } from '@/integrations/supabase/client';
+import { supabase } from '../integrations/supabase/client';
 
 export const testEdgeFunctionFix = async () => {
   try {

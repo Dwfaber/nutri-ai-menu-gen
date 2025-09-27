@@ -1,4 +1,4 @@
-import { ClientCostDetails } from "@/types/clientCosts";
+import { ClientCostDetails } from "../types/clientCosts";
 
 // ========================================================
 // TIPOS PARA MENU GENERATION

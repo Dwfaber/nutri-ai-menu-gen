@@ -1,7 +1,7 @@
 
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { supabase } from '@/integrations/supabase/client';
-import { useToast } from '@/hooks/use-toast';
+import { supabase } from '../integrations/supabase/client';
+import { useToast } from '../hooks/use-toast';
 import { 
   ClientCostDetails, 
   ClientWithCosts, 
@@ -9,7 +9,7 @@ import {
   CostValidationRules,
   calculateDailyCostBreakdown,
   calculateCostValidationRules
-} from '@/types/clientCosts';
+} from '../types/clientCosts';
 
 export interface ContractClient {
   id: string;

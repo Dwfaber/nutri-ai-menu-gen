@@ -1,4 +1,4 @@
-import { ContractClient } from '@/contexts/ClientContractsContext';
+import { ContractClient } from '../contexts/ClientContractsContext';
 
 export interface ClientCostDetails {
   id: string;

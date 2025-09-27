@@ -1,5 +1,5 @@
 
-import { PackagingOption, OptimizationConfig, PackageSelection } from '@/types/optimization';
+import { PackagingOption, OptimizationConfig, PackageSelection } from '../types/optimization';
 
 /**
  * Agrupa produtos por produto_base_id

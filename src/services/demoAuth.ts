@@ -1,4 +1,4 @@
-import { supabase } from '@/integrations/supabase/client';
+import { supabase } from '../integrations/supabase/client';
 
 const DEMO_USER_EMAIL = 'demo@nutris.app';
 const DEMO_USER_PASSWORD = 'demo123456';

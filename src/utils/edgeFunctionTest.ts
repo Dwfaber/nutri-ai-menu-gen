@@ -2,7 +2,7 @@
  * Utilitário para testar conectividade com Edge Functions
  */
 
-import { supabase } from '@/integrations/supabase/client';
+import { supabase } from '../integrations/supabase/client';
 
 export const testEdgeFunctionConnectivity = async (): Promise<{
   isConnected: boolean;
