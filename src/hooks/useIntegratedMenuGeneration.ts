@@ -10,7 +10,12 @@ export type { GeneratedMenu } from './useSimplifiedMenuGeneration';
 
 export interface SimpleMenuFormData {
   clientId: string;
-  period: { start: string; end: string };
+  period: {
+    type: string;
+    label: string;
+    days: number;
+    includeWeekends: boolean;
+  };
   mealsPerDay: number;
   estimatedMeals?: number;
   budgetPerMeal?: number;
@@ -144,10 +149,8 @@ export function useIntegratedMenuGeneration(): UseIntegratedMenuGenerationReturn
   }, [loadSavedMenus]);
 
   const generateMenuWithFormData = useCallback(async (formData: SimpleMenuFormData) => {
-    const periodLabel = `${formData.period.start} - ${formData.period.end}`;
-    // Determine number of days requested. If start === end, it's a single-day request.
-    const sameDay = formData?.period?.start && formData?.period?.end && (formData.period.start === formData.period.end);
-    const periodDays = sameDay ? 1 : (formData.diasUteis ? 5 : 7);
+    const periodLabel = formData.period.label;
+    const periodDays = formData.period.days;
     const menu = await generateMenu(
       selectedClient,
       periodLabel,

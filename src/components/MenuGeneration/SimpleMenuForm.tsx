@@ -4,15 +4,18 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { CalendarDays, ChefHat, X, Loader2 } from 'lucide-react';
+import { ChefHat, X, Loader2 } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useSelectedClient } from '@/contexts/SelectedClientContext';
+import { PeriodSelector, SelectedPeriod } from '@/components/ui/period-selector';
 
 export interface SimpleMenuFormData {
   clientId: string;
   period: {
-    start: string;
-    end: string;
+    type: string;
+    label: string;
+    days: number;
+    includeWeekends: boolean;
   };
   mealsPerDay: number;
   estimatedMeals?: number;
@@ -43,12 +46,9 @@ export const SimpleMenuForm: React.FC<SimpleMenuFormProps> = ({
   error
 }) => {
   const { selectedClient } = useSelectedClient();
-  const [periodStart, setPeriodStart] = useState('');
-  const [periodEnd, setPeriodEnd] = useState('');
+  const [selectedPeriod, setSelectedPeriod] = useState<SelectedPeriod | null>(null);
   const [preferences, setPreferences] = useState('');
   const [mealsPerDay, setMealsPerDay] = useState(50);
-  const [totalDays, setTotalDays] = useState(1);
-  const [totalMeals, setTotalMeals] = useState(50);
   
   // Estados para seleção de sucos
   const [selectedJuices, setSelectedJuices] = useState({
@@ -61,16 +61,13 @@ export const SimpleMenuForm: React.FC<SimpleMenuFormProps> = ({
   // Estado para gramagem de proteína
   const [selectedProteinGrams, setSelectedProteinGrams] = useState('100');
   
-  // Estado para controle de fins de semana
-  const [incluirFimDeSemana, setIncluirFimDeSemana] = useState(false);
-
   // Estado para prevenir duplo clique
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!periodStart || !periodEnd || isSubmitting) {
+    if (!selectedPeriod || isSubmitting) {
       return;
     }
 
@@ -79,17 +76,19 @@ export const SimpleMenuForm: React.FC<SimpleMenuFormProps> = ({
     const formData: SimpleMenuFormData = {
       clientId: selectedClient?.id || '',
       period: {
-        start: periodStart,
-        end: periodEnd
+        type: selectedPeriod.option.type,
+        label: selectedPeriod.option.label,
+        days: selectedPeriod.totalDays,
+        includeWeekends: selectedPeriod.option.includeWeekends
       },
-      mealsPerDay,
-      estimatedMeals: totalMeals,
+      mealsPerDay: selectedPeriod.mealsPerDay,
+      estimatedMeals: selectedPeriod.totalMeals,
       budgetPerMeal: selectedClient?.custo_medio_diario || 0,
-      totalBudget: (selectedClient?.custo_medio_diario || 0) * totalMeals,
+      totalBudget: (selectedClient?.custo_medio_diario || 0) * selectedPeriod.totalMeals,
       preferences: preferences.trim() ? [preferences.trim()] : undefined,
       juiceConfig: selectedJuices,
       proteinGrams: selectedProteinGrams,
-      diasUteis: !incluirFimDeSemana // Enviar true se excluir fins de semana
+      diasUteis: !selectedPeriod.option.includeWeekends
     };
 
     try {
@@ -100,50 +99,8 @@ export const SimpleMenuForm: React.FC<SimpleMenuFormProps> = ({
     }
   };
 
-  // Função para calcular total de dias e refeições
-  const calculatePeriodData = (start: string, end: string, mealsPerDayValue?: number) => {
-    if (start && end) {
-      const startDate = new Date(start);
-      const endDate = new Date(end);
-      let daysDifference = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1;
-      
-      // Se não incluir fins de semana, calcular apenas dias úteis
-      if (!incluirFimDeSemana && daysDifference > 0) {
-        let diasUteis = 0;
-        let currentDate = new Date(startDate);
-        
-        while (currentDate <= endDate) {
-          const dayOfWeek = currentDate.getDay(); // 0 = Domingo, 6 = Sábado
-          if (dayOfWeek !== 0 && dayOfWeek !== 6) { // Segunda a Sexta
-            diasUteis++;
-          }
-          currentDate.setDate(currentDate.getDate() + 1);
-        }
-        
-        daysDifference = diasUteis;
-      }
-      
-      if (daysDifference > 0) {
-        setTotalDays(daysDifference);
-        const mealsValue = mealsPerDayValue || mealsPerDay;
-        setTotalMeals(daysDifference * mealsValue);
-      }
-    }
-  };
-
-  const handlePeriodStartChange = (value: string) => {
-    setPeriodStart(value);
-    calculatePeriodData(value, periodEnd);
-  };
-
-  const handlePeriodEndChange = (value: string) => {
-    setPeriodEnd(value);
-    calculatePeriodData(periodStart, value);
-  };
-
   const handleMealsPerDayChange = (value: number) => {
     setMealsPerDay(value);
-    calculatePeriodData(periodStart, periodEnd, value);
   };
 
   const handleJuiceChange = (juiceType: keyof typeof selectedJuices, checked: boolean) => {
@@ -172,102 +129,18 @@ export const SimpleMenuForm: React.FC<SimpleMenuFormProps> = ({
             </div>
           )}
 
-          {/* Período da Semana */}
+          {/* Seleção de Período */}
+          <PeriodSelector
+            value={selectedPeriod}
+            onChange={setSelectedPeriod}
+            mealsPerDay={mealsPerDay}
+            onMealsPerDayChange={handleMealsPerDayChange}
+          />
+            
+          {/* Configurações de Sucos e Proteínas */}
           <div className="space-y-4">
-            <Label className="text-base font-medium flex items-center gap-2">
-              <CalendarDays className="w-4 h-4" />
-              Período do Cardápio
-            </Label>
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="periodStart">Data de Início *</Label>
-                <Input
-                  id="periodStart"
-                  type="date"
-                  value={periodStart}
-                  onChange={(e) => handlePeriodStartChange(e.target.value)}
-                  required
-                />
-              </div>
-              <div>
-                <Label htmlFor="periodEnd">Data de Fim *</Label>
-                <Input
-                  id="periodEnd"
-                  type="date"
-                  value={periodEnd}
-                  onChange={(e) => handlePeriodEndChange(e.target.value)}
-                  min={periodStart}
-                  required
-                />
-              </div>
-            </div>
-            
-            {/* Opção para incluir fins de semana */}
-            <div className="flex items-center space-x-2 mt-3">
-              <Checkbox
-                id="incluirFimDeSemana"
-                checked={incluirFimDeSemana}
-                onCheckedChange={(checked) => {
-                  setIncluirFimDeSemana(checked as boolean);
-                  // Recalcular quando a opção mudar
-                  calculatePeriodData(periodStart, periodEnd);
-                }}
-              />
-              <Label htmlFor="incluirFimDeSemana" className="text-sm">
-                Incluir fins de semana no cardápio
-              </Label>
-            </div>
-            
-            <p className="text-xs text-gray-500">
-              O cardápio será gerado para {totalDays} dia{totalDays !== 1 ? 's' : ''} 
-              {incluirFimDeSemana ? ' (incluindo fins de semana)' : ' (apenas dias úteis)'}
-            </p>
-          </div>
-
-          {/* Configuração do Período */}
-          <div className="space-y-4">
-            <Label className="text-base font-medium">Configuração do Período</Label>
-            
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div>
-                <Label htmlFor="totalDays">Total de Dias</Label>
-                <Input
-                  id="totalDays"
-                  type="number"
-                  value={totalDays}
-                  readOnly
-                  className="bg-gray-50"
-                />
-              </div>
-              <div>
-                <Label htmlFor="mealsPerDay">Refeições por Dia *</Label>
-                <Input
-                  id="mealsPerDay"
-                  type="number"
-                  min="1"
-                  value={mealsPerDay}
-                  onChange={(e) => {
-                    const value = parseInt(e.target.value) || 0;
-                    handleMealsPerDayChange(value);
-                  }}
-                  required
-                />
-              </div>
-              <div>
-                <Label htmlFor="totalMeals">Total de Refeições ({totalDays} dia{totalDays !== 1 ? 's' : ''})</Label>
-                <Input
-                  id="totalMeals"
-                  type="number"
-                  value={totalMeals}
-                  readOnly
-                  className="bg-gray-50"
-                />
-              </div>
-            </div>
-            
             {/* Seleção de Sucos */}
-            <div className="mt-4">
+            <div>
               <Label className="text-sm font-medium mb-3 block">Tipos de Sucos</Label>
               <div className="grid grid-cols-2 gap-3">
                 <div className="flex items-center space-x-2">
@@ -309,7 +182,7 @@ export const SimpleMenuForm: React.FC<SimpleMenuFormProps> = ({
             </div>
 
             {/* Seleção de Gramagem de Proteína */}
-            <div className="mt-4">
+            <div>
               <Label className="text-sm font-medium mb-3 block">Gramagem de Proteína por Porção</Label>
               <div className="flex gap-4">
                 <div className="flex items-center space-x-2">
@@ -372,7 +245,7 @@ export const SimpleMenuForm: React.FC<SimpleMenuFormProps> = ({
               <div>
                 <p className="text-gray-600">Orçamento Total</p>
                 <p className="font-medium text-blue-600">
-                  R$ {((selectedClient?.custo_medio_diario || 0) * totalMeals).toFixed(2)}
+                  R$ {((selectedClient?.custo_medio_diario || 0) * (selectedPeriod?.totalMeals || 0)).toFixed(2)}
                 </p>
               </div>
             </div>
@@ -392,7 +265,7 @@ export const SimpleMenuForm: React.FC<SimpleMenuFormProps> = ({
             </Button>
             <Button
               type="submit"
-              disabled={isGenerating || isSubmitting || !periodStart || !periodEnd || mealsPerDay <= 0}
+              disabled={isGenerating || isSubmitting || !selectedPeriod || mealsPerDay <= 0}
               className="flex-1"
             >
               {isGenerating ? (
