@@ -7,15 +7,15 @@ export async function testMenuGeneration() {
     const { data, error } = await supabase.functions.invoke('quick-worker', {
       body: {
         action: 'generate_validated_menu',
-        client_id: 'test',
-        filial_id: 8,
+        dias: 5,
         meal_quantity: 50,
-        periodDays: 3,
-        include_weekends: false,
-        protein_config: {
-          protein_grams_pp1: 100,
-          protein_grams_pp2: 100
-        }
+        proteina_gramas: '90',
+        incluir_fim_semana: false,
+        incluir_arroz_integral: false,
+        max_tentativas: 10,
+        tipo_suco_primario: 'PRO_MIX',
+        tipo_suco_secundario: null,
+        variar_sucos_por_dia: true
       }
     });
 
