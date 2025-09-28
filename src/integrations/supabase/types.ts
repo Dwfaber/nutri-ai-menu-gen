@@ -44,6 +44,63 @@ export type Database = {
         }
         Relationships: []
       }
+      audit_events: {
+        Row: {
+          action: string
+          created_at: string
+          entity_id: string | null
+          entity_type: string
+          error_message: string | null
+          event_type: string
+          execution_time_ms: number | null
+          id: string
+          ip_address: unknown | null
+          metadata: Json | null
+          module: string | null
+          session_id: string | null
+          severity: string | null
+          status: string | null
+          user_agent: string | null
+          user_id: string | null
+        }
+        Insert: {
+          action: string
+          created_at?: string
+          entity_id?: string | null
+          entity_type: string
+          error_message?: string | null
+          event_type: string
+          execution_time_ms?: number | null
+          id?: string
+          ip_address?: unknown | null
+          metadata?: Json | null
+          module?: string | null
+          session_id?: string | null
+          severity?: string | null
+          status?: string | null
+          user_agent?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          action?: string
+          created_at?: string
+          entity_id?: string | null
+          entity_type?: string
+          error_message?: string | null
+          event_type?: string
+          execution_time_ms?: number | null
+          id?: string
+          ip_address?: unknown | null
+          metadata?: Json | null
+          module?: string | null
+          session_id?: string | null
+          severity?: string | null
+          status?: string | null
+          user_agent?: string | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       automation_control: {
         Row: {
           automation_name: string
@@ -564,7 +621,6 @@ export type Database = {
           notas: string | null
           produto_base_descricao: string | null
           produto_base_id: number | null
-          produto_id: number | null
           quantidade: number
           quantidade_refeicoes: number | null
           receita_id_legado: string
@@ -584,7 +640,6 @@ export type Database = {
           notas?: string | null
           produto_base_descricao?: string | null
           produto_base_id?: number | null
-          produto_id?: number | null
           quantidade?: number
           quantidade_refeicoes?: number | null
           receita_id_legado: string
@@ -604,7 +659,6 @@ export type Database = {
           notas?: string | null
           produto_base_descricao?: string | null
           produto_base_id?: number | null
-          produto_id?: number | null
           quantidade?: number
           quantidade_refeicoes?: number | null
           receita_id_legado?: string
@@ -903,6 +957,14 @@ export type Database = {
       cleanup_old_product_versions: {
         Args: Record<PropertyKey, never>
         Returns: undefined
+      }
+      contar_receitas_completo: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          amostra_ids: string[]
+          categoria: string
+          total: number
+        }[]
       }
       gerar_cardapio: {
         Args: {

@@ -73,6 +73,9 @@ verify_jwt = false
 [functions.validate-recipes-with-ingredients]
 verify_jwt = false
 
+[functions.swift-processor]
+verify_jwt = false
+
 [functions.quick-worker]
 verify_jwt = false
 
