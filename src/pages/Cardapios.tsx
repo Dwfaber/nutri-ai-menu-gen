@@ -1,293 +1,321 @@
-import { useState, useEffect } from 'react';
-import { Plus, Search, Filter, Database, ShoppingCart, DollarSign, Eye, Download, Copy, Trash2 } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import React, { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
-import { useToast } from '@/hooks/use-toast';
-import { useShoppingList } from '@/hooks/useShoppingList';
-import { useClientContracts } from '@/hooks/useClientContracts';
+import { Button } from '@/components/ui/button';
+import { Separator } from '@/components/ui/separator';
+import { ChefHat, Calendar, ShoppingCart, DollarSign, Users, Plus, Wifi, WifiOff } from 'lucide-react';
+import { useIntegratedMenuGeneration } from '@/hooks/useIntegratedMenuGeneration';
 import { useSelectedClient } from '@/contexts/SelectedClientContext';
-import { useIntegratedMenuGeneration, GeneratedMenu } from '@/hooks/useIntegratedMenuGeneration';
-import { useJuiceConfiguration } from '@/hooks/useJuiceConfiguration';
-import SyncMonitor from '@/components/SyncMonitor/SyncMonitor';
-import IntegratedMenuGenerator from '@/components/MenuGeneration/IntegratedMenuGenerator';
-import WeeklyMenuView from '@/components/MenuGeneration/WeeklyMenuView';
+import WeeklyMenuView from "@/components/MenuGeneration/WeeklyMenuView";
+import { SimpleMenuForm, SimpleMenuFormData } from '@/components/MenuGeneration/SimpleMenuForm';
+import { MenuGenerationProgress } from '@/components/MenuGeneration/MenuGenerationProgress';
+import { testEdgeFunctionConnectivity, testMenuGeneration } from '@/utils/edgeFunctionTest';
+import { useToast } from '@/hooks/use-toast';
 
-const Cardapios = () => {
-  const [searchTerm, setSearchTerm] = useState('');
-  const [showCreateForm, setShowCreateForm] = useState(false);
-  const [selectedMenuForShopping, setSelectedMenuForShopping] = useState<string | null>(null);
-  const [viewingMenu, setViewingMenu] = useState<GeneratedMenu | null>(null);
-  const [juiceTestResult, setJuiceTestResult] = useState<any>(null);
+const IntegratedMenuGenerator = () => {
+  const [showForm, setShowForm] = useState(false);
+  const [approverName, setApproverName] = useState('');
+  const [rejectionReason, setRejectionReason] = useState('');
+  const [isTesting, setIsTesting] = useState(false);
+  const [connectionStatus, setConnectionStatus] = useState<'unknown' | 'healthy' | 'error'>('unknown');
+  const [generationStage, setGenerationStage] = useState<'fetching' | 'calculating' | 'processing' | 'finalizing' | 'complete'>('fetching');
   
-  const { 
-    generatedMenu, 
-    savedMenus,
-    loadSavedMenus,
-    generateShoppingListFromMenu,
-    deleteGeneratedMenu
-  } = useIntegratedMenuGeneration();
-  const { clients } = useClientContracts();
-  const { selectedClient } = useSelectedClient();
-  const { generateJuiceConfig } = useJuiceConfiguration();
   const { toast } = useToast();
+  const { selectedClient } = useSelectedClient();
+  const {
+    isGenerating,
+    generatedMenu,
+    generateMenuWithFormData,
+    approveMenu,
+    rejectMenu,
+    generateShoppingListFromMenu,
+    updateGeneratedMenu,
+    clearGeneratedMenu,
+    error
+  } = useIntegratedMenuGeneration();
 
-  useEffect(() => {
-    (async () => {
-      await loadSavedMenus();
-    })();
-  }, []);
-
-  const handleGenerateShoppingList = async (menu: GeneratedMenu) => {
-    setSelectedMenuForShopping(menu.id);
-    await generateShoppingListFromMenu(menu);
-    setSelectedMenuForShopping(null);
+  const handleGenerateMenu = async (formData: SimpleMenuFormData) => {
+    setGenerationStage('fetching');
+    
+    setTimeout(() => setGenerationStage('calculating'), 2000);
+    setTimeout(() => setGenerationStage('processing'), 8000);
+    setTimeout(() => setGenerationStage('finalizing'), 35000);
+    
+    await generateMenuWithFormData(formData);
+    setGenerationStage('complete');
+    setTimeout(() => setShowForm(false), 1000);
   };
 
-  const getBudgetStatus = (menu: GeneratedMenu) => {
-    const client = clients.find(c => c.id === menu.clientId);
-    if (!client) return 'unknown';
-    
-    // Calculate cost from recipes using correct logic
-    let costPerMeal = menu.costPerMeal || 0;
-    if (costPerMeal === 0 && menu.recipes && menu.recipes.length > 0) {
-      const totalRecipeCost = menu.recipes.reduce((sum: number, recipe: any) => {
-        return sum + (Number(recipe.cost || recipe.custo || recipe.custo_por_refeicao || 0));
-      }, 0);
-      const periodDays = Array.from(new Set(menu.recipes.map(r => r.day))).length || 5;
-      costPerMeal = totalRecipeCost / periodDays;
-    }
-    
-    if (costPerMeal === 0) return 'unknown';
-    
-    const defaultMealsPerDay = menu.mealsPerDay || 50; 
-    const totalDailyCost = costPerMeal * defaultMealsPerDay;
-    const clientDailyBudget = (client.custo_medio_diario || 0) * defaultMealsPerDay;
-    
-    if (clientDailyBudget === 0) return 'unknown';
-    
-    const budgetPercentage = (totalDailyCost / clientDailyBudget) * 100;
-    if (budgetPercentage <= 90) return 'good';
-    if (budgetPercentage <= 100) return 'warning';
-    return 'exceeded';
-  };
+  const handleShowForm = () => setShowForm(true);
+  const handleCancelForm = () => setShowForm(false);
 
-  const getBudgetBadge = (status: string) => {
-    switch (status) {
-      case 'good':
-        return <Badge className="bg-green-100 text-green-800">Dentro do Orçamento</Badge>;
-      case 'warning':
-        return <Badge className="bg-yellow-100 text-yellow-800">Próximo do Limite</Badge>;
-      case 'exceeded':
-        return <Badge className="bg-red-100 text-red-800">Orçamento Excedido</Badge>;
-      default:
-        return <Badge variant="outline">Status Desconhecido</Badge>;
+  const handleApprove = async (approverName: string, notes?: string) => {
+    if (generatedMenu) {
+      const success = await approveMenu(generatedMenu.id, approverName);
+      if (success) {
+        toast({
+          title: "Cardápio Aprovado",
+          description: `Cardápio aprovado por ${approverName}`,
+          variant: "default"
+        });
+      }
     }
   };
 
-  const handleVisualizarCardapio = (menu: GeneratedMenu) => setViewingMenu(menu);
-
-  const handleExportarCardapio = (menu: GeneratedMenu) => {
-    const uniqueDays = [...new Set(menu.recipes?.map(r => r.day).filter(Boolean))].sort();
-    const csvContent = [
-      ['Categoria', ...uniqueDays],
-      ...(['PP1', 'PP2', 'Arroz Branco', 'Feijão', 'Salada 1', 'Salada 2', 'Suco 1', 'Suco 2'].map(category => [
-        category,
-        ...(uniqueDays.map(day => {
-          const recipe = menu.recipes?.find(r => r.category === category && r.day?.toLowerCase().includes(day.toLowerCase()));
-          return recipe ? `${recipe.name} (R$ ${recipe.cost?.toFixed(2) || '0.00'})` : '-';
-        }))
-      ]))
-    ].map(row => row.join(',')).join('\n');
-
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `cardapio-${menu.weekPeriod.replace(/\s+/g, '-')}.csv`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    
-    toast({ title: "Cardápio exportado", description: "O arquivo CSV foi baixado com sucesso." });
+  const handleReject = async (reason: string) => {
+    if (generatedMenu) {
+      const success = await rejectMenu(generatedMenu.id, reason);
+      if (success) {
+        toast({
+          title: "Cardápio Rejeitado", 
+          description: "Cardápio foi rejeitado",
+          variant: "destructive"
+        });
+      }
+    }
   };
 
-  const handleDuplicarCardapio = async (menu: GeneratedMenu) => {
+  const handleEditMenu = async (editedMenu: Partial<any>) => {
+    if (generatedMenu) {
+      const success = await updateGeneratedMenu(generatedMenu.id, editedMenu);
+      if (success) {
+        toast({
+          title: "Cardápio Editado",
+          description: "Alterações salvas com sucesso",
+          variant: "default"
+        });
+      } else {
+        toast({
+          title: "Erro ao Editar",
+          description: "Não foi possível salvar as alterações",
+          variant: "destructive"
+        });
+      }
+    }
+  };
+
+  const handleGenerateShoppingList = async () => {
+    if (generatedMenu) {
+      await generateShoppingListFromMenu(generatedMenu);
+    }
+  };
+
+  const handleTestConnectivity = async () => {
+    setIsTesting(true);
+    setConnectionStatus('unknown');
+    
     try {
-      const duplicatedMenu = {
-        ...menu,
-        id: `menu-${Date.now()}`,
-        weekPeriod: `${menu.weekPeriod} (Cópia)`,
-        createdAt: new Date().toISOString(),
-        status: 'draft' as const
-      };
-      toast({ title: "Cardápio duplicado", description: "Uma cópia foi criada com sucesso." });
-      await loadSavedMenus(); // ✅ corrigido
-    } catch {
-      toast({ title: "Erro ao duplicar", description: "Não foi possível duplicar", variant: "destructive" });
+      console.log('[UI] Iniciando teste de conectividade...');
+      const connectivityResult = await testEdgeFunctionConnectivity();
+      console.log('[UI] Resultado do teste:', connectivityResult);
+      
+      if (connectivityResult.isConnected) {
+        setConnectionStatus('healthy');
+        toast({
+          title: "Conectividade OK",
+          description: `Edge Function está funcionando (${connectivityResult.timestamp})`,
+          variant: "default"
+        });
+        
+        if (selectedClient) {
+          console.log('[UI] Testando geração de cardápio rápida...');
+          const testResult = await testMenuGeneration({
+            action: 'generate_menu',
+            filialIdLegado: selectedClient.filial_id || 8,
+            numDays: 1,
+            refeicoesPorDia: 10,
+            useDiaEspecial: false,
+            baseRecipes: { arroz: 580, feijao: 1600 }
+          });
+          
+          if (testResult.success) {
+            toast({
+              title: "Teste de Geração OK",
+              description: "Sistema funcionando end-to-end!",
+              variant: "default"
+            });
+          } else {
+            toast({
+              title: "Conectividade OK, mas geração falhou",
+              description: testResult.error || "Erro na geração",
+              variant: "destructive"
+            });
+          }
+        }
+      } else {
+        setConnectionStatus('error');
+        toast({
+          title: "Problema de Conectividade",
+          description: connectivityResult.error || "Edge Function não respondeu",
+          variant: "destructive"
+        });
+      }
+    } catch (error) {
+      console.error('[UI] Erro no teste:', error);
+      setConnectionStatus('error');
+      toast({
+        title: "Erro no Teste",
+        description: error instanceof Error ? error.message : "Erro desconhecido",
+        variant: "destructive"
+      });
+    } finally {
+      setIsTesting(false);
     }
   };
 
-  const handleExcluirCardapio = async (menu: GeneratedMenu) => await deleteGeneratedMenu(menu.id);
+  if (!selectedClient) {
+    return (
+      <Card>
+        <CardContent className="p-8 text-center">
+          <p className="text-gray-500">Selecione um cliente para gerar cardápios</p>
+        </CardContent>
+      </Card>
+    );
+  }
 
-  const handleTestJuiceConfiguration = async () => {
-    if (!selectedClient) {
-      toast({ title: "Cliente não selecionado", description: "Selecione um cliente", variant: "destructive" });
-      return;
-    }
-    const startDate = new Date().toISOString().split('T')[0];
-    const endDate = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-    const result = await generateJuiceConfig(startDate, endDate, {
-      use_pro_mix: selectedClient.use_pro_mix || false,
-      use_pro_vita: selectedClient.use_pro_vita || false,
-      use_suco_diet: selectedClient.use_suco_diet || false,
-      use_suco_natural: selectedClient.use_suco_natural ?? true
-    });
-    if (result) setJuiceTestResult(result);
-  };
+  if (showForm && !generatedMenu) {
+    return (
+      <div className="space-y-6">
+        <SimpleMenuForm
+          onSubmit={handleGenerateMenu}
+          onCancel={handleCancelForm}
+          isGenerating={isGenerating}
+          error={error}
+        />
+        
+        {isGenerating && (
+          <MenuGenerationProgress 
+            stage={generationStage}
+            message="Processamento detalhado de receitas e custos em andamento..."
+          />
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Cardápios</h1>
-          <p className="text-gray-600">Sistema inteligente de cardápios com lista de compras automática</p>
-        </div>
-        <Button onClick={() => setShowCreateForm(true)} disabled={!selectedClient} className="bg-green-600 hover:bg-green-700">
-          <Plus className="w-4 h-4 mr-2" /> Novo Cardápio
-        </Button>
-      </div>
-
-      <Tabs defaultValue="integrated">
-        <TabsList className="grid w-full grid-cols-3">
-          <TabsTrigger value="integrated">Gerador Inteligente</TabsTrigger>
-          <TabsTrigger value="menus">Cardápios Salvos</TabsTrigger>
-          <TabsTrigger value="sync">Sincronização</TabsTrigger>
-        </TabsList>
-        
-        <TabsContent value="integrated"><IntegratedMenuGenerator /></TabsContent>
-        
-        <TabsContent value="menus" className="space-y-6">
-          <div className="flex items-center gap-3">
-            <div className="relative flex-1">
-              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                placeholder="Buscar por cliente, período..."
-                className="pl-9"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Users className="w-5 h-5" />
+            Cliente Selecionado: {selectedClient.nome_fantasia}
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+            <div>
+              <p className="font-medium text-gray-700">Tipo de Refeição</p>
+              <p className="text-lg font-bold">{selectedClient.tipo_refeicao}</p>
             </div>
-            <Button variant="outline" onClick={loadSavedMenus}>
-              <Database className="w-4 h-4 mr-2" /> Atualizar
-            </Button>
+            <div>
+              <p className="font-medium text-gray-700">Custo Médio Diário</p>
+              <p className="text-lg font-bold text-green-600">R$ {(selectedClient.custo_medio_diario || 0).toFixed(2)}</p>
+            </div>
+            <div>
+              <p className="font-medium text-gray-700">Filial</p>
+              <p className="text-lg font-bold">{selectedClient.nome_filial || 'Principal'}</p>
+            </div>
           </div>
+        </CardContent>
+      </Card>
 
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {savedMenus
-              .filter((m) =>
-                `${m.clientName} ${m.weekPeriod}`
-                  .toLowerCase()
-                  .includes(searchTerm.toLowerCase())
-              )
-              .map((menu) => (
-                <Card key={menu.id} className="border hover:shadow-md transition-shadow">
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-base flex items-center justify-between">
-                      <span>{menu.clientName}</span>
-                      {getBudgetBadge(getBudgetStatus(menu))}
-                    </CardTitle>
-                    <p className="text-sm text-muted-foreground">{menu.weekPeriod}</p>
-                  </CardHeader>
-                   <CardContent className="flex items-center justify-between">
-                     <div>
-                       <p className="text-sm">Custo total</p>
-                       <p className="font-semibold">R$ {(() => {
-                         if (menu.recipes && menu.recipes.length > 0) {
-                           const totalRecipeCost = menu.recipes.reduce((sum: number, recipe: any) => 
-                             sum + (Number(recipe.cost || recipe.custo || recipe.custo_por_refeicao || 0)), 0
-                           );
-                           const periodDays = Array.from(new Set(menu.recipes.map(r => r.day))).length || 5;
-                           const costPerMeal = totalRecipeCost / periodDays;
-                           return (costPerMeal * (menu.mealsPerDay || 1) * periodDays).toFixed(2);
-                         }
-                         return Number(menu.totalCost || 0).toFixed(2);
-                       })()}</p>
-                       <p className="text-xs text-muted-foreground">
-                         R$ {(() => {
-                           if (menu.recipes && menu.recipes.length > 0) {
-                             const totalRecipeCost = menu.recipes.reduce((sum: number, recipe: any) => 
-                               sum + (Number(recipe.cost || recipe.custo || recipe.custo_por_refeicao || 0)), 0
-                             );
-                             const periodDays = Array.from(new Set(menu.recipes.map(r => r.day))).length || 5;
-                             return (totalRecipeCost / periodDays).toFixed(2);
-                           }
-                           return Number(menu.costPerMeal || 0).toFixed(2);
-                         })()}/refeição
-                       </p>
-                     </div>
-                    <div className="flex gap-2">
-                      <Button size="icon" variant="outline" onClick={() => handleVisualizarCardapio(menu)}>
-                        <Eye className="w-4 h-4" />
-                      </Button>
-                      <Button size="icon" variant="outline" onClick={() => handleGenerateShoppingList(menu)} disabled={selectedMenuForShopping===menu.id}>
-                        <ShoppingCart className="w-4 h-4" />
-                      </Button>
-                      <Button size="icon" variant="outline" onClick={() => handleExportarCardapio(menu)}>
-                        <Download className="w-4 h-4" />
-                      </Button>
-                      <Button size="icon" variant="outline" onClick={() => handleDuplicarCardapio(menu)}>
-                        <Copy className="w-4 h-4" />
-                      </Button>
-                      <AlertDialog>
-                        <AlertDialogTrigger asChild>
-                          <Button size="icon" variant="destructive">
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
-                        </AlertDialogTrigger>
-                        <AlertDialogContent>
-                          <AlertDialogHeader>
-                            <AlertDialogTitle>Excluir cardápio?</AlertDialogTitle>
-                            <AlertDialogDescription>
-                              Esta ação não pode ser desfeita.
-                            </AlertDialogDescription>
-                          </AlertDialogHeader>
-                          <AlertDialogFooter>
-                            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                            <AlertDialogAction onClick={() => handleExcluirCardapio(menu)}>Excluir</AlertDialogAction>
-                          </AlertDialogFooter>
-                        </AlertDialogContent>
-                      </AlertDialog>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-          </div>
+      {!generatedMenu && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <ChefHat className="w-5 h-5" />
+              Gerador Inteligente de Cardápios
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <p className="text-gray-600 text-sm">
+              Sistema inteligente que verifica disponibilidade no mercado e aplica regras de negócio. 
+              Estrutura: PP1, PP2, Arroz Branco, Feijão, Guarnição, 
+              Salada 1, Salada 2, Suco 1, Suco 2, Sobremesa.
+            </p>
+            <div className="flex gap-3">
+              <Button onClick={handleShowForm} disabled={isGenerating} className="flex-1" size="lg">
+                <Plus className="w-4 h-4 mr-2" />
+                Gerar Novo Cardápio
+              </Button>
+              <Button 
+                onClick={handleTestConnectivity}
+                disabled={isTesting}
+                variant="outline"
+                size="lg"
+                className="flex items-center gap-2"
+              >
+                {isTesting ? (
+                  <div className="w-4 h-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                ) : connectionStatus === 'healthy' ? (
+                  <Wifi className="w-4 h-4 text-green-600" />
+                ) : connectionStatus === 'error' ? (
+                  <WifiOff className="w-4 h-4 text-red-600" />
+                ) : (
+                  <Wifi className="w-4 h-4" />
+                )}
+                Testar
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
-          {savedMenus.length === 0 && (
-            <Card>
-              <CardContent className="py-10 text-center text-muted-foreground">
-                Nenhum cardápio salvo ainda. Gere um novo na aba "Gerador Inteligente".
-              </CardContent>
-            </Card>
-          )}
-        </TabsContent>
+      {generatedMenu && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Calendar className="w-5 h-5" />
+              Cardápio: {generatedMenu.weekPeriod}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="text-center p-4 bg-blue-50 rounded-lg">
+                <p className="text-sm text-gray-600">Total de Receitas</p>
+                <p className="text-2xl font-bold text-blue-600">{generatedMenu.totalRecipes}</p>
+              </div>
+              <div className="text-center p-4 bg-green-50 rounded-lg">
+                <p className="text-sm text-gray-600">Custo por Refeição</p>
+                <p className="text-2xl font-bold text-green-600">R$ {generatedMenu.costPerMeal.toFixed(2)}</p>
+              </div>
+              <div className="text-center p-4 bg-purple-50 rounded-lg">
+                <p className="text-sm text-gray-600">Custo Total</p>
+                <p className="text-2xl font-bold text-purple-600">R$ {generatedMenu.totalCost.toFixed(2)}</p>
+              </div>
+              <div className="text-center p-4 bg-orange-50 rounded-lg">
+                <p className="text-sm text-gray-600">Refeições/Dia</p>
+                <p className="text-2xl font-bold text-orange-600">{generatedMenu.mealsPerDay || 50}</p>
+              </div>
+            </div>
 
-        <TabsContent value="sync"><SyncMonitor /></TabsContent>
-      </Tabs>
+            <Separator />
 
-      <Dialog open={!!viewingMenu} onOpenChange={() => setViewingMenu(null)}>
-        <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader><DialogTitle>Visualizar Cardápio - {viewingMenu?.weekPeriod}</DialogTitle></DialogHeader>
-          {viewingMenu && <WeeklyMenuView menu={viewingMenu?.menu || viewingMenu} />} {/* ✅ WeeklyMenuView agora importa certo */}
-        </DialogContent>
-      </Dialog>
+            {generatedMenu.menu ? (
+              <WeeklyMenuView menu={generatedMenu.menu} />
+            ) : (
+              <div className="p-8 text-center text-gray-500">
+                <ChefHat className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+                <p>Nenhuma receita encontrada no cardápio</p>
+              </div>
+            )}
+
+            <Separator />
+
+            <div className="flex gap-3">
+              <Button onClick={handleGenerateShoppingList} className="flex-1">
+                <ShoppingCart className="w-4 h-4 mr-2" />
+                Gerar Lista de Compras
+              </Button>
+              <Button onClick={clearGeneratedMenu} variant="outline">
+                Limpar
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 };
 
-export default Cardapios;
+export default IntegratedMenuGenerator;
