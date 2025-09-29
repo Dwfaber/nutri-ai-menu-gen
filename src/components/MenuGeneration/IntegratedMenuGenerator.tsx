@@ -1,17 +1,12 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
-import { ChefHat, Calendar, CheckCircle, XCircle, ShoppingCart, DollarSign, Users, Plus, Wifi, WifiOff } from 'lucide-react';
+import { ChefHat, Calendar, ShoppingCart, DollarSign, Users, Plus, Wifi, WifiOff } from 'lucide-react';
 import { useIntegratedMenuGeneration } from '@/hooks/useIntegratedMenuGeneration';
 import { useSelectedClient } from '@/contexts/SelectedClientContext';
 import WeeklyMenuView from "@/components/MenuGeneration/WeeklyMenuView";
 import { SimpleMenuForm, SimpleMenuFormData } from '@/components/MenuGeneration/SimpleMenuForm';
-import MenuValidationPanel from '@/components/MenuGeneration/MenuValidationPanel';
 import { MenuGenerationProgress } from '@/components/MenuGeneration/MenuGenerationProgress';
 import { testEdgeFunctionConnectivity, testMenuGeneration } from '@/utils/edgeFunctionTest';
 import { useToast } from '@/hooks/use-toast';
@@ -35,30 +30,12 @@ const IntegratedMenuGenerator = () => {
     generateShoppingListFromMenu,
     updateGeneratedMenu,
     clearGeneratedMenu,
-    error,
-    violations,
-    validateMenu,
-    validateMenuAndSetViolations
+    error
   } = useIntegratedMenuGeneration();
 
-  const validationRules = useMemo(() => {
-    if (!generatedMenu?.recipes || generatedMenu.recipes.length === 0) {
-      return null;
-    }
-    return validateMenu(generatedMenu.recipes);
-  }, [generatedMenu?.recipes]);
-
-  useEffect(() => {
-    if (generatedMenu?.recipes && generatedMenu.recipes.length > 0) {
-      validateMenuAndSetViolations(generatedMenu.recipes);
-    }
-  }, [generatedMenu?.recipes]);
-
   const handleGenerateMenu = async (formData: SimpleMenuFormData) => {
-    // Simular progresso para melhor UX
     setGenerationStage('fetching');
     
-    // Simular etapas do processo
     setTimeout(() => setGenerationStage('calculating'), 2000);
     setTimeout(() => setGenerationStage('processing'), 8000);
     setTimeout(() => setGenerationStage('finalizing'), 35000);
@@ -76,7 +53,7 @@ const IntegratedMenuGenerator = () => {
       const success = await approveMenu(generatedMenu.id, approverName);
       if (success) {
         toast({
-          title: "✅ Cardápio Aprovado",
+          title: "Cardápio Aprovado",
           description: `Cardápio aprovado por ${approverName}`,
           variant: "default"
         });
@@ -89,7 +66,7 @@ const IntegratedMenuGenerator = () => {
       const success = await rejectMenu(generatedMenu.id, reason);
       if (success) {
         toast({
-          title: "❌ Cardápio Rejeitado", 
+          title: "Cardápio Rejeitado", 
           description: "Cardápio foi rejeitado",
           variant: "destructive"
         });
@@ -102,13 +79,13 @@ const IntegratedMenuGenerator = () => {
       const success = await updateGeneratedMenu(generatedMenu.id, editedMenu);
       if (success) {
         toast({
-          title: "✏️ Cardápio Editado",
+          title: "Cardápio Editado",
           description: "Alterações salvas com sucesso",
           variant: "default"
         });
       } else {
         toast({
-          title: "❌ Erro ao Editar",
+          title: "Erro ao Editar",
           description: "Não foi possível salvar as alterações",
           variant: "destructive"
         });
@@ -134,7 +111,7 @@ const IntegratedMenuGenerator = () => {
       if (connectivityResult.isConnected) {
         setConnectionStatus('healthy');
         toast({
-          title: "✅ Conectividade OK",
+          title: "Conectividade OK",
           description: `Edge Function está funcionando (${connectivityResult.timestamp})`,
           variant: "default"
         });
@@ -152,13 +129,13 @@ const IntegratedMenuGenerator = () => {
           
           if (testResult.success) {
             toast({
-              title: "🎯 Teste de Geração OK",
+              title: "Teste de Geração OK",
               description: "Sistema funcionando end-to-end!",
               variant: "default"
             });
           } else {
             toast({
-              title: "⚠️ Conectividade OK, mas geração falhou",
+              title: "Conectividade OK, mas geração falhou",
               description: testResult.error || "Erro na geração",
               variant: "destructive"
             });
@@ -167,7 +144,7 @@ const IntegratedMenuGenerator = () => {
       } else {
         setConnectionStatus('error');
         toast({
-          title: "❌ Problema de Conectividade",
+          title: "Problema de Conectividade",
           description: connectivityResult.error || "Edge Function não respondeu",
           variant: "destructive"
         });
@@ -176,7 +153,7 @@ const IntegratedMenuGenerator = () => {
       console.error('[UI] Erro no teste:', error);
       setConnectionStatus('error');
       toast({
-        title: "❌ Erro no Teste",
+        title: "Erro no Teste",
         description: error instanceof Error ? error.message : "Erro desconhecido",
         variant: "destructive"
       });
@@ -185,7 +162,6 @@ const IntegratedMenuGenerator = () => {
     }
   };
 
-  // Se não tem cliente selecionado
   if (!selectedClient) {
     return (
       <Card>
@@ -218,7 +194,6 @@ const IntegratedMenuGenerator = () => {
 
   return (
     <div className="space-y-6">
-      {/* Info do Cliente */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -244,7 +219,6 @@ const IntegratedMenuGenerator = () => {
         </CardContent>
       </Card>
 
-      {/* Botão Principal */}
       {!generatedMenu && (
         <Card>
           <CardHeader>
@@ -280,8 +254,43 @@ const IntegratedMenuGenerator = () => {
                 ) : (
                   <Wifi className="w-4 h-4" />
                 )}
+                Testar
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
-            {/* Visão semanal */}
+      {generatedMenu && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Calendar className="w-5 h-5" />
+              Cardápio: {generatedMenu.weekPeriod}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="text-center p-4 bg-blue-50 rounded-lg">
+                <p className="text-sm text-gray-600">Total de Receitas</p>
+                <p className="text-2xl font-bold text-blue-600">{generatedMenu.totalRecipes}</p>
+              </div>
+              <div className="text-center p-4 bg-green-50 rounded-lg">
+                <p className="text-sm text-gray-600">Custo por Refeição</p>
+                <p className="text-2xl font-bold text-green-600">R$ {generatedMenu.costPerMeal.toFixed(2)}</p>
+              </div>
+              <div className="text-center p-4 bg-purple-50 rounded-lg">
+                <p className="text-sm text-gray-600">Custo Total</p>
+                <p className="text-2xl font-bold text-purple-600">R$ {generatedMenu.totalCost.toFixed(2)}</p>
+              </div>
+              <div className="text-center p-4 bg-orange-50 rounded-lg">
+                <p className="text-sm text-gray-600">Refeições/Dia</p>
+                <p className="text-2xl font-bold text-orange-600">{generatedMenu.mealsPerDay || 50}</p>
+              </div>
+            </div>
+
+            <Separator />
+
             {generatedMenu.menu ? (
               <WeeklyMenuView menu={generatedMenu.menu} />
             ) : (
@@ -293,16 +302,15 @@ const IntegratedMenuGenerator = () => {
 
             <Separator />
 
-            {/* Menu Approval Panel */}
-            <MenuApprovalPanel
-              menu={generatedMenu}
-              violations={violations}
-              hasUnapprovedViolations={violations.some((_, index) => !violations[index])}
-              onApprove={handleApprove}
-              onReject={handleReject}
-              onEdit={handleEditMenu}
-              onGenerateShoppingList={handleGenerateShoppingList}
-            />
+            <div className="flex gap-3">
+              <Button onClick={handleGenerateShoppingList} className="flex-1">
+                <ShoppingCart className="w-4 h-4 mr-2" />
+                Gerar Lista de Compras
+              </Button>
+              <Button onClick={clearGeneratedMenu} variant="outline">
+                Limpar
+              </Button>
+            </div>
           </CardContent>
         </Card>
       )}
