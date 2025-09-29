@@ -12,7 +12,6 @@ import { useSelectedClient } from '@/contexts/SelectedClientContext';
 import WeeklyMenuView from "@/components/MenuGeneration/WeeklyMenuView";
 import { SimpleMenuForm, SimpleMenuFormData } from '@/components/MenuGeneration/SimpleMenuForm';
 import MenuValidationPanel from '@/components/MenuGeneration/MenuValidationPanel';
-import MenuApprovalPanel from '@/components/MenuGeneration/MenuApprovalPanel';
 import { MenuGenerationProgress } from '@/components/MenuGeneration/MenuGenerationProgress';
 import { testEdgeFunctionConnectivity, testMenuGeneration } from '@/utils/edgeFunctionTest';
 import { useToast } from '@/hooks/use-toast';
@@ -281,43 +280,6 @@ const IntegratedMenuGenerator = () => {
                 ) : (
                   <Wifi className="w-4 h-4" />
                 )}
-                {isTesting ? 'Testando...' : 'Testar Conectividade'}
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Se já existe menu gerado */}
-      {generatedMenu && (
-        <Card>
-          <CardHeader>
-            <div className="flex justify-between items-start">
-              <CardTitle className="flex items-center gap-2">
-                <Calendar className="w-5 h-5" />
-                Cardápio: {generatedMenu.weekPeriod}
-              </CardTitle>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            {/* Validação de Regras */}
-            {validationRules && (
-              <MenuValidationPanel
-                rules={validationRules}
-                violations={violations}
-                marketAvailability={{
-                  totalIngredients: 0,
-                  availableIngredients: 0,
-                  missingIngredients: []
-                }}
-                menuId={generatedMenu.id}
-                onViolationsChanged={() => {
-                  if (generatedMenu?.recipes && generatedMenu.recipes.length > 0) {
-                    validateMenuAndSetViolations(generatedMenu.recipes);
-                  }
-                }}
-              />
-            )}
 
             {/* Visão semanal */}
             {generatedMenu.menu ? (
