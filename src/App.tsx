@@ -24,6 +24,7 @@ import Configuracoes from "./pages/Configuracoes";
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import ResetPassword from "./pages/ResetPassword";
+import RecipeAudit from "./pages/RecipeAudit";
 import ClientSelectionWrapper from "./components/ClientSelection/ClientSelectionWrapper";
 
 const queryClient = new QueryClient({
@@ -63,6 +64,7 @@ const App = () => {
                               <Route path="/cardapios" element={<Cardapios />} />
                               <Route path="/receitas" element={<Receitas />} />
                               <Route path="/compras" element={<Compras />} />
+                              <Route path="/auditoria" element={<RecipeAudit />} />
                               <Route path="/relatorios" element={<Relatorios />} />
                               <Route path="/atualizacoes" element={<Updates />} />
                               <Route path="/configuracoes" element={<Configuracoes />} />

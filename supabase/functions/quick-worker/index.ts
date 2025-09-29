@@ -1298,5 +1298,197 @@ Deno.serve(async (req) => {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     });
+
+    // ========================================
+    // NOVA FUNCIONALIDADE: AUDITORIA DE RECEITAS
+    // ========================================
+    if (action === 'audit_recipe_problems') {
+      const { receita_id, log_to_swift = true } = requestData;
+
+      if (!receita_id) {
+        return new Response(JSON.stringify({
+          success: false,
+          error: 'receita_id é obrigatório'
+        }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
+      try {
+        console.log(`🔍 Iniciando auditoria da receita ${receita_id}`);
+
+        // Usar a função existente de cálculo de custo
+        const custoData = await calcularCustoReceita(receita_id, 100);
+
+        if (!custoData || !custoData.sucesso) {
+          const problemaReceita = {
+            receita_id,
+            nome: 'Receita não encontrada',
+            categoria: 'Não definido',
+            problemas: [
+              {
+                tipo: 'availability',
+                severidade: 'CRITICA',
+                mensagem: 'Receita não encontrada ou sem dados válidos'
+              }
+            ],
+            custo_calculado: 0,
+            ingredientes_total: 0,
+            percentual_calculado: 0
+          };
+
+          // Log para swift-processor se solicitado
+          if (log_to_swift) {
+            await supabase.functions.invoke('swift-processor', {
+              body: {
+                event_type: 'recipe_audit_failed',
+                entity_type: 'receita',
+                entity_id: receita_id,
+                action: 'audit_validation',
+                severity: 'critical',
+                status: 'error',
+                metadata: problemaReceita
+              }
+            });
+          }
+
+          return new Response(JSON.stringify({
+            success: true,
+            resultado: problemaReceita
+          }), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+          });
+        }
+
+        const { resultado } = custoData;
+        const problemas = [];
+
+        // Aplicar critérios de validação
+        const validacao = validarReceitaComCriterios(resultado, resultado.categoria);
+        
+        if (!validacao.valida) {
+          problemas.push({
+            tipo: 'validation',
+            severidade: validacao.severidade || 'MEDIA',
+            mensagem: validacao.motivo
+          });
+        }
+
+        // Verificações adicionais de auditoria
+        if (resultado.ingredientes_total < 2) {
+          problemas.push({
+            tipo: 'ingredients',
+            severidade: 'ALTA',
+            mensagem: `Muito poucos ingredientes (${resultado.ingredientes_total})`
+          });
+        }
+
+        if (resultado.percentual_calculado < 40) {
+          problemas.push({
+            tipo: 'cost',
+            severidade: 'MEDIA',
+            mensagem: `Muitos ingredientes sem preço (${resultado.percentual_calculado.toFixed(1)}% calculado)`
+          });
+        }
+
+        if (resultado.custo_por_porcao < 0.05) {
+          problemas.push({
+            tipo: 'cost',
+            severidade: 'ALTA',
+            mensagem: `Custo suspeito muito baixo: R$ ${resultado.custo_por_porcao.toFixed(3)}`
+          });
+        }
+
+        if (resultado.custo_por_porcao > 10.00) {
+          problemas.push({
+            tipo: 'cost',
+            severidade: 'MEDIA',
+            mensagem: `Custo muito alto: R$ ${resultado.custo_por_porcao.toFixed(2)}`
+          });
+        }
+
+        // Verificar categorias específicas
+        if (resultado.categoria?.includes('Prato Principal')) {
+          const temProteina = resultado.ingredientes_detalhes?.some(ing => {
+            const desc = ing.nome?.toUpperCase() || '';
+            return desc.includes('CARNE') || desc.includes('FRANGO') || desc.includes('PEIXE') || 
+                   desc.includes('PROTEÍNA') || desc.includes('BIFE') || desc.includes('OVO');
+          });
+          
+          if (!temProteina) {
+            problemas.push({
+              tipo: 'validation',
+              severidade: 'CRITICA',
+              mensagem: 'Prato principal sem proteína identificada'
+            });
+          }
+        }
+
+        const resultadoAuditoria = {
+          receita_id,
+          nome: resultado.nome,
+          categoria: resultado.categoria,
+          problemas,
+          custo_calculado: resultado.custo_por_porcao,
+          ingredientes_total: resultado.ingredientes_total,
+          percentual_calculado: resultado.percentual_calculado,
+          tem_problemas: problemas.length > 0
+        };
+
+        // Log para swift-processor apenas se há problemas
+        if (problemas.length > 0 && log_to_swift) {
+          const severidadeGeral = problemas.some(p => p.severidade === 'CRITICA') ? 'critical' :
+                                  problemas.some(p => p.severidade === 'ALTA') ? 'error' :
+                                  problemas.some(p => p.severidade === 'MEDIA') ? 'warn' : 'info';
+
+          await supabase.functions.invoke('swift-processor', {
+            body: {
+              event_type: 'recipe_audit_failed',
+              entity_type: 'receita',
+              entity_id: receita_id,
+              action: 'audit_validation',
+              severity: severidadeGeral,
+              status: 'error',
+              metadata: {
+                nome_receita: resultado.nome,
+                categoria: resultado.categoria,
+                total_problems: problemas.length,
+                problems_summary: problemas,
+                custo_calculado: resultado.custo_por_porcao,
+                ingredientes_total: resultado.ingredientes_total,
+                percentual_calculado: resultado.percentual_calculado,
+                critical_issues: problemas.filter(p => p.severidade === 'CRITICA').length,
+                high_priority_issues: problemas.filter(p => p.severidade === 'ALTA').length
+              }
+            }
+          });
+        }
+
+        console.log(`✅ Auditoria concluída: ${resultado.nome} - ${problemas.length} problemas encontrados`);
+
+        return new Response(JSON.stringify({
+          success: true,
+          resultado: resultadoAuditoria
+        }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+
+      } catch (error) {
+        console.error('❌ Erro na auditoria da receita:', error);
+        return new Response(JSON.stringify({
+          success: false,
+          error: error.message
+        }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+    }
+
+    return new Response(JSON.stringify({
+      success: false,
+      error: 'Ação não reconhecida'
+    }), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+    });
   }
 });
