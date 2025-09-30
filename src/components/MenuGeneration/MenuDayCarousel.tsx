@@ -3,6 +3,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { CATEGORY_ORDER, mapCategory, isBaseProduct, MENU_CATEGORIES } from '@/constants/menuCategories';
 
 interface Recipe {
   id: string | number;
@@ -33,11 +34,7 @@ interface MenuDayCarouselProps {
   };
 }
 
-const CATEGORY_ORDER = [
-  'Base', 'Prato Principal 1', 'Prato Principal 2', 
-  'Guarnição', 'Salada 1', 'Salada 2', 
-  'SUCO1', 'SUCO2', 'Sobremesa'
-];
+// CATEGORY_ORDER agora vem das constantes compartilhadas
 
 const WEEK_DAYS = [
   'Segunda-feira',
@@ -136,33 +133,7 @@ export function MenuDayCarousel({ menu }: MenuDayCarouselProps) {
       'FEIJÃO MIX COM CALABRESA (CARIOCA + BANDINHA) 50%': ['feijão mix com calabresa 50%', 'feijao mix calabresa 50%']
     };
     
-    // Helper function to determine if a recipe should be categorized as Base
-    const isBaseProduct = (name: string, code?: string, category?: string) => {
-      const normalizedName = name.toLowerCase();
-      
-      // Check by category first
-      if (category?.toLowerCase() === 'base') return true;
-      
-      // Check by code
-      if (code && ['ARROZ', 'FEIJAO', 'CAFE', 'KIT'].some(baseCode => code.includes(baseCode))) return true;
-      
-      // Check by name patterns for all base products from the legacy system
-      return (
-        normalizedName.includes('arroz') ||
-        normalizedName.includes('feijão') ||
-        normalizedName.includes('feijao') ||
-        normalizedName.includes('café cortesia') ||
-        normalizedName.includes('cafe cortesia') ||
-        normalizedName.includes('kit descartáveis') ||
-        normalizedName.includes('kit descartaveis') ||
-        normalizedName.includes('kit limpeza') ||
-        normalizedName.includes('kit tempero') ||
-        normalizedName.includes('tempero de mesa') ||
-        normalizedName.includes('mini filão') ||
-        normalizedName.includes('mini filao') ||
-        normalizedName.includes('acompanhamento')
-      );
-    };
+    // isBaseProduct agora vem das constantes compartilhadas
     
     // Helper function to detect bean variant
     const detectBeanVariant = (name: string) => {
@@ -189,39 +160,20 @@ export function MenuDayCarousel({ menu }: MenuDayCarouselProps) {
       }
     }
     
-    // Group actual recipes by category
+    // Group actual recipes by category using standardized mapping
     currentDay?.receitas?.forEach((receita) => {
       const code = receita.codigo || (receita as any).codigo;
       const rawCat = receita.category || receita.categoria || 'Outros';
       const name = receita.name || receita.nome || '';
       
-      let displayCat = rawCat;
+      let displayCat: string;
       
       // Check if it's a base product first
       if (isBaseProduct(name, code, rawCat)) {
-        displayCat = 'Base';
-      } else if (code === 'SUCO1') {
-        displayCat = 'SUCO1';
-      } else if (code === 'SUCO2') {
-        displayCat = 'SUCO2';
-      } else if (rawCat && ['SUCO', 'Suco', 'SUCO 1'].includes(rawCat)) {
-        displayCat = 'SUCO1';
-      } else if (rawCat && ['SUCO 2'].includes(rawCat)) {
-        displayCat = 'SUCO2';
-      } else if (code) {
-        // Map other category codes
-        displayCat = 
-          code === 'PP1' ? 'Prato Principal 1' :
-          code === 'PP2' ? 'Prato Principal 2' :
-          code === 'SALADA1' ? 'Salada 1' :
-          code === 'SALADA2' ? 'Salada 2' :
-          code === 'GUARNICAO' ? 'Guarnição' :
-          code === 'SOBREMESA' ? 'Sobremesa' : rawCat;
+        displayCat = MENU_CATEGORIES.BASE;
       } else {
-        // Map category names
-        displayCat = 
-          rawCat === 'PP1' ? 'Prato Principal 1' : 
-          rawCat === 'PP2' ? 'Prato Principal 2' : rawCat;
+        // Use standardized category mapping
+        displayCat = mapCategory(rawCat, code);
       }
 
       if (!grouped[displayCat]) {
@@ -235,33 +187,14 @@ export function MenuDayCarousel({ menu }: MenuDayCarouselProps) {
       const rawCat = recipe.category || recipe.categoria || 'Outros';
       const name = recipe.name || recipe.nome || '';
       
-      let displayCat = rawCat;
+      let displayCat: string;
       
       // Check if it's a base product first
       if (isBaseProduct(name, code, rawCat)) {
-        displayCat = 'Base';
-      } else if (code === 'SUCO1') {
-        displayCat = 'SUCO1';
-      } else if (code === 'SUCO2') {
-        displayCat = 'SUCO2';
-      } else if (rawCat && ['SUCO', 'Suco', 'SUCO 1'].includes(rawCat)) {
-        displayCat = 'SUCO1';
-      } else if (rawCat && ['SUCO 2'].includes(rawCat)) {
-        displayCat = 'SUCO2';
-      } else if (code) {
-        // Map other category codes
-        displayCat = 
-          code === 'PP1' ? 'Prato Principal 1' :
-          code === 'PP2' ? 'Prato Principal 2' :
-          code === 'SALADA1' ? 'Salada 1' :
-          code === 'SALADA2' ? 'Salada 2' :
-          code === 'GUARNICAO' ? 'Guarnição' :
-          code === 'SOBREMESA' ? 'Sobremesa' : rawCat;
+        displayCat = MENU_CATEGORIES.BASE;
       } else {
-        // Map category names
-        displayCat = 
-          rawCat === 'PP1' ? 'Prato Principal 1' : 
-          rawCat === 'PP2' ? 'Prato Principal 2' : rawCat;
+        // Use standardized category mapping
+        displayCat = mapCategory(rawCat, code);
       }
 
       if (!grouped[displayCat]) {
@@ -323,11 +256,11 @@ export function MenuDayCarousel({ menu }: MenuDayCarouselProps) {
       }
     });
 
-    grouped['Base'] = deduplicatedBaseItems;
+    grouped[MENU_CATEGORIES.BASE] = deduplicatedBaseItems;
 
     // Always inject juices if missing (1 juice per category)
-    const existingSuco1 = grouped['SUCO1'] || [];
-    const existingSuco2 = grouped['SUCO2'] || [];
+    const existingSuco1 = grouped[MENU_CATEGORIES.SUCO_1] || [];
+    const existingSuco2 = grouped[MENU_CATEGORIES.SUCO_2] || [];
     const allExistingJuices = [...existingSuco1, ...existingSuco2];
     const juiceNames = allExistingJuices.map(j => normalizeString(j.name || j.nome || ''));
     
@@ -342,27 +275,27 @@ export function MenuDayCarousel({ menu }: MenuDayCarouselProps) {
     // Select two distinct juices (prefer Pro Mix)
     const availableJuices = [...juicePools.proMix, ...juicePools.vita];
     
-    // Inject juice in SUCO1 if missing
+    // Inject juice in Suco 1 if missing
     if (existingSuco1.length === 0 && availableJuices.length > 0) {
       const juiceName = availableJuices[0];
       if (!juiceNames.includes(normalizeString(juiceName))) {
-        grouped['SUCO1'] = [{
+        grouped[MENU_CATEGORIES.SUCO_1] = [{
           id: 'juice-injected-suco1',
           name: juiceName,
-          category: 'SUCO1',
+          category: MENU_CATEGORIES.SUCO_1,
           cost: 0.05
         }];
       }
     }
     
-    // Inject juice in SUCO2 if missing
+    // Inject juice in Suco 2 if missing
     if (existingSuco2.length === 0 && availableJuices.length > 1) {
       const juiceName = availableJuices[1];
       if (!juiceNames.includes(normalizeString(juiceName))) {
-        grouped['SUCO2'] = [{
+        grouped[MENU_CATEGORIES.SUCO_2] = [{
           id: 'juice-injected-suco2',
           name: juiceName,
-          category: 'SUCO2',
+          category: MENU_CATEGORIES.SUCO_2,
           cost: 0.05
         }];
       }
@@ -374,11 +307,11 @@ export function MenuDayCarousel({ menu }: MenuDayCarouselProps) {
   // Calculate costs separately for Base (fixed) and Variable Menu
   const { baseCost, variableCost, totalCost } = React.useMemo(() => {
     // Include injected base items in cost calculation
-    const baseItems = recipesByCategory['Base'] || [];
+    const baseItems = recipesByCategory[MENU_CATEGORIES.BASE] || [];
     const base = baseItems.reduce((sum, recipe) => sum + (recipe.cost || recipe.custo || recipe.custo_por_refeicao || 0), 0);
     
     const allVariableRecipes = CATEGORY_ORDER
-      .filter(cat => cat !== 'Base')
+      .filter(cat => cat !== MENU_CATEGORIES.BASE)
       .flatMap(cat => recipesByCategory[cat] || []);
     
     const variable = allVariableRecipes.reduce((sum, recipe) => sum + (recipe.cost || recipe.custo || recipe.custo_por_refeicao || 0), 0);
@@ -414,7 +347,7 @@ export function MenuDayCarousel({ menu }: MenuDayCarouselProps) {
         {CATEGORY_ORDER.map((category) => {
           const recipes = recipesByCategory[category] || [];
           const categoryTotal = recipes.reduce((sum, recipe) => sum + (recipe.cost || recipe.custo || recipe.custo_por_refeicao || 0), 0);
-          const isBaseCategory = category === 'Base';
+          const isBaseCategory = category === MENU_CATEGORIES.BASE;
           
           return (
             <Card key={category} className={`${isBaseCategory ? 'bg-amber-50 border-amber-200' : 'bg-gray-50 border-gray-200'} hover:shadow-md transition-shadow`}>

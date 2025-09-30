@@ -8,6 +8,7 @@ import { useToast } from '../hooks/use-toast';
 import { useSelectedClient } from '../contexts/SelectedClientContext';
 import { useMenuBusinessRules } from './useMenuBusinessRules';
 import { format, addDays } from 'date-fns';
+import { mapCategory, MENU_CATEGORIES } from '../constants/menuCategories';
 
 export interface GeneratedMenu {
   id: string;
@@ -263,23 +264,7 @@ export function useSimplifiedMenuGeneration() {
       // === Categorias para UI
       const WEEK_DAYS = ['Segunda-feira','Terça-feira','Quarta-feira','Quinta-feira','Sexta-feira','Sábado','Domingo'];
 
-      const mapCategory = (nome: string = '', categoria: string = ''): string => {
-        const lowerNome = nome.toLowerCase();
-        const lowerCat = categoria.toLowerCase();
-
-        if (lowerNome.includes('arroz')) return 'Arroz Branco';
-        if (lowerNome.includes('feij')) return 'Feijão';
-        if (lowerNome.includes('guarni') || lowerCat.includes('guarni')) return 'Guarnição';
-        if (lowerNome.includes('salada 2') || lowerCat.includes('salada 2')) return 'Salada 2';
-        if (lowerNome.includes('salada')) return 'Salada 1';
-        if (lowerNome.includes('suco 2') || lowerCat.includes('suco 2')) return 'Suco 2';
-        if (lowerNome.includes('suco')) return 'Suco 1';
-        if (lowerNome.includes('sobremesa') || lowerCat.includes('sobremesa')) return 'Sobremesa';
-        if (lowerCat.includes('principal 1') || lowerCat.includes('pp1')) return 'PP1';
-        if (lowerCat.includes('principal 2') || lowerCat.includes('pp2')) return 'PP2';
-
-        return categoria || 'Outros';
-      };
+      // Usar mapCategory das constantes compartilhadas para padronização
 
       // === Normalização de receitas
       const allRecipes = allRecipesRaw.map((r: any, idx: number) => {
@@ -295,17 +280,20 @@ export function useSimplifiedMenuGeneration() {
           warnings.push(`⚠️ Custo fora da realidade: R$ ${custo.toFixed(2)}/porção`);
         }
 
-        const categoriaUI = r.category || 'Outros';
+        // Usar mapeamento padronizado de categoria
+        const categoriaOriginal = r.category || 'Outros';
+        const categoriaUI = mapCategory(categoriaOriginal, r.codigo);
         const codigo = (() => {
-          const key = (categoriaUI || '').toUpperCase();
+          const key = categoriaUI.toUpperCase();
           if (key.includes('PRINCIPAL 1')) return 'PP1';
           if (key.includes('PRINCIPAL 2')) return 'PP2';
-          if (key.includes('ARROZ')) return 'ARROZ';
-          if (key.includes('FEIJ')) return 'FEIJAO';
+          if (key.includes('BASE')) return 'BASE';
+          if (key.includes('GUARNIÇÃO')) return 'GUARNICAO';
           if (key.includes('SALADA 1')) return 'SALADA1';
           if (key.includes('SALADA 2')) return 'SALADA2';
           if (key.includes('SUCO 1')) return 'SUCO1';
           if (key.includes('SUCO 2')) return 'SUCO2';
+          if (key.includes('SOBREMESA')) return 'SOBREMESA';
           return undefined;
         })();
 
