@@ -2,7 +2,8 @@ import React, { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
-import { ChefHat, Calendar, ShoppingCart, DollarSign, Users, Plus, Wifi, WifiOff } from 'lucide-react';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { ChefHat, Calendar, ShoppingCart, Users, Plus, Wifi, WifiOff, FolderOpen, Trash2 } from 'lucide-react';
 import { useIntegratedMenuGeneration } from '@/hooks/useIntegratedMenuGeneration';
 import { useSelectedClient } from '@/contexts/SelectedClientContext';
 import WeeklyMenuView from "@/components/MenuGeneration/WeeklyMenuView";
@@ -13,11 +14,11 @@ import { useToast } from '@/hooks/use-toast';
 
 const IntegratedMenuGenerator = () => {
   const [showForm, setShowForm] = useState(false);
-  const [approverName, setApproverName] = useState('');
-  const [rejectionReason, setRejectionReason] = useState('');
   const [isTesting, setIsTesting] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<'unknown' | 'healthy' | 'error'>('unknown');
   const [generationStage, setGenerationStage] = useState<'fetching' | 'calculating' | 'processing' | 'finalizing' | 'complete'>('fetching');
+  const [activeTab, setActiveTab] = useState<'new' | 'saved'>('new');
+  const [selectedSavedMenu, setSelectedSavedMenu] = useState<any>(null);
   
   const { toast } = useToast();
   const { selectedClient } = useSelectedClient();
@@ -30,12 +31,14 @@ const IntegratedMenuGenerator = () => {
     generateShoppingListFromMenu,
     updateGeneratedMenu,
     clearGeneratedMenu,
+    deleteGeneratedMenu,
+    savedMenus,
+    loadSavedMenus,
     error
   } = useIntegratedMenuGeneration();
 
   const handleGenerateMenu = async (formData: SimpleMenuFormData) => {
     setGenerationStage('fetching');
-    
     setTimeout(() => setGenerationStage('calculating'), 2000);
     setTimeout(() => setGenerationStage('processing'), 8000);
     setTimeout(() => setGenerationStage('finalizing'), 35000);
@@ -99,14 +102,36 @@ const IntegratedMenuGenerator = () => {
     }
   };
 
+  const handleDeleteMenu = async (menuId: string) => {
+    const success = await deleteGeneratedMenu(menuId);
+    if (success) {
+      toast({
+        title: "Cardápio Excluído",
+        description: "Cardápio foi removido com sucesso",
+        variant: "default"
+      });
+      if (selectedSavedMenu?.id === menuId) {
+        setSelectedSavedMenu(null);
+      }
+    } else {
+      toast({
+        title: "Erro ao Excluir",
+        description: "Não foi possível excluir o cardápio",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const handleViewSavedMenu = (menu: any) => {
+    setSelectedSavedMenu(menu);
+  };
+
   const handleTestConnectivity = async () => {
     setIsTesting(true);
     setConnectionStatus('unknown');
     
     try {
-      console.log('[UI] Iniciando teste de conectividade...');
       const connectivityResult = await testEdgeFunctionConnectivity();
-      console.log('[UI] Resultado do teste:', connectivityResult);
       
       if (connectivityResult.isConnected) {
         setConnectionStatus('healthy');
@@ -117,7 +142,6 @@ const IntegratedMenuGenerator = () => {
         });
         
         if (selectedClient) {
-          console.log('[UI] Testando geração de cardápio rápida...');
           const testResult = await testMenuGeneration({
             action: 'generate_menu',
             filialIdLegado: selectedClient.filial_id || 8,
@@ -150,7 +174,6 @@ const IntegratedMenuGenerator = () => {
         });
       }
     } catch (error) {
-      console.error('[UI] Erro no teste:', error);
       setConnectionStatus('error');
       toast({
         title: "Erro no Teste",
@@ -219,113 +242,250 @@ const IntegratedMenuGenerator = () => {
         </CardContent>
       </Card>
 
-      {!generatedMenu && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <ChefHat className="w-5 h-5" />
-              Gerador Inteligente de Cardápios
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <p className="text-gray-600 text-sm">
-              Sistema inteligente que verifica disponibilidade no mercado e aplica regras de negócio. 
-              Estrutura: PP1, PP2, Arroz Branco, Feijão, Guarnição, 
-              Salada 1, Salada 2, Suco 1, Suco 2, Sobremesa.
-            </p>
-            <div className="flex gap-3">
-              <Button onClick={handleShowForm} disabled={isGenerating} className="flex-1" size="lg">
-                <Plus className="w-4 h-4 mr-2" />
-                Gerar Novo Cardápio
-              </Button>
-              <Button 
-                onClick={handleTestConnectivity}
-                disabled={isTesting}
-                variant="outline"
-                size="lg"
-                className="flex items-center gap-2"
-              >
-                {isTesting ? (
-                  <div className="w-4 h-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
-                ) : connectionStatus === 'healthy' ? (
-                  <Wifi className="w-4 h-4 text-green-600" />
-                ) : connectionStatus === 'error' ? (
-                  <WifiOff className="w-4 h-4 text-red-600" />
-                ) : (
-                  <Wifi className="w-4 h-4" />
-                )}
-                Testar
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      )}
+      <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as 'new' | 'saved')}>
+        <TabsList className="grid w-full grid-cols-2">
+          <TabsTrigger value="new" className="flex items-center gap-2">
+            <Plus className="w-4 h-4" />
+            Gerar Novo
+          </TabsTrigger>
+          <TabsTrigger value="saved" className="flex items-center gap-2">
+            <FolderOpen className="w-4 h-4" />
+            Cardápios Salvos ({savedMenus.length})
+          </TabsTrigger>
+        </TabsList>
 
-      {generatedMenu && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Calendar className="w-5 h-5" />
-              Cardápio: {generatedMenu.weekPeriod}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <div className="text-center p-4 bg-blue-50 rounded-lg">
-                <p className="text-sm text-gray-600">Total de Receitas</p>
-                <p className="text-2xl font-bold text-blue-600">{generatedMenu.totalRecipes}</p>
-              </div>
-              <div className="text-center p-4 bg-green-50 rounded-lg">
-                <p className="text-sm text-gray-600">Custo por Refeição</p>
-                <p className="text-2xl font-bold text-green-600">R$ {generatedMenu.costPerMeal.toFixed(2)}</p>
-              </div>
-              <div className="text-center p-4 bg-purple-50 rounded-lg">
-                <p className="text-sm text-gray-600">Custo Total</p>
-                <p className="text-2xl font-bold text-purple-600">R$ {generatedMenu.totalCost.toFixed(2)}</p>
-              </div>
-              <div className="text-center p-4 bg-orange-50 rounded-lg">
-                <p className="text-sm text-gray-600">Refeições/Dia</p>
-                <p className="text-2xl font-bold text-orange-600">{generatedMenu.mealsPerDay || 50}</p>
-              </div>
-            </div>
-
-            <Separator />
-
-            {generatedMenu.menu || generatedMenu.receitas_adaptadas?.length ? (
-              <WeeklyMenuView 
-                menu={generatedMenu.menu || {
-                  dias: generatedMenu.receitas_adaptadas ? [
-                    {
-                      dia: 'Menu Gerado',
-                      receitas: generatedMenu.receitas_adaptadas
-                    }
-                  ] : []
-                }}
-              />
-            ) : (
-              <div className="p-8 text-center text-gray-500">
-                <ChefHat className="w-12 h-12 mx-auto mb-3 text-gray-300" />
-                <p>Aguardando geração do cardápio...</p>
-                <p className="text-xs mt-2">
-                  Debug: menu={generatedMenu.menu ? 'OK' : 'null'}, receitas={generatedMenu.receitas_adaptadas?.length || 0}
+        <TabsContent value="new" className="space-y-6">
+          {!generatedMenu && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <ChefHat className="w-5 h-5" />
+                  Gerador Inteligente de Cardápios
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <p className="text-gray-600 text-sm">
+                  Sistema inteligente que verifica disponibilidade no mercado e aplica regras de negócio. 
+                  Estrutura: PP1, PP2, Arroz Branco, Feijão, Guarnição, 
+                  Salada 1, Salada 2, Suco 1, Suco 2, Sobremesa.
                 </p>
-              </div>
-            )}
+                <div className="flex gap-3">
+                  <Button onClick={handleShowForm} disabled={isGenerating} className="flex-1" size="lg">
+                    <Plus className="w-4 h-4 mr-2" />
+                    Gerar Novo Cardápio
+                  </Button>
+                  <Button 
+                    onClick={handleTestConnectivity}
+                    disabled={isTesting}
+                    variant="outline"
+                    size="lg"
+                    className="flex items-center gap-2"
+                  >
+                    {isTesting ? (
+                      <div className="w-4 h-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                    ) : connectionStatus === 'healthy' ? (
+                      <Wifi className="w-4 h-4 text-green-600" />
+                    ) : connectionStatus === 'error' ? (
+                      <WifiOff className="w-4 h-4 text-red-600" />
+                    ) : (
+                      <Wifi className="w-4 h-4" />
+                    )}
+                    Testar
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
-            <Separator />
+          {generatedMenu && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Calendar className="w-5 h-5" />
+                  Cardápio: {generatedMenu.weekPeriod}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div className="text-center p-4 bg-blue-50 rounded-lg">
+                    <p className="text-sm text-gray-600">Total de Receitas</p>
+                    <p className="text-2xl font-bold text-blue-600">{generatedMenu.totalRecipes}</p>
+                  </div>
+                  <div className="text-center p-4 bg-green-50 rounded-lg">
+                    <p className="text-sm text-gray-600">Custo por Refeição</p>
+                    <p className="text-2xl font-bold text-green-600">R$ {generatedMenu.costPerMeal.toFixed(2)}</p>
+                  </div>
+                  <div className="text-center p-4 bg-purple-50 rounded-lg">
+                    <p className="text-sm text-gray-600">Custo Total</p>
+                    <p className="text-2xl font-bold text-purple-600">R$ {generatedMenu.totalCost.toFixed(2)}</p>
+                  </div>
+                  <div className="text-center p-4 bg-orange-50 rounded-lg">
+                    <p className="text-sm text-gray-600">Refeições/Dia</p>
+                    <p className="text-2xl font-bold text-orange-600">{generatedMenu.mealsPerDay || 100}</p>
+                  </div>
+                </div>
 
-            <div className="flex gap-3">
-              <Button onClick={handleGenerateShoppingList} className="flex-1">
-                <ShoppingCart className="w-4 h-4 mr-2" />
-                Gerar Lista de Compras
-              </Button>
-              <Button onClick={clearGeneratedMenu} variant="outline">
-                Limpar
-              </Button>
+                <Separator />
+
+                {generatedMenu.menu ? (
+                  <WeeklyMenuView menu={generatedMenu.menu} />
+                ) : (
+                  <div className="p-8 text-center text-gray-500">
+                    <ChefHat className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+                    <p>Nenhuma receita encontrada no cardápio</p>
+                  </div>
+                )}
+
+                <Separator />
+
+                <div className="flex gap-3">
+                  <Button onClick={handleGenerateShoppingList} className="flex-1">
+                    <ShoppingCart className="w-4 h-4 mr-2" />
+                    Gerar Lista de Compras
+                  </Button>
+                  <Button onClick={clearGeneratedMenu} variant="outline">
+                    Limpar
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
+
+        <TabsContent value="saved" className="space-y-6">
+          {selectedSavedMenu ? (
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <CardTitle className="flex items-center gap-2">
+                    <Calendar className="w-5 h-5" />
+                    Cardápio: {selectedSavedMenu.weekPeriod}
+                  </CardTitle>
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    onClick={() => setSelectedSavedMenu(null)}
+                  >
+                    Voltar à Lista
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div className="text-center p-4 bg-blue-50 rounded-lg">
+                    <p className="text-sm text-gray-600">Total de Receitas</p>
+                    <p className="text-2xl font-bold text-blue-600">{selectedSavedMenu.totalRecipes}</p>
+                  </div>
+                  <div className="text-center p-4 bg-green-50 rounded-lg">
+                    <p className="text-sm text-gray-600">Custo por Refeição</p>
+                    <p className="text-2xl font-bold text-green-600">R$ {selectedSavedMenu.costPerMeal.toFixed(2)}</p>
+                  </div>
+                  <div className="text-center p-4 bg-purple-50 rounded-lg">
+                    <p className="text-sm text-gray-600">Custo Total</p>
+                    <p className="text-2xl font-bold text-purple-600">R$ {selectedSavedMenu.totalCost.toFixed(2)}</p>
+                  </div>
+                  <div className="text-center p-4 bg-orange-50 rounded-lg">
+                    <p className="text-sm text-gray-600">Status</p>
+                    <p className="text-lg font-bold text-orange-600">{selectedSavedMenu.status}</p>
+                  </div>
+                </div>
+
+                <Separator />
+
+                {selectedSavedMenu.menu ? (
+                  <WeeklyMenuView menu={selectedSavedMenu.menu} />
+                ) : (
+                  <div className="p-8 text-center text-gray-500">
+                    <ChefHat className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+                    <p>Nenhuma receita encontrada no cardápio</p>
+                  </div>
+                )}
+
+                <Separator />
+
+                <div className="flex gap-3">
+                  <Button onClick={() => handleGenerateShoppingList()} className="flex-1">
+                    <ShoppingCart className="w-4 h-4 mr-2" />
+                    Gerar Lista de Compras
+                  </Button>
+                  <Button 
+                    onClick={() => handleDeleteMenu(selectedSavedMenu.id)} 
+                    variant="destructive"
+                  >
+                    <Trash2 className="w-4 h-4 mr-2" />
+                    Excluir
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {savedMenus.length === 0 ? (
+                <Card className="col-span-full">
+                  <CardContent className="p-8 text-center text-gray-500">
+                    <FolderOpen className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+                    <p>Nenhum cardápio salvo ainda</p>
+                    <p className="text-sm mt-2">Gere um novo cardápio para começar</p>
+                  </CardContent>
+                </Card>
+              ) : (
+                savedMenus.map((menu) => (
+                  <Card key={menu.id} className="hover:shadow-lg transition-shadow">
+                    <CardHeader>
+                      <CardTitle className="text-lg">{menu.weekPeriod}</CardTitle>
+                      <p className="text-sm text-gray-500">{menu.clientName}</p>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="space-y-2">
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-600">Receitas:</span>
+                          <span className="font-semibold">{menu.totalRecipes}</span>
+                        </div>
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-600">Custo/Refeição:</span>
+                          <span className="font-semibold text-green-600">
+                            R$ {menu.costPerMeal.toFixed(2)}
+                          </span>
+                        </div>
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-600">Status:</span>
+                          <span className={`font-semibold ${
+                            menu.status === 'approved' ? 'text-green-600' :
+                            menu.status === 'rejected' ? 'text-red-600' :
+                            'text-yellow-600'
+                          }`}>
+                            {menu.status}
+                          </span>
+                        </div>
+                      </div>
+
+                      <Separator />
+
+                      <div className="flex gap-2">
+                        <Button 
+                          onClick={() => handleViewSavedMenu(menu)}
+                          variant="outline"
+                          size="sm"
+                          className="flex-1"
+                        >
+                          Ver Detalhes
+                        </Button>
+                        <Button 
+                          onClick={() => handleDeleteMenu(menu.id)}
+                          variant="ghost"
+                          size="sm"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))
+              )}
             </div>
-          </CardContent>
-        </Card>
-      )}
+          )}
+        </TabsContent>
+      </Tabs>
     </div>
   );
 };
