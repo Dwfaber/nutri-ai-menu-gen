@@ -35,60 +35,16 @@ export function useSimplifiedMenuGeneration() {
   const { validateMenu, violations } = useMenuBusinessRules();
   const { toast } = useToast();
 
-  const generateSimpleRecipes = async (clientData: any, mealQuantity: number) => {
-    console.log('🔍 Frontend DEBUG - Client data:', {
-      selectedClient,
-      clientData,
-      clientId: clientData?.id || clientData?.cliente_id_legado,
-      filialId: clientData?.filial_id
-    });
-
-    if (!clientData?.id && !clientData?.cliente_id_legado) {
-      throw new Error('Cliente inválido: ID não encontrado');
-    }
-
-    const payload = {
-      action: 'generate_recipes_only',
-      client_id: clientData.id || null,
-      clientId: clientData.cliente_id_legado || null,
-      filial_id: clientData.filial_id || null,
-      filialIdLegado: clientData.filial_id || null,
-      client_data: clientData,
-      meal_quantity: mealQuantity,
-      simple_mode: true
-    };
-
-    console.log('📤 Payload being sent:', payload);
-
-    const { data, error } = await supabase.functions.invoke('gpt-assistant', {
-      body: payload
-    });
-
-    if (error) {
-      console.error('Edge Function error:', error);
-      throw new Error(`Erro na geração: ${error.message || 'Falha na comunicação com o servidor'}`);
-    }
-
-    if (!data?.recipes || data.recipes.length === 0) {
-      console.error('No recipes returned from Edge Function:', data);
-      throw new Error('IA não conseguiu gerar receitas para este cliente');
-    }
-
-    return data.recipes;
-  };
-
   const saveMenuToDatabase = async (menu: GeneratedMenu): Promise<string | null> => {
     try {
-      // Prepare receitas_adaptadas format for shopping list compatibility
       const receitasAdaptadas = menu.recipes?.map(recipe => ({
         receita_id_legado: recipe.id,
         nome: recipe.name,
         categoria: recipe.category,
         custo_por_porcao: recipe.cost || 0,
-        porcoes_calculadas: menu.mealsPerDay || 50
+        porcoes_calculadas: menu.mealsPerDay || 100
       })) || [];
 
-      // Prepare receitas_ids as backup fallback
       const receitasIds = menu.recipes?.map(recipe => recipe.id).filter(Boolean) || [];
 
       const { data, error } = await supabase
@@ -101,7 +57,7 @@ export function useSimplifiedMenuGeneration() {
           total_cost: menu.totalCost,
           cost_per_meal: menu.costPerMeal,
           total_recipes: menu.totalRecipes,
-          meals_per_day: menu.mealsPerDay || 50,
+          meals_per_day: menu.mealsPerDay || 100,
           recipes: menu.recipes,
           receitas_adaptadas: receitasAdaptadas,
           receitas_ids: receitasIds,
@@ -140,7 +96,7 @@ export function useSimplifiedMenuGeneration() {
         throw new Error('Nenhum cliente selecionado');
       }
 
-      console.log('🎯 Iniciando geração com CostCalculator...', {
+      console.log('Iniciando geração com CostCalculator...', {
         selectedClient: clientToUse?.id,
         mealQuantity,
         periodDays,
@@ -149,7 +105,7 @@ export function useSimplifiedMenuGeneration() {
 
       const weekPeriod = period || `${format(new Date(), 'dd/MM/yyyy')} - ${format(addDays(new Date(), periodDays - 1), 'dd/MM/yyyy')}`;
 
-      // CORREÇÃO: Usar quick-worker - Nova Edge Function otimizada
+      // Chamar Edge Function quick-worker corrigida
       const { data: response, error: menuError } = await supabase.functions.invoke('quick-worker', {
         body: {
           action: 'generate_validated_menu',
@@ -162,7 +118,6 @@ export function useSimplifiedMenuGeneration() {
           tipo_suco_primario: 'PRO_MIX',
           tipo_suco_secundario: null,
           variar_sucos_por_dia: true,
-          // Dados de contexto para auditoria
           client_id: clientToUse.id,
           clientId: clientToUse.cliente_id_legado,
           filial_id: clientToUse.filial_id,
@@ -175,23 +130,50 @@ export function useSimplifiedMenuGeneration() {
         throw new Error(`Erro na geração: ${menuError.message}`);
       }
 
-      console.log('🔍 DEBUG: Response completo da Edge Function:', response);
-      console.log('🔍 DEBUG: response.success:', response?.success);
-      console.log('🔍 DEBUG: response.cardapio_dias:', response?.cardapio_dias);
-      console.log('🔍 DEBUG: response.cardapio_semanal:', response?.cardapio_semanal);
-      console.log('🔍 DEBUG: response.statistics:', response?.statistics);
-      console.log('🔍 DEBUG: Todas as propriedades da response:', Object.keys(response || {}));
+      console.log('DEBUG: Response completo da Edge Function:', response);
+      console.log('DEBUG: response.success:', response?.success);
+      console.log('DEBUG: response.cardapio:', response?.cardapio);
+      console.log('DEBUG: response.resumo:', response?.resumo);
 
       if (!response?.success) {
         throw new Error(response?.error || 'Falha na geração do cardápio');
       }
 
-      // CORREÇÃO: Acomodar TODAS as possíveis estruturas retornadas pela quick-worker
+      // CORREÇÃO: Processar estrutura corrigida da Edge Function
       let cardapioValidado = null;
-      let receitasValidas = [];
+      let receitasValidas: any[] = [];
       
-      // 1. Primeiro: tentar nova estrutura com cardapio_dias
-      if (response?.cardapio_dias && Array.isArray(response.cardapio_dias)) {
+      // 1. ESTRUTURA CORRIGIDA: response.cardapio (array de dias)
+      if (response?.cardapio && Array.isArray(response.cardapio)) {
+        console.log('Processando estrutura cardapio da Edge Function corrigida');
+        
+        cardapioValidado = { 
+          dias: response.cardapio.map(dia => ({
+            dia: dia.dia,
+            receitas: dia.receitas || [],
+            custo_total: dia.custo_total,
+            orcamento: dia.orcamento,
+            dentro_orcamento: dia.dentro_orcamento,
+            percentual_uso: dia.percentual_uso,
+            economia: dia.economia
+          })),
+          resumo: response.resumo
+        };
+        
+        response.cardapio.forEach(dia => {
+          if (dia.receitas && Array.isArray(dia.receitas)) {
+            dia.receitas.forEach(receita => {
+              receitasValidas.push({
+                ...receita,
+                dia: dia.dia,
+                custo: receita.custo || receita.cost
+              });
+            });
+          }
+        });
+      }
+      // 2. Fallback: estrutura anterior com cardapio_dias
+      else if (response?.cardapio_dias && Array.isArray(response.cardapio_dias)) {
         cardapioValidado = { dias: response.cardapio_dias };
         response.cardapio_dias.forEach(dia => {
           if (dia.receitas_validadas) {
@@ -199,48 +181,37 @@ export function useSimplifiedMenuGeneration() {
           }
         });
       }
-      // 2. Fallback: estrutura anterior
+      // 3. Fallback: estrutura anterior com cardapio_semanal
       else if (response?.cardapio_semanal) {
         cardapioValidado = response.cardapio_semanal;
       }
-      // 3. Fallback: dados diretos
+      // 4. Fallback: dados diretos
       else if (response?.data) {
         cardapioValidado = response.data;
       }
-      // 4. Último recurso: usar response inteiro
+      // 5. Último recurso: usar response inteiro
       else {
         cardapioValidado = response;
       }
 
-      console.log('✅ Estrutura Final Processada:', {
-        cardapioValidado,
+      console.log('Estrutura Final Processada:', {
+        cardapioValidado: cardapioValidado ? Object.keys(cardapioValidado) : [],
         receitasValidas: receitasValidas.length,
-        estrutura: cardapioValidado ? Object.keys(cardapioValidado) : []
+        dias: cardapioValidado?.dias?.length || 0
       });
 
-      // === Nova estrutura do quick-worker: cardapio_dias com receitas_validadas
+      // Extrair todas as receitas
       const allRecipesRaw: any[] = [];
       
-      // Verificar se tem cardapio_dias (nova estrutura)
-      if (response?.cardapio_dias?.length) {
-        response.cardapio_dias.forEach((dia: any) => {
-          if (dia?.receitas_validadas?.length) {
-            dia.receitas_validadas.forEach((receita: any) => {
-              allRecipesRaw.push({
-                ...receita,
-                dia: dia.data || dia.dia_semana || 'Dia Único'
-              });
-            });
-          }
-        });
-      }
-      // Fallback: estrutura anterior com dias.receitas
-      else if (cardapioValidado?.dias?.length) {
+      // Processar dias do cardápio validado
+      if (cardapioValidado?.dias?.length) {
         cardapioValidado.dias.forEach((dia: any) => {
-          dia?.receitas?.forEach((receita: any) => {
+          const receitas = dia?.receitas || dia?.receitas_validadas || [];
+          receitas.forEach((receita: any) => {
             allRecipesRaw.push({
               ...receita,
-              dia: dia.dia
+              dia: dia.dia || dia.dia_semana || dia.data || 'Dia Único',
+              custo: receita.custo || receita.cost
             });
           });
         });
@@ -250,39 +221,33 @@ export function useSimplifiedMenuGeneration() {
         response.recipes.forEach((r: any) => {
           allRecipesRaw.push({
             ...r,
-            dia: r.dia || r.day || 'Dia Único'
+            dia: r.dia || r.day || 'Dia Único',
+            custo: r.custo || r.cost
           });
         });
       }
 
-      console.log('📊 Receitas encontradas (quick-worker):', {
+      console.log('Receitas encontradas:', {
         total: allRecipesRaw.length,
-        porDia: cardapioValidado?.dias?.map((d: any) => `${d.dia}: ${d.receitas?.length || 0}`).join(', '),
-        estruturaDias: cardapioValidado?.dias?.length ? 'OK' : 'FALHOU'
+        porDia: cardapioValidado?.dias?.map((d: any) => `${d.dia}: ${(d.receitas || d.receitas_validadas || []).length}`).join(', ')
       });
 
-      // === Categorias para UI
-      const WEEK_DAYS = ['Segunda-feira','Terça-feira','Quarta-feira','Quinta-feira','Sexta-feira','Sábado','Domingo'];
-
-      // Usar mapCategory das constantes compartilhadas para padronização
-
-      // === Normalização de receitas
+      // Normalização de receitas
       const allRecipes = allRecipesRaw.map((r: any, idx: number) => {
-        const custo = Number(r.cost ?? 0);
+        const custo = Number(r.custo || r.cost || 0);
         const warnings: string[] = [];
 
-        // Verificar se é receita de fallback (sem ingredientes)
         if (r.warning) {
           warnings.push(r.warning);
         }
 
         if (custo > (budgetPerMeal || clientToUse.custo_maximo_refeicao) * 5) {
-          warnings.push(`⚠️ Custo fora da realidade: R$ ${custo.toFixed(2)}/porção`);
+          warnings.push(`Custo fora da realidade: R$ ${custo.toFixed(2)}/porção`);
         }
 
-        // Usar mapeamento padronizado de categoria
-        const categoriaOriginal = r.category || 'Outros';
+        const categoriaOriginal = r.categoria || r.category || 'Outros';
         const categoriaUI = mapCategory(categoriaOriginal, r.codigo);
+        
         const codigo = (() => {
           const key = categoriaUI.toUpperCase();
           if (key.includes('PRINCIPAL 1')) return 'PP1';
@@ -298,8 +263,8 @@ export function useSimplifiedMenuGeneration() {
         })();
 
         return {
-          id: r.id || idx,
-          name: r.name || 'Item',
+          id: r.receita_id || r.id || idx,
+          name: r.nome || r.name || 'Item',
           category: categoriaUI,
           codigo,
           cost: custo,
@@ -312,16 +277,16 @@ export function useSimplifiedMenuGeneration() {
         throw new Error("Nenhuma receita foi incluída no cardápio");
       }
 
-      // === Validação contra regras de negócio
+      // Validação contra regras de negócio
       const businessRules = validateMenu(allRecipes);
 
-      // === Calcular custos totais das receitas geradas
+      // Calcular custos totais
       const totalRecipeCost = allRecipes.reduce((sum, recipe) => sum + (recipe.cost || 0), 0);
       const actualPeriodDays = Array.from(new Set(allRecipes.map(r => r.day))).length || periodDays;
       const calculatedCostPerMeal = totalRecipeCost / actualPeriodDays;
       const calculatedTotalCost = calculatedCostPerMeal * (mealQuantity || 1) * actualPeriodDays;
 
-      // === Resultado final
+      // Resultado final
       const menu: GeneratedMenu = {
         id: crypto.randomUUID(),
         clientId: clientToUse.id || clientToUse.cliente_id_legado,
@@ -341,15 +306,15 @@ export function useSimplifiedMenuGeneration() {
         juiceMenu: undefined
       };
 
-      // === Salvar no banco
+      // Salvar no banco
       const savedId = await saveMenuToDatabase(menu);
       if (savedId) {
         menu.id = savedId;
         setGeneratedMenu(menu);
 
         toast({
-          title: "Cardápio Gerado com Receitas Validadas!",
-          description: `${allRecipes.length} receitas com ingredientes. Custo: R$ ${(menu.totalCost || 0).toFixed(2)} total`,
+          title: "Cardápio Gerado com Receitas Validadas",
+          description: `${allRecipes.length} receitas. Custo: R$ ${(menu.totalCost || 0).toFixed(2)} total`,
         });
 
         return menu;
