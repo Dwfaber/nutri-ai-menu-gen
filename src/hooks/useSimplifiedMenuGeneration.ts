@@ -152,19 +152,21 @@ export function useSimplifiedMenuGeneration() {
       const { data: response, error: menuError } = await supabase.functions.invoke('quick-worker', {
         body: {
           action: 'generate_validated_menu',
+          dias: periodDays,
+          meal_quantity: mealQuantity,
+          proteina_gramas: proteinGrams || '100',
+          incluir_fim_semana: periodDays === 7,
+          incluir_arroz_integral: false,
+          max_tentativas: 10,
+          tipo_suco_primario: 'PRO_MIX',
+          tipo_suco_secundario: null,
+          variar_sucos_por_dia: true,
+          // Dados de contexto para auditoria
           client_id: clientToUse.id,
           clientId: clientToUse.cliente_id_legado,
           filial_id: clientToUse.filial_id,
-          meal_quantity: mealQuantity, // Corrigido para meal_quantity
-          periodDays: periodDays,
           budgetPerMeal: budgetPerMeal || clientToUse.custo_maximo_refeicao,
-          selectedRecipes: selectedRecipes,
-          client_data: clientToUse,
-          protein_config: {
-            protein_grams_pp1: parseInt(proteinGrams || '100'),
-            protein_grams_pp2: parseInt(proteinGrams || '100')  // Usar MESMA gramagem escolhida pelo usuário
-          },
-          include_weekends: periodDays === 7
+          client_data: clientToUse
         }
       });
 
@@ -182,18 +184,35 @@ export function useSimplifiedMenuGeneration() {
         throw new Error(response?.error || 'Falha na geração do cardápio');
       }
 
-      // CORREÇÃO: Quick-worker retorna response.cardapio_semanal diretamente
-      const cardapioValidado = response?.cardapio_semanal || response?.data || response?.cardapio;
+      // CORREÇÃO: Ajustar para nova estrutura do quick-worker
+      const cardapioValidado = response?.cardapio_semanal || response?.data?.cardapio_semanal || response?.result || response;
       console.log('✅ Cardápio Validado recebido (quick-worker):', {
+        responseKeys: Object.keys(response || {}),
         cardapioValidado,
         diasArray: cardapioValidado?.dias?.length || 0,
         estruturaCompleta: cardapioValidado ? Object.keys(cardapioValidado) : [],
-        primeiroItem: cardapioValidado?.dias?.[0] || null
+        primeiroItem: cardapioValidado?.dias?.[0] || null,
+        responseComplete: response
       });
 
-      // === Flatten receitas do cardápio semanal 
+      // === Nova estrutura do quick-worker: cardapio_dias com receitas_validadas
       const allRecipesRaw: any[] = [];
-      if (cardapioValidado?.dias?.length) {
+      
+      // Verificar se tem cardapio_dias (nova estrutura)
+      if (response?.cardapio_dias?.length) {
+        response.cardapio_dias.forEach((dia: any) => {
+          if (dia?.receitas_validadas?.length) {
+            dia.receitas_validadas.forEach((receita: any) => {
+              allRecipesRaw.push({
+                ...receita,
+                dia: dia.data || dia.dia_semana || 'Dia Único'
+              });
+            });
+          }
+        });
+      }
+      // Fallback: estrutura anterior com dias.receitas
+      else if (cardapioValidado?.dias?.length) {
         cardapioValidado.dias.forEach((dia: any) => {
           dia?.receitas?.forEach((receita: any) => {
             allRecipesRaw.push({
@@ -202,9 +221,10 @@ export function useSimplifiedMenuGeneration() {
             });
           });
         });
-      } else if (Array.isArray(response?.recipes) && response.recipes.length > 0) {
-        // Fallback: usar recipes direto quando não houver cardápio estruturado
-        response.recipes.forEach((r: any, idx: number) => {
+      }
+      // Fallback: receitas diretas
+      else if (Array.isArray(response?.recipes) && response.recipes.length > 0) {
+        response.recipes.forEach((r: any) => {
           allRecipesRaw.push({
             ...r,
             dia: r.dia || r.day || 'Dia Único'

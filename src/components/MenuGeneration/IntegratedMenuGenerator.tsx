@@ -291,12 +291,24 @@ const IntegratedMenuGenerator = () => {
 
             <Separator />
 
-            {generatedMenu.menu ? (
-              <WeeklyMenuView menu={generatedMenu.menu} />
+            {generatedMenu.menu || generatedMenu.receitas_adaptadas?.length ? (
+              <WeeklyMenuView 
+                menu={generatedMenu.menu || {
+                  dias: generatedMenu.receitas_adaptadas ? [
+                    {
+                      dia: 'Menu Gerado',
+                      receitas: generatedMenu.receitas_adaptadas
+                    }
+                  ] : []
+                }}
+              />
             ) : (
               <div className="p-8 text-center text-gray-500">
                 <ChefHat className="w-12 h-12 mx-auto mb-3 text-gray-300" />
-                <p>Nenhuma receita encontrada no cardápio</p>
+                <p>Aguardando geração do cardápio...</p>
+                <p className="text-xs mt-2">
+                  Debug: menu={generatedMenu.menu ? 'OK' : 'null'}, receitas={generatedMenu.receitas_adaptadas?.length || 0}
+                </p>
               </div>
             )}
 
