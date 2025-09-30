@@ -176,23 +176,45 @@ export function useSimplifiedMenuGeneration() {
 
       console.log('🔍 DEBUG: Response completo da Edge Function:', response);
       console.log('🔍 DEBUG: response.success:', response?.success);
-      console.log('🔍 DEBUG: response.cardapio:', response?.cardapio);
-      console.log('🔍 DEBUG: response.data:', response?.data);
+      console.log('🔍 DEBUG: response.cardapio_dias:', response?.cardapio_dias);
+      console.log('🔍 DEBUG: response.cardapio_semanal:', response?.cardapio_semanal);
+      console.log('🔍 DEBUG: response.statistics:', response?.statistics);
       console.log('🔍 DEBUG: Todas as propriedades da response:', Object.keys(response || {}));
 
       if (!response?.success) {
         throw new Error(response?.error || 'Falha na geração do cardápio');
       }
 
-      // CORREÇÃO: Ajustar para nova estrutura do quick-worker
-      const cardapioValidado = response?.cardapio_semanal || response?.data?.cardapio_semanal || response?.result || response;
-      console.log('✅ Cardápio Validado recebido (quick-worker):', {
-        responseKeys: Object.keys(response || {}),
+      // CORREÇÃO: Acomodar TODAS as possíveis estruturas retornadas pela quick-worker
+      let cardapioValidado = null;
+      let receitasValidas = [];
+      
+      // 1. Primeiro: tentar nova estrutura com cardapio_dias
+      if (response?.cardapio_dias && Array.isArray(response.cardapio_dias)) {
+        cardapioValidado = { dias: response.cardapio_dias };
+        response.cardapio_dias.forEach(dia => {
+          if (dia.receitas_validadas) {
+            receitasValidas.push(...dia.receitas_validadas);
+          }
+        });
+      }
+      // 2. Fallback: estrutura anterior
+      else if (response?.cardapio_semanal) {
+        cardapioValidado = response.cardapio_semanal;
+      }
+      // 3. Fallback: dados diretos
+      else if (response?.data) {
+        cardapioValidado = response.data;
+      }
+      // 4. Último recurso: usar response inteiro
+      else {
+        cardapioValidado = response;
+      }
+
+      console.log('✅ Estrutura Final Processada:', {
         cardapioValidado,
-        diasArray: cardapioValidado?.dias?.length || 0,
-        estruturaCompleta: cardapioValidado ? Object.keys(cardapioValidado) : [],
-        primeiroItem: cardapioValidado?.dias?.[0] || null,
-        responseComplete: response
+        receitasValidas: receitasValidas.length,
+        estrutura: cardapioValidado ? Object.keys(cardapioValidado) : []
       });
 
       // === Nova estrutura do quick-worker: cardapio_dias com receitas_validadas

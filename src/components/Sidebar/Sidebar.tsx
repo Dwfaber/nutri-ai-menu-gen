@@ -18,7 +18,7 @@ const Sidebar = () => {
     { path: '/cardapios', icon: ChefHat, label: 'Cardápios' },
     { path: '/receitas', icon: Brain, label: 'Receitas' },
     { path: '/compras', icon: ShoppingCart, label: 'Lista de Compras' },
-    { path: '/auditoria', icon: Search, label: 'Auditoria de Receitas' },
+    
     { path: '/relatorios', icon: BarChart3, label: 'Relatórios' },
     { path: '/atualizacoes', icon: History, label: 'Atualizações' },
     { path: '/configuracoes', icon: Settings, label: 'Configurações' }
