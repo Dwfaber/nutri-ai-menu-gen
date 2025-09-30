@@ -96,31 +96,36 @@ export function useSimplifiedMenuGeneration() {
         throw new Error('Nenhum cliente selecionado');
       }
 
-      console.log('Iniciando geração com CostCalculator...', {
+      console.log('Iniciando geração COM ORÇAMENTO...', {
         selectedClient: clientToUse?.id,
         mealQuantity,
         periodDays,
-        budgetPerMeal
+        budgetPerMeal,
+        filial_id: clientToUse.filial_id,
+        nome_fantasia: clientToUse.nome_fantasia
       });
 
       const weekPeriod = period || `${format(new Date(), 'dd/MM/yyyy')} - ${format(addDays(new Date(), periodDays - 1), 'dd/MM/yyyy')}`;
 
-      // Chamar Edge Function quick-worker corrigida
+      // CORREÇÃO: Usar action correta para respeitar orçamento
       const { data: response, error: menuError } = await supabase.functions.invoke('quick-worker', {
         body: {
-          action: 'generate_validated_menu',
+          action: 'gerar_cardapio_com_orcamento', // ← CORRIGIDO
           dias: periodDays,
-          meal_quantity: mealQuantity,
-          proteina_gramas: proteinGrams || '100',
+          porcoes: mealQuantity,
           incluir_fim_semana: periodDays === 7,
           incluir_arroz_integral: false,
-          max_tentativas: 10,
           tipo_suco_primario: 'PRO_MIX',
           tipo_suco_secundario: null,
-          variar_sucos_por_dia: true,
+          // PARÂMETROS DE ORÇAMENTO
+          filial_id: clientToUse.filial_id,
+          nome_fantasia: clientToUse.nome_fantasia,
+          respeitar_orcamento: true,
+          margem_seguranca: 0.95,
+          priorizar_categorias: ['Prato Principal 1', 'Prato Principal 2'],
+          // Dados de contexto
           client_id: clientToUse.id,
           clientId: clientToUse.cliente_id_legado,
-          filial_id: clientToUse.filial_id,
           budgetPerMeal: budgetPerMeal || clientToUse.custo_maximo_refeicao,
           client_data: clientToUse
         }
@@ -134,6 +139,7 @@ export function useSimplifiedMenuGeneration() {
       console.log('DEBUG: response.success:', response?.success);
       console.log('DEBUG: response.cardapio:', response?.cardapio);
       console.log('DEBUG: response.resumo:', response?.resumo);
+      console.log('DEBUG: response.filial:', response?.filial);
 
       if (!response?.success) {
         throw new Error(response?.error || 'Falha na geração do cardápio');
@@ -157,7 +163,8 @@ export function useSimplifiedMenuGeneration() {
             percentual_uso: dia.percentual_uso,
             economia: dia.economia
           })),
-          resumo: response.resumo
+          resumo: response.resumo,
+          filial: response.filial
         };
         
         response.cardapio.forEach(dia => {
@@ -197,7 +204,8 @@ export function useSimplifiedMenuGeneration() {
       console.log('Estrutura Final Processada:', {
         cardapioValidado: cardapioValidado ? Object.keys(cardapioValidado) : [],
         receitasValidas: receitasValidas.length,
-        dias: cardapioValidado?.dias?.length || 0
+        dias: cardapioValidado?.dias?.length || 0,
+        filial: cardapioValidado?.filial || response?.filial
       });
 
       // Extrair todas as receitas
@@ -241,8 +249,10 @@ export function useSimplifiedMenuGeneration() {
           warnings.push(r.warning);
         }
 
-        if (custo > (budgetPerMeal || clientToUse.custo_maximo_refeicao) * 5) {
-          warnings.push(`Custo fora da realidade: R$ ${custo.toFixed(2)}/porção`);
+        // Validar contra orçamento se fornecido
+        const orcamentoMax = budgetPerMeal || clientToUse.custo_maximo_refeicao;
+        if (orcamentoMax && custo > orcamentoMax * 5) {
+          warnings.push(`Custo muito alto: R$ ${custo.toFixed(2)}/porção (orçamento: R$ ${orcamentoMax.toFixed(2)})`);
         }
 
         const categoriaOriginal = r.categoria || r.category || 'Outros';
@@ -286,6 +296,18 @@ export function useSimplifiedMenuGeneration() {
       const calculatedCostPerMeal = totalRecipeCost / actualPeriodDays;
       const calculatedTotalCost = calculatedCostPerMeal * (mealQuantity || 1) * actualPeriodDays;
 
+      // Adicionar informações de orçamento aos warnings
+      const budgetWarnings: string[] = [];
+      if (response?.resumo) {
+        const resumo = response.resumo;
+        if (resumo.dias_ok < actualPeriodDays) {
+          budgetWarnings.push(`${resumo.dias_ok}/${actualPeriodDays} dias dentro do orçamento`);
+        }
+        if (resumo.economia_total) {
+          budgetWarnings.push(`Economia total: R$ ${resumo.economia_total.toFixed(2)}`);
+        }
+      }
+
       // Resultado final
       const menu: GeneratedMenu = {
         id: crypto.randomUUID(),
@@ -301,6 +323,7 @@ export function useSimplifiedMenuGeneration() {
         createdAt: new Date().toISOString(),
         menu: cardapioValidado,
         warnings: [
+          ...budgetWarnings,
           ...allRecipes.flatMap(r => r.warnings || [])
         ],
         juiceMenu: undefined
@@ -312,9 +335,13 @@ export function useSimplifiedMenuGeneration() {
         menu.id = savedId;
         setGeneratedMenu(menu);
 
+        const orcamentoInfo = response?.filial 
+          ? ` | Orçamento: ${response.resumo?.dias_ok || 0}/${actualPeriodDays} dias OK`
+          : '';
+
         toast({
-          title: "Cardápio Gerado com Receitas Validadas",
-          description: `${allRecipes.length} receitas. Custo: R$ ${(menu.totalCost || 0).toFixed(2)} total`,
+          title: "Cardápio Gerado com Orçamento Respeitado",
+          description: `${allRecipes.length} receitas. Custo: R$ ${(menu.totalCost || 0).toFixed(2)} total${orcamentoInfo}`,
         });
 
         return menu;
