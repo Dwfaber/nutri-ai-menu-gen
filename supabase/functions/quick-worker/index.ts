@@ -647,8 +647,18 @@ Deno.serve(async (req) => {
         // NOVAS OPÇÕES DE SUCOS
         tipoSucoPrimario = 'PRO_MIX',
         tipoSucoSecundario = null,
-        variarSucosPorDia = true
+        variarSucosPorDia = true,
+        // OPÇÕES DE ORÇAMENTO
+        orcamentoPorRefeicao = null,
+        respeitarOrcamento = false,
+        margemSeguranca = 0.95
       } = config;
+      
+      console.log('Orçamento configurado:', {
+        orcamentoPorRefeicao,
+        respeitarOrcamento,
+        margemSeguranca
+      });
 
       const diasSemana = incluirFimSemana
         ? ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado', 'Domingo']
@@ -844,6 +854,21 @@ Deno.serve(async (req) => {
               continue;
             }
 
+            // VALIDAÇÃO DE ORÇAMENTO
+            if (respeitarOrcamento && orcamentoPorRefeicao) {
+              const orcamentoDisponivel = orcamentoPorRefeicao * margemSeguranca;
+              const custoTotalProjetado = custoTotalDia + receitaCalculada.custo_por_porcao;
+              
+              if (custoTotalProjetado > orcamentoDisponivel) {
+                console.log(`${categoria}: ${receitaCalculada.nome} rejeitada - estoura orçamento (R$ ${custoTotalProjetado.toFixed(2)} > R$ ${orcamentoDisponivel.toFixed(2)})`);
+                
+                // Remover receita do pool
+                const index = receitasFiltradas.findIndex(r => r.receita_id_legado === receitaSelecionada.receita_id_legado);
+                if (index > -1) receitasFiltradas.splice(index, 1);
+                continue;
+              }
+            }
+
             // FILTROS ADICIONAIS ESPECÍFICOS POR CATEGORIA
             
             // Sobremesas: rejeitar se muito caras
@@ -903,11 +928,28 @@ Deno.serve(async (req) => {
         // Ordenar receitas por ordem
         receitasDia.sort((a, b) => (a.ordem || 20) - (b.ordem || 20));
 
+        // Calcular informações de orçamento
+        const dentroOrcamento = respeitarOrcamento && orcamentoPorRefeicao 
+          ? custoTotalDia <= (orcamentoPorRefeicao * margemSeguranca)
+          : true;
+        
+        const percentualUso = respeitarOrcamento && orcamentoPorRefeicao
+          ? (custoTotalDia / orcamentoPorRefeicao) * 100
+          : 0;
+        
+        const economia = respeitarOrcamento && orcamentoPorRefeicao
+          ? orcamentoPorRefeicao - custoTotalDia
+          : 0;
+
         cardapio.push({
           dia: nomeDia,
           receitas: receitasDia,
           custo_total_dia: custoTotalDia,
           custo_por_porcao: custoTotalDia,
+          orcamento: orcamentoPorRefeicao || null,
+          dentro_orcamento: dentroOrcamento,
+          percentual_uso: percentualUso,
+          economia: economia,
           total_receitas: receitasDia.length,
           receitas_validadas: receitasDia.filter(r => r.validacao?.valida).length,
           sucos_info: {
@@ -926,6 +968,11 @@ Deno.serve(async (req) => {
           porcoes_por_dia: porcoesPorDia,
           custo_medio_por_porcao: cardapio.reduce((acc, dia) => acc + dia.custo_por_porcao, 0) / cardapio.length,
           custo_total_periodo: cardapio.reduce((acc, dia) => acc + dia.custo_por_porcao * porcoesPorDia, 0),
+          orcamento_configurado: orcamentoPorRefeicao || null,
+          dias_dentro_orcamento: respeitarOrcamento ? cardapio.filter(d => d.dentro_orcamento).length : null,
+          economia_total: respeitarOrcamento && orcamentoPorRefeicao 
+            ? cardapio.reduce((acc, dia) => acc + dia.economia, 0) 
+            : null,
           qualidade: {
             total_receitas_testadas: estatisticas.total_receitas_testadas,
             receitas_rejeitadas: estatisticas.receitas_rejeitadas_por_criterios,
@@ -955,13 +1002,19 @@ Deno.serve(async (req) => {
         // NOVAS CONFIGURAÇÕES DE SUCOS
         tipoSucoPrimario: requestData.tipo_suco_primario || 'PRO_MIX',
         tipoSucoSecundario: requestData.tipo_suco_secundario || null,
-        variarSucosPorDia: requestData.variar_sucos_por_dia !== false
+        variarSucosPorDia: requestData.variar_sucos_por_dia !== false,
+        // CONFIGURAÇÕES DE ORÇAMENTO
+        orcamentoPorRefeicao: requestData.orcamento_por_refeicao || null,
+        respeitarOrcamento: requestData.respeitar_orcamento || false,
+        margemSeguranca: requestData.margem_seguranca || 0.95
       };
 
       const resultado = await gerarCardapioValidado(config);
 
       return new Response(JSON.stringify({
         success: true,
+        cardapio: resultado.cardapio,
+        resumo: resultado.resumo,
         cardapio_semanal: {
           dias: resultado.cardapio.map(dia => ({
             dia_semana: dia.dia,
@@ -976,12 +1029,24 @@ Deno.serve(async (req) => {
               percentual_calculado: receita.percentual_calculado,
               tipo_suco: receita.tipo_suco || null
             })),
+            custo_total: dia.custo_total_dia,
+            orcamento: dia.orcamento,
+            dentro_orcamento: dia.dentro_orcamento,
+            percentual_uso: dia.percentual_uso,
+            economia: dia.economia,
             sucos_do_dia: dia.sucos_info
           })),
           custo_medio: resultado.resumo.custo_medio_por_porcao,
           total_refeicoes: resultado.resumo.porcoes_por_dia * resultado.resumo.dias_gerados,
+          orcamento_configurado: resultado.resumo.orcamento_configurado,
+          dias_dentro_orcamento: resultado.resumo.dias_dentro_orcamento,
+          economia_total: resultado.resumo.economia_total,
           qualidade_cardapio: resultado.resumo.qualidade,
           configuracao_sucos: resultado.resumo.sucos_configuracao
+        },
+        filial: {
+          nome: requestData.nome_fantasia,
+          filial_id: requestData.filial_id
         },
         data: resultado
       }), {
