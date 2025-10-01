@@ -161,7 +161,8 @@ export function MenuDayCarousel({ menu }: MenuDayCarouselProps) {
     }
     
     // Group actual recipes by category using standardized mapping
-    currentDay?.receitas?.forEach((receita) => {
+    const recipesToProcess = currentDay?.receitas || currentDay?.recipes || [];
+    recipesToProcess.forEach((receita) => {
       const code = receita.codigo || (receita as any).codigo;
       const rawCat = receita.category || receita.categoria || 'Outros';
       const name = receita.name || receita.nome || '';
@@ -180,27 +181,6 @@ export function MenuDayCarousel({ menu }: MenuDayCarouselProps) {
         grouped[displayCat] = [];
       }
       grouped[displayCat].push(receita);
-    }) || 
-    // Fallback for recipes property
-    currentDay?.recipes?.forEach((recipe) => {
-      const code = (recipe as any).codigo as string | undefined;
-      const rawCat = recipe.category || recipe.categoria || 'Outros';
-      const name = recipe.name || recipe.nome || '';
-      
-      let displayCat: string;
-      
-      // Check if it's a base product first
-      if (isBaseProduct(name, code, rawCat)) {
-        displayCat = MENU_CATEGORIES.BASE;
-      } else {
-        // Use standardized category mapping
-        displayCat = mapCategory(rawCat, code);
-      }
-
-      if (!grouped[displayCat]) {
-        grouped[displayCat] = [];
-      }
-      grouped[displayCat].push(recipe);
     });
     
     // Bean cost mapping based on variation
