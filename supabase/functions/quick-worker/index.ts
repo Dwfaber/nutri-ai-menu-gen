@@ -472,7 +472,33 @@ Deno.serve(async (req) => {
         } else if (unidadeNormalizada === 'ML') {
           quantidadeNormalizada = quantidadeNormalizada / 1000;
         } else if (unidadeNormalizada === 'UND') {
-          quantidadeNormalizada = ingrediente.quantidade;
+          const nomeIng = ingrediente.produto_base_descricao?.toUpperCase() || '';
+          const ehDescartavel = nomeIng.includes('COPO') || 
+                                nomeIng.includes('TAMPA') || 
+                                nomeIng.includes('GUARDANAPO') || 
+                                nomeIng.includes('TALHER') || 
+                                nomeIng.includes('PRATO') ||
+                                nomeIng.includes('SACO') ||
+                                nomeIng.includes('EMBALAGEM');
+          
+          if (ehDescartavel) {
+            // Para descartáveis: quantidade é para 100 porções
+            // Se receita pede 100 unidades, é 1 por porção
+            // Preço médio já está por unidade individual
+            quantidadeNormalizada = ingrediente.quantidade / 100;
+            console.log(`CORREÇÃO DESCARTÁVEL: ${nomeIng} ${ingrediente.quantidade} UND para 100 porções → ${quantidadeNormalizada.toFixed(2)} UND por porção`);
+          } else {
+            // Outros produtos UND: manter quantidade original
+            quantidadeNormalizada = ingrediente.quantidade / 100;
+          }
+        } else if (unidadeNormalizada === 'FD') {
+          // Fardo = ignorar por enquanto (produto problemático)
+          console.log(`⚠️ PRODUTO EM FARDO IGNORADO: ${ingrediente.produto_base_descricao}`);
+          continue;
+        } else if (unidadeNormalizada === 'PCT' || unidadeNormalizada === 'PT' || unidadeNormalizada === 'MÇ') {
+          // Pacote/Pote/Maço = 1 unidade para 100 porções
+          quantidadeNormalizada = ingrediente.quantidade / 100;
+          console.log(`CORREÇÃO ${unidadeNormalizada}: ${ingrediente.quantidade} → ${quantidadeNormalizada} por porção`);
         }
 
         // CORREÇÃO CRÍTICA: Dividir por porções ANTES de calcular custo
