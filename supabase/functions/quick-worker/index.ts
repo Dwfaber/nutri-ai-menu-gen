@@ -1262,13 +1262,287 @@ Deno.serve(async (req) => {
       });
     }
 
+    // ========================================
+    // AUDITORIA COMPLETA DE CATEGORIAS E RECEITAS
+    // ========================================
+    if (requestData.action === 'auditar_categorias') {
+      const { 
+        categorias = null, // null = todas, ou array: ['Sobremesa', 'Prato Principal 1']
+        limite_receitas = 50, // quantas receitas testar por categoria
+        incluir_calculos_detalhados = true,
+        apenas_problematicas = false
+      } = requestData;
+      
+      console.log('🔍 Iniciando auditoria de categorias...');
+      
+      const categoriasParaAuditar = categorias || Object.keys(CRITERIOS_AVALIACAO);
+      const relatorioGeral = {
+        data_auditoria: new Date().toISOString(),
+        categorias_auditadas: [],
+        resumo_geral: {
+          total_receitas_testadas: 0,
+          receitas_validas: 0,
+          receitas_problematicas: 0,
+          problemas_por_tipo: {}
+        }
+      };
+      
+      for (const categoria of categoriasParaAuditar) {
+        console.log(`\n📂 Auditando categoria: ${categoria}`);
+        
+        const criterios = CRITERIOS_AVALIACAO[categoria];
+        if (!criterios) {
+          console.log(`⚠️ Categoria ${categoria} não possui critérios definidos`);
+          continue;
+        }
+        
+        // Buscar receitas da categoria
+        const receitasCategoria = await buscarReceitasPorCategoria(categoria);
+        const receitasParaTestar = receitasCategoria.slice(0, limite_receitas);
+        
+        const relatorioCategoria = {
+          categoria: categoria,
+          criterios_validacao: criterios,
+          total_receitas_disponiveis: receitasCategoria.length,
+          receitas_testadas: receitasParaTestar.length,
+          receitas_validas: [],
+          receitas_problematicas: [],
+          termos_extraidos: {
+            ingredientes_principais: new Set(),
+            palavras_chave: new Set()
+          },
+          estatisticas: {
+            custo_minimo: Infinity,
+            custo_maximo: 0,
+            custo_medio: 0,
+            problemas_por_severidade: {
+              CRITICA: 0,
+              ALTA: 0,
+              MEDIA: 0
+            }
+          }
+        };
+        
+        // Auditar cada receita
+        for (const receita of receitasParaTestar) {
+          try {
+            const resultado = await calcularCustoReceita(receita.receita_id_legado, 100);
+            
+            if (!resultado) {
+              relatorioCategoria.receitas_problematicas.push({
+                receita_id: receita.receita_id_legado,
+                nome: receita.nome,
+                problema: 'Erro no cálculo - receita sem dados válidos',
+                severidade: 'CRITICA'
+              });
+              relatorioCategoria.estatisticas.problemas_por_severidade.CRITICA++;
+              continue;
+            }
+            
+            // Extrair termos
+            resultado.ingredientes_detalhes?.forEach(ing => {
+              const palavras = ing.nome.toUpperCase().split(/[\s\-\/]+/);
+              palavras.forEach(p => {
+                if (p.length > 3) relatorioCategoria.termos_extraidos.palavras_chave.add(p);
+              });
+              
+              // Ingredientes principais
+              criterios.ingredientes_obrigatorios?.forEach(obrig => {
+                if (ing.nome.toUpperCase().includes(obrig)) {
+                  relatorioCategoria.termos_extraidos.ingredientes_principais.add(obrig);
+                }
+              });
+            });
+            
+            // Atualizar estatísticas de custo
+            if (resultado.custo_por_porcao < relatorioCategoria.estatisticas.custo_minimo) {
+              relatorioCategoria.estatisticas.custo_minimo = resultado.custo_por_porcao;
+            }
+            if (resultado.custo_por_porcao > relatorioCategoria.estatisticas.custo_maximo) {
+              relatorioCategoria.estatisticas.custo_maximo = resultado.custo_por_porcao;
+            }
+            
+            // Montar relatório detalhado da receita
+            const receitaAuditada = {
+              receita_id: receita.receita_id_legado,
+              nome: resultado.nome,
+              custo_por_porcao: resultado.custo_por_porcao,
+              validacao: resultado.validacao,
+              ingredientes: {
+                total: resultado.ingredientes_total,
+                com_preco: resultado.ingredientes_com_preco,
+                percentual: resultado.percentual_calculado
+              },
+              problemas_detectados: []
+            };
+            
+            // Adicionar cálculos detalhados se solicitado
+            if (incluir_calculos_detalhados) {
+              receitaAuditada.calculos_detalhados = resultado.ingredientes_detalhes?.map(ing => ({
+                ingrediente: ing.nome,
+                quantidade: ing.quantidade,
+                unidade: ing.unidade,
+                tem_preco: ing.tem_preco,
+                produto_base_id: ing.produto_base_id
+              }));
+            }
+            
+            // Análise de problemas específicos
+            const problemas = [];
+            
+            // 1. Validação básica
+            if (!resultado.validacao.valida) {
+              problemas.push({
+                tipo: 'validacao',
+                severidade: resultado.validacao.severidade || 'MEDIA',
+                descricao: resultado.validacao.motivo
+              });
+              relatorioCategoria.estatisticas.problemas_por_severidade[resultado.validacao.severidade || 'MEDIA']++;
+            }
+            
+            // 2. Custo fora da faixa
+            if (resultado.custo_por_porcao < criterios.custo_minimo) {
+              problemas.push({
+                tipo: 'custo_baixo',
+                severidade: 'ALTA',
+                descricao: `Custo muito baixo: R$ ${resultado.custo_por_porcao.toFixed(2)} (mínimo R$ ${criterios.custo_minimo.toFixed(2)})`,
+                possivel_causa: 'Faltam ingredientes ou preços incorretos no banco'
+              });
+              relatorioCategoria.estatisticas.problemas_por_severidade.ALTA++;
+            }
+            
+            if (resultado.custo_por_porcao > criterios.custo_maximo) {
+              problemas.push({
+                tipo: 'custo_alto',
+                severidade: 'MEDIA',
+                descricao: `Custo muito alto: R$ ${resultado.custo_por_porcao.toFixed(2)} (máximo R$ ${criterios.custo_maximo.toFixed(2)})`,
+                possivel_causa: 'Preços inflacionados, unidades incorretas ou produtos prontos caros'
+              });
+              relatorioCategoria.estatisticas.problemas_por_severidade.MEDIA++;
+            }
+            
+            // 3. Poucos ingredientes com preço
+            if (resultado.percentual_calculado < 70) {
+              problemas.push({
+                tipo: 'preco_incompleto',
+                severidade: 'MEDIA',
+                descricao: `Apenas ${resultado.percentual_calculado.toFixed(1)}% dos ingredientes têm preço`,
+                possivel_causa: 'Faltam preços no banco de dados para alguns ingredientes'
+              });
+            }
+            
+            // 4. Falta ingrediente obrigatório
+            if (criterios.ingredientes_obrigatorios.length > 0) {
+              const temObrigatorio = resultado.ingredientes_detalhes?.some(ing =>
+                criterios.ingredientes_obrigatorios.some(obrig =>
+                  ing.nome.toUpperCase().includes(obrig)
+                )
+              );
+              
+              if (!temObrigatorio) {
+                problemas.push({
+                  tipo: 'ingrediente_faltando',
+                  severidade: 'CRITICA',
+                  descricao: `Falta ingrediente principal esperado para ${categoria}`,
+                  possivel_causa: 'Receita incompleta ou mal categorizada',
+                  ingredientes_esperados: criterios.ingredientes_obrigatorios.slice(0, 10)
+                });
+                relatorioCategoria.estatisticas.problemas_por_severidade.CRITICA++;
+              }
+            }
+            
+            // 5. Apenas temperos básicos
+            if (criterios.tipos_problematicos.length > 0) {
+              const apenasProblematicos = resultado.ingredientes_detalhes?.every(ing =>
+                criterios.tipos_problematicos.some(prob =>
+                  ing.nome.toUpperCase().includes(prob)
+                )
+              );
+              
+              if (apenasProblematicos) {
+                problemas.push({
+                  tipo: 'apenas_temperos',
+                  severidade: 'CRITICA',
+                  descricao: 'Receita contém apenas temperos/condimentos básicos',
+                  possivel_causa: 'Receita incompleta ou erro de cadastro'
+                });
+                relatorioCategoria.estatisticas.problemas_por_severidade.CRITICA++;
+              }
+            }
+            
+            receitaAuditada.problemas_detectados = problemas;
+            
+            // Classificar receita
+            if (problemas.length === 0 && resultado.validacao.valida) {
+              relatorioCategoria.receitas_validas.push(receitaAuditada);
+            } else {
+              relatorioCategoria.receitas_problematicas.push(receitaAuditada);
+            }
+            
+          } catch (error) {
+            relatorioCategoria.receitas_problematicas.push({
+              receita_id: receita.receita_id_legado,
+              nome: receita.nome,
+              problema: `Erro na auditoria: ${error.message}`,
+              severidade: 'CRITICA'
+            });
+            relatorioCategoria.estatisticas.problemas_por_severidade.CRITICA++;
+          }
+        }
+        
+        // Calcular custo médio
+        const totalCustos = [...relatorioCategoria.receitas_validas, ...relatorioCategoria.receitas_problematicas]
+          .reduce((acc, r) => acc + (r.custo_por_porcao || 0), 0);
+        relatorioCategoria.estatisticas.custo_medio = totalCustos / receitasParaTestar.length;
+        
+        // Converter Sets para Arrays
+        relatorioCategoria.termos_extraidos.ingredientes_principais = 
+          Array.from(relatorioCategoria.termos_extraidos.ingredientes_principais);
+        relatorioCategoria.termos_extraidos.palavras_chave = 
+          Array.from(relatorioCategoria.termos_extraidos.palavras_chave).slice(0, 50); // Top 50
+        
+        // Filtrar se apenas problemáticas
+        if (apenas_problematicas) {
+          delete relatorioCategoria.receitas_validas;
+        }
+        
+        relatorioGeral.categorias_auditadas.push(relatorioCategoria);
+        relatorioGeral.resumo_geral.total_receitas_testadas += receitasParaTestar.length;
+        relatorioGeral.resumo_geral.receitas_validas += relatorioCategoria.receitas_validas?.length || 0;
+        relatorioGeral.resumo_geral.receitas_problematicas += relatorioCategoria.receitas_problematicas.length;
+        
+        // Agregar problemas por tipo
+        relatorioCategoria.receitas_problematicas.forEach(r => {
+          r.problemas_detectados?.forEach(p => {
+            relatorioGeral.resumo_geral.problemas_por_tipo[p.tipo] = 
+              (relatorioGeral.resumo_geral.problemas_por_tipo[p.tipo] || 0) + 1;
+          });
+        });
+        
+        console.log(`✅ ${categoria}: ${relatorioCategoria.receitas_validas?.length || 0} válidas, ${relatorioCategoria.receitas_problematicas.length} problemáticas`);
+      }
+      
+      console.log('\n📊 Auditoria concluída!');
+      
+      return new Response(JSON.stringify({
+        success: true,
+        auditoria: relatorioGeral
+      }), {
+        headers: {
+          ...corsHeaders,
+          'Content-Type': 'application/json'
+        }
+      });
+    }
+
     // Status padrão
     return new Response(JSON.stringify({
       success: true,
       message: 'Gerador de Cardápio com Sistema de Sucos Integrado - Versão Final',
       actions: [
         'generate_validated_menu',
-        'calcular_receita', 
+        'calcular_receita',
+        'auditar_categorias',
         'gerar_cardapio_simples',
         'listar_categorias',
         'validar_receita',
