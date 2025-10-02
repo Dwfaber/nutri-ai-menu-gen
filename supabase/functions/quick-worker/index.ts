@@ -522,7 +522,7 @@ Deno.serve(async (req) => {
       const validacao = validarReceitaComCriterios(resultado, categoria);
       resultado.validacao = validacao;
 
-      console.log(`${nomeReceita}: R$ ${custoPorPorcao.toFixed(2)} por porção - ${validacao.valida ? 'VÁLIDA' : `REJEITADA: ${validacao.motivo}`}`);
+      console.log(`${nomeReceita}: R$ ${resultado.custo_por_porcao.toFixed(2)} por porção - ${validacao.valida ? 'VÁLIDA' : `REJEITADA: ${validacao.motivo}`}`);
 
       return resultado;
     }
