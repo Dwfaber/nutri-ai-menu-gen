@@ -478,15 +478,15 @@ Deno.serve(async (req) => {
         // CORREÇÃO CRÍTICA: Dividir por porções ANTES de calcular custo
         const quantidadePorPorcao = quantidadeNormalizada / porcoes;
         const custoPorPorcao = quantidadePorPorcao * precoMedio;
-        const custoIngrediente = custoPorPorcao * porcoes; // ou simplesmente quantidadeNormalizada * precoMedio
+        const custoIngrediente = custoPorPorcao; // Já é o custo por porção
         
         custoTotal += custoIngrediente;
         ingredientesComPreco++;
 
         // Logging detalhado
         console.log(`  ${ingrediente.produto_base_descricao}:`);
-        console.log(`    Qtd total: ${quantidadeNormalizada.toFixed(4)} | Por porção: ${quantidadePorPorcao.toFixed(4)}`);
-        console.log(`    Preço/kg: R$ ${precoMedio.toFixed(4)} | Custo/porção: R$ ${custoPorPorcao.toFixed(4)}`);
+        console.log(`    Qtd total: ${quantidadeNormalizada.toFixed(4)} kg | Por porção: ${quantidadePorPorcao.toFixed(4)} kg`);
+        console.log(`    Preço/kg: R$ ${precoMedio.toFixed(4)} | Custo ingrediente/porção: R$ ${custoPorPorcao.toFixed(4)}`);
 
         ingredientesDetalhados.push({
           nome: ingrediente.produto_base_descricao,
@@ -501,7 +501,7 @@ Deno.serve(async (req) => {
       }
 
       const percentualCalculado = (ingredientesComPreco / ingredientesLimpos.length) * 100;
-      const custoPorPorcaoFinal = custoTotal / porcoes;
+      const custoPorPorcaoFinal = custoTotal; // custoTotal já é a soma dos custos por porção
 
       const resultado = {
         receita_id: receitaId,
