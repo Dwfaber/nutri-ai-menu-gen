@@ -645,9 +645,10 @@ Deno.serve(async (req) => {
 
     async function buscarReceitasPorCategoria(categoria) {
       const { data: receitas, error } = await supabase
-        .from('receita_ingredientes')
-        .select('receita_id_legado, nome, categoria_descricao')
+        .from('receitas_legado')
+        .select('receita_id_legado, nome_receita, categoria_descricao')
         .eq('categoria_descricao', categoria)
+        .eq('inativa', false)
         .order('receita_id_legado');
 
       if (error) {
@@ -655,11 +656,15 @@ Deno.serve(async (req) => {
         return [];
       }
 
-      // Remover duplicatas
+      // Remover duplicatas (caso existam)
       const receitasUnicas = new Map();
       receitas?.forEach(receita => {
         if (!receitasUnicas.has(receita.receita_id_legado)) {
-          receitasUnicas.set(receita.receita_id_legado, receita);
+          receitasUnicas.set(receita.receita_id_legado, {
+            receita_id_legado: receita.receita_id_legado,
+            nome: receita.nome_receita,
+            categoria_descricao: receita.categoria_descricao
+          });
         }
       });
 
