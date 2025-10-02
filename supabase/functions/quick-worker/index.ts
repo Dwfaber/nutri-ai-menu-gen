@@ -1348,7 +1348,7 @@ Deno.serve(async (req) => {
             }
             
             // Extrair termos
-            resultado.ingredientes_detalhes?.forEach(ing => {
+            resultado.ingredientes?.forEach(ing => {
               const palavras = ing.nome.toUpperCase().split(/[\s\-\/]+/);
               palavras.forEach(p => {
                 if (p.length > 3) relatorioCategoria.termos_extraidos.palavras_chave.add(p);
@@ -1386,7 +1386,7 @@ Deno.serve(async (req) => {
             
             // Adicionar cálculos detalhados se solicitado
             if (incluir_calculos_detalhados) {
-              receitaAuditada.calculos_detalhados = resultado.ingredientes_detalhes?.map(ing => ({
+              receitaAuditada.calculos_detalhados = resultado.ingredientes?.map(ing => ({
                 ingrediente: ing.nome,
                 quantidade: ing.quantidade,
                 unidade: ing.unidade,
@@ -1441,7 +1441,7 @@ Deno.serve(async (req) => {
             
             // 4. Falta ingrediente obrigatório
             if (criterios.ingredientes_obrigatorios.length > 0) {
-              const temObrigatorio = resultado.ingredientes_detalhes?.some(ing =>
+              const temObrigatorio = resultado.ingredientes?.some(ing =>
                 criterios.ingredientes_obrigatorios.some(obrig =>
                   ing.nome.toUpperCase().includes(obrig)
                 )
@@ -1461,7 +1461,7 @@ Deno.serve(async (req) => {
             
             // 5. Apenas temperos básicos
             if (criterios.tipos_problematicos.length > 0) {
-              const apenasProblematicos = resultado.ingredientes_detalhes?.every(ing =>
+              const apenasProblematicos = resultado.ingredientes?.every(ing =>
                 criterios.tipos_problematicos.some(prob =>
                   ing.nome.toUpperCase().includes(prob)
                 )
