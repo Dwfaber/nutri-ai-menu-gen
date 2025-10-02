@@ -419,19 +419,37 @@ Deno.serve(async (req) => {
       // 5. Calcular custo total
       let custoTotal = 0;
       let ingredientesComPreco = 0;
+      const ingredientesDetalhados = [];
 
       for (const ingrediente of ingredientesLimpos) {
         const precoMedio = precosNormalizados.get(ingrediente.produto_base_id);
-        if (!precoMedio) continue;
+        
+        // Pular ingredientes sem preço (ex: água)
+        if (!precoMedio || precoMedio <= 0) {
+          console.log(`⚠️ Ingrediente ${ingrediente.produto_base_descricao} sem preço válido - atribuindo custo R$ 0.00`);
+          ingredientesDetalhados.push({
+            nome: ingrediente.produto_base_descricao,
+            produto_base_id: ingrediente.produto_base_id,
+            quantidade: ingrediente.quantidade,
+            unidade: ingrediente.unidade,
+            preco_unitario: 0,
+            custo_ingrediente: 0,
+            custo_por_porcao: 0,
+            correcao_aplicada: 'Sem preço disponível'
+          });
+          continue;
+        }
 
         let quantidadeNormalizada = ingrediente.quantidade;
         let unidadeNormalizada = ingrediente.unidade;
+        let correcaoAplicada = null;
 
         // CORREÇÃO ÓLEO DE SOJA (produto_base_id = 246)
         if (ingrediente.produto_base_id === 246 && unidadeNormalizada === 'UND') {
           console.log(`Correção ÓLEO DE SOJA: ${ingrediente.quantidade} UND → ${ingrediente.quantidade} ML`);
           quantidadeNormalizada = ingrediente.quantidade;
           unidadeNormalizada = 'ML';
+          correcaoAplicada = 'UND → ML';
         }
         // CORREÇÃO VITA SUCO UVA (produto_base_id = 325)
         else if (ingrediente.produto_base_id === 325) {
@@ -439,11 +457,13 @@ Deno.serve(async (req) => {
           const custoCorretoPorPorcao = custoCorretoTotal / 100; // R$ 0,0587
           quantidadeNormalizada = custoCorretoPorPorcao / precoMedio;
           console.log(`Correção VITA SUCO UVA: custo ajustado para R$ ${custoCorretoPorPorcao.toFixed(4)}`);
+          correcaoAplicada = 'Custo fixo ajustado';
         }
         // CORREÇÃO AUTOMÁTICA EXISTENTE
         else if (unidadeNormalizada === 'LT' && (quantidadeNormalizada === 500 || quantidadeNormalizada === 400)) {
           console.log(`Correção automática: ${ingrediente.produto_base_descricao} ${quantidadeNormalizada} LT → ${quantidadeNormalizada} ML`);
           unidadeNormalizada = 'ML';
+          correcaoAplicada = 'LT → ML';
         }
 
         // Converter para kg/L
@@ -455,33 +475,47 @@ Deno.serve(async (req) => {
           quantidadeNormalizada = ingrediente.quantidade;
         }
 
-        custoTotal += quantidadeNormalizada * precoMedio;
+        // CORREÇÃO CRÍTICA: Dividir por porções ANTES de calcular custo
+        const quantidadePorPorcao = quantidadeNormalizada / porcoes;
+        const custoPorPorcao = quantidadePorPorcao * precoMedio;
+        const custoIngrediente = custoPorPorcao * porcoes; // ou simplesmente quantidadeNormalizada * precoMedio
+        
+        custoTotal += custoIngrediente;
         ingredientesComPreco++;
+
+        // Logging detalhado
+        console.log(`  ${ingrediente.produto_base_descricao}:`);
+        console.log(`    Qtd total: ${quantidadeNormalizada.toFixed(4)} | Por porção: ${quantidadePorPorcao.toFixed(4)}`);
+        console.log(`    Preço/kg: R$ ${precoMedio.toFixed(4)} | Custo/porção: R$ ${custoPorPorcao.toFixed(4)}`);
+
+        ingredientesDetalhados.push({
+          nome: ingrediente.produto_base_descricao,
+          produto_base_id: ingrediente.produto_base_id,
+          quantidade: ingrediente.quantidade,
+          unidade: ingrediente.unidade,
+          preco_unitario: precoMedio,
+          custo_ingrediente: custoIngrediente,
+          custo_por_porcao: custoPorPorcao,
+          correcao_aplicada: correcaoAplicada
+        });
       }
 
       const percentualCalculado = (ingredientesComPreco / ingredientesLimpos.length) * 100;
-      const fatorEscala = porcoes / 100;
-      const custoEscalado = custoTotal * fatorEscala;
-      const custoPorPorcao = custoEscalado / porcoes;
+      const custoPorPorcaoFinal = custoTotal / porcoes;
 
       const resultado = {
         receita_id: receitaId,
         nome: nomeReceita,
         categoria: categoria,
-        custo_total_base: custoTotal,
-        custo_por_porcao: custoPorPorcao,
-        porcoes_calculadas: porcoes,
+        custo_total: custoTotal,
+        custo_por_porcao: custoPorPorcaoFinal,
+        porcoes: porcoes,
         ingredientes_total: ingredientesLimpos.length,
         ingredientes_originais: ingredientes.length,
         ingredientes_com_preco: ingredientesComPreco,
         percentual_calculado: percentualCalculado,
         ingredientes_removidos: ingredientes.length - ingredientesLimpos.length,
-        ingredientes_detalhes: ingredientesLimpos.map(ing => ({
-          nome: ing.produto_base_descricao,
-          quantidade: ing.quantidade,
-          unidade: ing.unidade,
-          tem_preco: precosNormalizados.has(ing.produto_base_id)
-        }))
+        ingredientes: ingredientesDetalhados
       };
 
       // NOVA VALIDAÇÃO COM CRITÉRIOS DE AUDITORIA
