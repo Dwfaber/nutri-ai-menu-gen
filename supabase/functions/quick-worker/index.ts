@@ -644,26 +644,58 @@ Deno.serve(async (req) => {
     // ========================================
 
     async function buscarReceitasPorCategoria(categoria) {
-      const { data: receitas, error } = await supabase
+      // 1) Tentativa direta na tabela de receitas (preferível)
+      const { data: receitasDiretas, error: erroDireto } = await supabase
         .from('receitas_legado')
         .select('receita_id_legado, nome_receita, categoria_descricao')
         .eq('categoria_descricao', categoria)
         .eq('inativa', false)
         .order('receita_id_legado');
 
-      if (error) {
-        console.error(`Erro ao buscar receitas da categoria ${categoria}:`, error);
-        return [];
+      if (erroDireto) {
+        console.error(`Erro ao buscar receitas da categoria ${categoria} (direto):`, erroDireto);
+      }
+
+      let receitas: any[] = receitasDiretas ?? [];
+
+      // 2) Fallback: quando a categoria está somente em receita_ingredientes (ex.: "Suco 1")
+      if (!receitas?.length) {
+        const { data: ingRows, error: erroIng } = await supabase
+          .from('receita_ingredientes')
+          .select('receita_id_legado, categoria_descricao')
+          .eq('categoria_descricao', categoria);
+
+        if (erroIng) {
+          console.error(`Erro ao buscar ingredientes por categoria ${categoria}:`, erroIng);
+          return [];
+        }
+
+        const ids = Array.from(new Set((ingRows || []).map((r: any) => r.receita_id_legado).filter(Boolean)));
+
+        if (ids.length) {
+          const { data: receitasPorIds, error: erroIds } = await supabase
+            .from('receitas_legado')
+            .select('receita_id_legado, nome_receita, categoria_descricao')
+            .in('receita_id_legado', ids)
+            .eq('inativa', false);
+
+          if (erroIds) {
+            console.error(`Erro ao buscar receitas por IDs (${categoria}):`, erroIds);
+            return [];
+          }
+
+          receitas = receitasPorIds ?? [];
+        }
       }
 
       // Remover duplicatas (caso existam)
       const receitasUnicas = new Map();
-      receitas?.forEach(receita => {
+      receitas?.forEach((receita: any) => {
         if (!receitasUnicas.has(receita.receita_id_legado)) {
           receitasUnicas.set(receita.receita_id_legado, {
             receita_id_legado: receita.receita_id_legado,
             nome: receita.nome_receita,
-            categoria_descricao: receita.categoria_descricao
+            categoria_descricao: receita.categoria_descricao ?? categoria
           });
         }
       });
