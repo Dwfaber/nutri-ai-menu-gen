@@ -99,12 +99,23 @@ export const useRecipeAuditor = () => {
 
       console.log('✅ Auditoria concluída:', data);
 
-      setResult(data as AuditResult);
+      const safeResult: AuditResult = {
+        data_auditoria: data?.data_auditoria || new Date().toISOString(),
+        categorias_auditadas: Array.isArray(data?.categorias_auditadas) ? data.categorias_auditadas : [],
+        resumo_geral: {
+          total_receitas_testadas: data?.resumo_geral?.total_receitas_testadas ?? 0,
+          receitas_validas: data?.resumo_geral?.receitas_validas ?? 0,
+          receitas_problematicas: data?.resumo_geral?.receitas_problematicas ?? 0,
+          problemas_por_tipo: data?.resumo_geral?.problemas_por_tipo ?? {}
+        }
+      };
+
+      setResult(safeResult);
       setProgress(100);
 
       toast({
         title: "✅ Auditoria Concluída",
-        description: `${data.resumo_geral.total_receitas_testadas} receitas analisadas em ${data.categorias_auditadas.length} categorias`,
+        description: `${safeResult.resumo_geral.total_receitas_testadas} receitas analisadas em ${safeResult.categorias_auditadas.length} categorias`,
       });
 
     } catch (err: any) {
