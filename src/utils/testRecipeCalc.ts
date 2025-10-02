@@ -32,12 +32,13 @@ export async function testRecipeCalculation(recipeName: string, servings: number
 
     console.log(`📋 Ingredientes encontrados: ${ingredients?.length || 0}`);
 
-    // Calcular custo via Edge Function
-    const { data: costData, error: costError } = await supabase.functions.invoke('swift-processor', {
+    // Calcular custo via Edge Function (quick-worker)
+    console.log('📞 Chamando quick-worker para calcular custo...');
+    const { data: costData, error: costError } = await supabase.functions.invoke('quick-worker', {
       body: {
-        action: 'calculate_recipe_cost',
+        action: 'calcular_receita',
         receita_id: recipe.receita_id_legado,
-        meal_quantity: servings
+        porcoes: servings
       }
     });
 
@@ -50,9 +51,26 @@ export async function testRecipeCalculation(recipeName: string, servings: number
       receita: recipe.nome_receita,
       porcoes: servings,
       custo_total: costData?.custo_total,
-      custo_por_porcao: costData?.custo_por_refeicao,
-      ingredientes_calculados: costData?.ingredientes?.length || 0
+      custo_por_porcao: costData?.custo_por_porcao,
+      ingredientes_calculados: costData?.ingredientes?.length || 0,
+      validacao: costData?.validacao,
+      aprovado: costData?.aprovado
     });
+
+    // Log detalhado de cada ingrediente
+    if (costData?.ingredientes && Array.isArray(costData.ingredientes)) {
+      console.log('\n📊 Detalhamento por ingrediente:');
+      costData.ingredientes.forEach((ing: any, idx: number) => {
+        console.log(`\n${idx + 1}. ${ing.nome || ing.produto_base_descricao}`);
+        console.log(`   • Quantidade: ${ing.quantidade} ${ing.unidade}`);
+        console.log(`   • Preço unitário: R$ ${ing.preco_unitario?.toFixed(4)}`);
+        console.log(`   • Custo ingrediente: R$ ${ing.custo_ingrediente?.toFixed(2)}`);
+        console.log(`   • Custo por porção: R$ ${ing.custo_por_porcao?.toFixed(4)}`);
+        if (ing.correcao_aplicada) {
+          console.log(`   ⚠️ Correção aplicada: ${ing.correcao_aplicada}`);
+        }
+      });
+    }
 
     return { 
       success: true, 
