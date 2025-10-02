@@ -44,37 +44,35 @@ const CRITERIOS_AVALIACAO = {
     tipos_problematicos: ['SAL', 'TEMPERO', 'ÁGUA']
   },
   'Guarnição': {
-    ingredientes_minimos: 2,
+    ingredientes_minimos: 3,
     custo_minimo: 0.10,
     custo_maximo: 2.00,
     ingredientes_obrigatorios: [
-      'ABÓBORA', 'ABOBRINHA', 'ACELGA', 'BERINJELA', 'BRÓCOLIS', 'CENOURA',
-      'CHUCHU', 'COUVE', 'ESCAROLA', 'CHICÓRIA', 'MANDIOCA', 'MANDIOQUINHA',
-      'BATATA', 'REPOLHO', 'BATATA DOCE', 'MILHO', 'ERVILHA', 'VAGEM',
-      'LEGUMES', 'PALMITO', 'POLENTA', 'FAROFA', 'MACARRÃO', 'NHOQUE',
-      'ARROZ', 'PURÊ', 'VIRADO', 'CREME', 'GRATINADO', 'REFOGADO'
+      'BATATA', 'CENOURA', 'ABOBRINHA', 'FARINHA', 'ARROZ', 
+      'MACARRÃO', 'MANDIOCA', 'COUVE', 'REPOLHO', 'MILHO',
+      'CHUCHU', 'BRÓCOLIS', 'VAGEM', 'POLENTA', 'FAROFA',
+      'PURÊ', 'CREME', 'GRATINADO', 'REFOGADO', 'NHOQUE'
     ],
-    tipos_problematicos: []
+    tipos_problematicos: ['CARNE', 'FRANGO', 'PEIXE', 'PORCO']
   },
   'Salada 1': {
     ingredientes_minimos: 1,
     custo_minimo: 0.02,
     custo_maximo: 1.50,
     ingredientes_obrigatorios: [
-      'VERDURA', 'FOLHA', 'VEGETAL', 'ALFACE', 'TOMATE', 'CENOURA',
-      'PEPINO', 'REPOLHO', 'CHICÓRIA', 'ALMEIRÃO', 'ESCAROLA', 'ACELGA',
-      'RÚCULA', 'RUCULA', 'AGRIÃO', 'COUVE'
+      'REPOLHO', 'ACELGA', 'ALFACE', 'COUVE', 'ALMEIRÃO', 'CHICÓRIA',
+      'ESCAROLA', 'RÚCULA', 'RUCULA', 'AGRIÃO', 'FOLHA', 'VERDURA'
     ],
     tipos_problematicos: []
   },
   'Salada 2': {
-    ingredientes_minimos: 1,
+    ingredientes_minimos: 2,
     custo_minimo: 0.02,
     custo_maximo: 2.00,
     ingredientes_obrigatorios: [
-      'CENOURA', 'BETERRABA', 'ABOBRINHA', 'TOMATE', 'PEPINO', 'BATATA',
-      'BATATA DOCE', 'CHUCHU', 'BERINJELA', 'ABÓBORA', 'RABANETE',
-      'VINAGRETE', 'SALADA MISTA', 'MAIONESE', 'TABULE', 'SUNOMONO'
+      'CENOURA', 'TOMATE', 'BATATA', 'PEPINO', 'ABOBRINHA',
+      'MILHO', 'CHUCHU', 'BETERRABA', 'VAGEM', 'BRÓCOLIS',
+      'RABANETE', 'VINAGRETE', 'MAIONESE', 'TABULE', 'BERINJELA'
     ],
     tipos_problematicos: []
   },
@@ -280,7 +278,7 @@ Deno.serve(async (req) => {
       }
 
       // 3. Verificar percentual de ingredientes calculados (com correção para sucos)
-      const percentualMinimo = criterios.percentual_minimo_calculado || 70;
+      const percentualMinimo = criterios.percentual_minimo_calculado || 60; // Reduzido de 70% para 60%
       if (percentual_calculado < percentualMinimo) {
         return {
           valida: false,
@@ -289,7 +287,7 @@ Deno.serve(async (req) => {
         };
       }
 
-      // 4. Verificar ingredientes obrigatórios
+      // 4. Verificar ingredientes obrigatórios (relaxado para warning)
       if (criterios.ingredientes_obrigatorios.length > 0) {
         const temIngredienteObrigatorio = ingredientes_detalhes?.some(ing =>
           criterios.ingredientes_obrigatorios.some(obrig =>
@@ -298,11 +296,8 @@ Deno.serve(async (req) => {
         );
 
         if (!temIngredienteObrigatorio) {
-          return {
-            valida: false,
-            motivo: `Falta ingrediente principal esperado para ${categoria}`,
-            severidade: 'ALTA'
-          };
+          // Apenas warning, não bloqueia mais
+          console.log(`⚠️ Recomendado: Adicionar ingrediente principal para ${categoria}`);
         }
       }
 
@@ -353,6 +348,8 @@ Deno.serve(async (req) => {
         // Remover carne de 1ª e arroz emergência
         if (descricao.includes('CARNE') && descricao.includes('1ª')) return false;
         if (ing.produto_base_id === 38) return false;
+        // Ignorar AGUA NATURAL no cálculo de percentual
+        if (descricao.toUpperCase().includes('AGUA')) return false;
         return true;
       });
 
