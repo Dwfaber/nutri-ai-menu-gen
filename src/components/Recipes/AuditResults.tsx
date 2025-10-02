@@ -1,9 +1,10 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Download, FileJson, FileSpreadsheet } from 'lucide-react';
+import { Download, FileJson, FileSpreadsheet, AlertTriangle } from 'lucide-react';
 import { AuditResult } from '@/hooks/useRecipeAuditor';
 import { CategoryAuditCard } from './CategoryAuditCard';
 import { Progress } from '@/components/ui/progress';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 
 interface AuditResultsProps {
   result: AuditResult;
@@ -12,6 +13,18 @@ interface AuditResultsProps {
 }
 
 export const AuditResults = ({ result, onExportJSON, onExportCSV }: AuditResultsProps) => {
+  // Validação de segurança
+  if (!result?.resumo_geral || !result?.categorias_auditadas) {
+    return (
+      <Alert>
+        <AlertTriangle className="h-4 w-4" />
+        <AlertDescription>
+          Dados de auditoria incompletos. Execute a auditoria novamente.
+        </AlertDescription>
+      </Alert>
+    );
+  }
+
   const percentualValidas = result.resumo_geral.total_receitas_testadas > 0
     ? (result.resumo_geral.receitas_validas / result.resumo_geral.total_receitas_testadas) * 100
     : 0;
