@@ -166,6 +166,8 @@ export const useRecipeAuditor = () => {
   const exportToCSV = () => {
     if (!result) return;
 
+    console.log('🔍 Receitas antes de exportar CSV:', result.categorias_auditadas);
+
     const rows: string[][] = [
       ['Categoria', 'Receita', 'Custo', 'Status', 'Problemas', 'Severidade']
     ];
@@ -175,7 +177,7 @@ export const useRecipeAuditor = () => {
         rows.push([
           cat.categoria,
           rec.nome,
-          rec.custo_por_porcao.toFixed(2),
+          (rec.custo_por_porcao ?? 0).toFixed(2),
           rec.validacao.valida ? 'Válida' : 'Problemática',
           rec.problemas_detectados.length.toString(),
           rec.validacao.severidade

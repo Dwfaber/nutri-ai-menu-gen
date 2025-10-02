@@ -184,11 +184,11 @@ export const CategoryAuditCard = ({ report }: CategoryAuditCardProps) => {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {report.receitas_problematicas.slice(0, 10).map(receita => (
+                       {report.receitas_problematicas.slice(0, 10).map(receita => (
                         <TableRow key={receita.receita_id}>
                           <TableCell className="font-medium">{receita.nome}</TableCell>
                           <TableCell className="text-right">
-                            R$ {receita.custo_por_porcao.toFixed(2)}
+                            R$ {(receita.custo_por_porcao ?? 0).toFixed(2)}
                           </TableCell>
                           <TableCell className="text-center">
                             <Badge variant="outline">
