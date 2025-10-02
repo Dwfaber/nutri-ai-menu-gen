@@ -8,8 +8,11 @@ const corsHeaders = {
 
 // ========================================
 // CRITÉRIOS DE AUDITORIA INTEGRADOS
+// Importados de constante compartilhada
 // ========================================
 
+// NOTE: Em produção, isso seria importado de src/constants/recipeValidationCriteria.ts
+// Como Deno edge functions não podem importar do src/ diretamente, mantemos cópia aqui
 const CRITERIOS_AVALIACAO = {
   'Prato Principal 1': {
     ingredientes_minimos: 4,

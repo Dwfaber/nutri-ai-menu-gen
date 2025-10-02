@@ -12,6 +12,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { useRecipeAnalysis } from '@/hooks/useRecipeAnalysis';
 import { useDetailedRecipeDiagnosis } from '@/hooks/useDetailedRecipeDiagnosis';
 import { useRecipeCosting } from '@/hooks/useRecipeCosting';
+import { useRecipeAuditor } from '@/hooks/useRecipeAuditor';
+import { AuditConfigForm } from '@/components/Recipes/AuditConfigForm';
+import { AuditResults } from '@/components/Recipes/AuditResults';
 
 const Receitas = () => {
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
@@ -45,6 +48,17 @@ const Receitas = () => {
     logs: costLogs, 
     triggerRecalculation 
   } = useRecipeCosting();
+
+  const {
+    auditing,
+    progress: auditProgress,
+    result: auditResult,
+    error: auditError,
+    currentCategory,
+    runAudit,
+    exportToJSON,
+    exportToCSV
+  } = useRecipeAuditor();
 
   const filteredRecipes = recipes.filter(recipe => {
     const matchesCategory = selectedCategory === 'all' || recipe.categoria_descricao === selectedCategory;
@@ -232,11 +246,12 @@ const Receitas = () => {
 
       {/* Tabs para diferentes visualizações */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid w-full grid-cols-5">
+        <TabsList className="grid w-full grid-cols-6">
           <TabsTrigger value="overview">Visão Geral</TabsTrigger>
           <TabsTrigger value="categories">Por Categoria</TabsTrigger>
           <TabsTrigger value="problematic">Problemáticas</TabsTrigger>
           <TabsTrigger value="diagnosis">Diagnóstico Detalhado</TabsTrigger>
+          <TabsTrigger value="audit">🔍 Auditoria</TabsTrigger>
           <TabsTrigger value="detailed">Lista Detalhada</TabsTrigger>
         </TabsList>
 
@@ -951,6 +966,53 @@ const Receitas = () => {
               </Card>
             </>
           )}
+        </TabsContent>
+
+        <TabsContent value="audit" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Search className="h-5 w-5" />
+                Auditoria Completa de Categorias
+              </CardTitle>
+              <p className="text-sm text-muted-foreground">
+                Análise profunda baseada nos CRITERIOS_AVALIACAO
+              </p>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <AuditConfigForm 
+                onStartAudit={(config) => runAudit(config)}
+                isAuditing={auditing}
+              />
+
+              {auditing && (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-muted-foreground">
+                      {currentCategory || 'Processando...'}
+                    </span>
+                    <span className="font-medium">{auditProgress}%</span>
+                  </div>
+                  <Progress value={auditProgress} className="h-2" />
+                </div>
+              )}
+
+              {auditResult && (
+                <AuditResults 
+                  result={auditResult}
+                  onExportJSON={exportToJSON}
+                  onExportCSV={exportToCSV}
+                />
+              )}
+
+              {auditError && (
+                <Alert className="border-destructive">
+                  <AlertTriangle className="h-4 w-4" />
+                  <AlertDescription>{auditError}</AlertDescription>
+                </Alert>
+              )}
+            </CardContent>
+          </Card>
         </TabsContent>
 
         <TabsContent value="detailed" className="space-y-4">
