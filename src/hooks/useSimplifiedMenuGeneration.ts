@@ -107,24 +107,27 @@ export function useSimplifiedMenuGeneration() {
 
       const weekPeriod = period || `${format(new Date(), 'dd/MM/yyyy')} - ${format(addDays(new Date(), periodDays - 1), 'dd/MM/yyyy')}`;
 
-      // Usar action correta com parâmetros de orçamento
+      // CORREÇÃO: Usar action correta para respeitar orçamento
       const { data: response, error: menuError } = await supabase.functions.invoke('quick-worker', {
         body: {
-          action: 'generate_validated_menu',
+          action: 'gerar_cardapio_com_orcamento', // ← CORRIGIDO
           dias: periodDays,
-          meal_quantity: mealQuantity,
+          porcoes: mealQuantity,
           incluir_fim_semana: periodDays === 7,
           incluir_arroz_integral: false,
-          tipo_suco_primario: juiceConfig?.tipo_primario || 'PRO_MIX',
-          tipo_suco_secundario: juiceConfig?.tipo_secundario || null,
-          proteina_gramas: proteinGrams || '90',
+          tipo_suco_primario: 'PRO_MIX',
+          tipo_suco_secundario: null,
           // PARÂMETROS DE ORÇAMENTO
-          orcamento_por_refeicao: budgetPerMeal || clientToUse.custo_maximo_refeicao,
+          filial_id: clientToUse.filial_id,
+          nome_fantasia: clientToUse.nome_fantasia,
           respeitar_orcamento: true,
+          margem_seguranca: 0.95,
+          priorizar_categorias: ['Prato Principal 1', 'Prato Principal 2'],
           // Dados de contexto
           client_id: clientToUse.id,
-          filial_id: clientToUse.filial_id,
-          nome_fantasia: clientToUse.nome_fantasia
+          clientId: clientToUse.cliente_id_legado,
+          budgetPerMeal: budgetPerMeal || clientToUse.custo_maximo_refeicao,
+          client_data: clientToUse
         }
       });
 
