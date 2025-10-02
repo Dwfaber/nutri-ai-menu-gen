@@ -97,18 +97,29 @@ export const useRecipeAuditor = () => {
         throw new Error(data?.error || 'Erro desconhecido ao executar auditoria');
       }
 
-      console.log('✅ Auditoria concluída:', data);
+      console.log('✅ Auditoria concluída (raw):', data);
+
+      // Extrair payload: quick-worker retorna { auditoria: {...} }
+      const payload = data?.auditoria ?? data;
+      console.log('📊 Payload extraído:', payload);
+
+      const categoriasAuditadas = Array.isArray(payload?.categorias_auditadas) ? payload.categorias_auditadas : [];
+
+      // Construir resumo_geral (com fallback se não vier do backend)
+      const resumoGeral = payload?.resumo_geral ?? {
+        total_receitas_testadas: categoriasAuditadas.reduce((a, c) => a + (c.receitas_testadas || 0), 0),
+        receitas_validas: categoriasAuditadas.reduce((a, c) => a + ((c.receitas_validas?.length) || 0), 0),
+        receitas_problematicas: categoriasAuditadas.reduce((a, c) => a + (c.receitas_problematicas?.length || 0), 0),
+        problemas_por_tipo: {}
+      };
 
       const safeResult: AuditResult = {
-        data_auditoria: data?.data_auditoria || new Date().toISOString(),
-        categorias_auditadas: Array.isArray(data?.categorias_auditadas) ? data.categorias_auditadas : [],
-        resumo_geral: {
-          total_receitas_testadas: data?.resumo_geral?.total_receitas_testadas ?? 0,
-          receitas_validas: data?.resumo_geral?.receitas_validas ?? 0,
-          receitas_problematicas: data?.resumo_geral?.receitas_problematicas ?? 0,
-          problemas_por_tipo: data?.resumo_geral?.problemas_por_tipo ?? {}
-        }
+        data_auditoria: payload?.data_auditoria || new Date().toISOString(),
+        categorias_auditadas: categoriasAuditadas,
+        resumo_geral: resumoGeral
       };
+
+      console.log('✅ Parsed audit result:', safeResult);
 
       setResult(safeResult);
       setProgress(100);
@@ -160,7 +171,7 @@ export const useRecipeAuditor = () => {
     ];
 
     result.categorias_auditadas.forEach(cat => {
-      [...cat.receitas_validas, ...cat.receitas_problematicas].forEach(rec => {
+      [...(cat.receitas_validas ?? []), ...(cat.receitas_problematicas ?? [])].forEach(rec => {
         rows.push([
           cat.categoria,
           rec.nome,
