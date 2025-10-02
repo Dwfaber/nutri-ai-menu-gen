@@ -358,11 +358,11 @@ Deno.serve(async (req) => {
 
       console.log(`Ingredientes: ${ingredientes.length} → ${ingredientesLimpos.length} (após filtro)`);
 
-      // 3. Buscar preços
+      // 3. Buscar preços (incluindo quantidade de embalagem)
       const produtoIds = [...new Set(ingredientesLimpos.map(ing => ing.produto_base_id))];
       const { data: precos, error: errorPrecos } = await supabase
         .from('co_solicitacao_produto_listagem')
-        .select('produto_base_id, preco, descricao')
+        .select('produto_base_id, preco, descricao, produto_base_quantidade_embalagem')
         .in('produto_base_id', produtoIds)
         .gt('preco', 0);
 
@@ -370,6 +370,9 @@ Deno.serve(async (req) => {
         console.error(`Erro ao buscar preços para receita ${receitaId}`);
         return null;
       }
+      
+      // Guardar referência aos preços detalhados para usar depois
+      const precosDetalhados = precos;
 
       // 4. Calcular preços médios normalizados
       const precosNormalizados = new Map();
@@ -473,6 +476,11 @@ Deno.serve(async (req) => {
           quantidadeNormalizada = quantidadeNormalizada / 1000;
         } else if (unidadeNormalizada === 'UND') {
           const nomeIng = ingrediente.produto_base_descricao?.toUpperCase() || '';
+          
+          // Buscar quantidade de embalagem do produto
+          const produtoInfo = precosDetalhados.find(p => p.produto_base_id === ingrediente.produto_base_id);
+          const qtdEmbalagem = produtoInfo?.produto_base_quantidade_embalagem || 1;
+          
           const ehDescartavel = nomeIng.includes('COPO') || 
                                 nomeIng.includes('TAMPA') || 
                                 nomeIng.includes('GUARDANAPO') || 
@@ -487,8 +495,15 @@ Deno.serve(async (req) => {
             // Preço médio já está por unidade individual
             quantidadeNormalizada = ingrediente.quantidade / 100;
             console.log(`CORREÇÃO DESCARTÁVEL: ${nomeIng} ${ingrediente.quantidade} UND para 100 porções → ${quantidadeNormalizada.toFixed(2)} UND por porção`);
+          } else if (qtdEmbalagem > 1) {
+            // Produto vendido em embalagem múltipla (ex: PAÇOCA C/ 100 UN)
+            // Receita pede unidades individuais, mas preço é da embalagem completa
+            // Exemplo: 40 paçocas ÷ 100 paçocas/embalagem = 0.4 embalagens para 100 porções
+            quantidadeNormalizada = ingrediente.quantidade / qtdEmbalagem;
+            console.log(`CORREÇÃO EMBALAGEM MÚLTIPLA: ${nomeIng} ${ingrediente.quantidade} UND (embalagem: ${qtdEmbalagem}) → ${(quantidadeNormalizada / 100).toFixed(4)} embalagens por porção`);
+            correcaoAplicada = `Embalagem múltipla (${qtdEmbalagem} un)`;
           } else {
-            // Outros produtos UND: manter quantidade original
+            // Outros produtos UND: quantidade direta
             quantidadeNormalizada = ingrediente.quantidade / 100;
           }
         } else if (unidadeNormalizada === 'FD') {
