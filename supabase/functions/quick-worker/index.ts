@@ -507,11 +507,29 @@ Deno.serve(async (req) => {
           console.log(`Correção VITA SUCO UVA: custo ajustado para R$ ${custoCorretoPorPorcao.toFixed(4)}`);
           correcaoAplicada = 'Custo fixo ajustado';
         }
-        // CORREÇÃO AUTOMÁTICA EXISTENTE
-        else if (unidadeNormalizada === 'LT' && (quantidadeNormalizada === 500 || quantidadeNormalizada === 400)) {
-          console.log(`Correção automática: ${ingrediente.produto_base_descricao} ${quantidadeNormalizada} LT → ${quantidadeNormalizada} ML`);
-          unidadeNormalizada = 'ML';
-          correcaoAplicada = 'LT → ML';
+        // CORREÇÃO: Molhos e líquidos cadastrados como LT quando são ML
+        else if (unidadeNormalizada === 'LT' || unidadeNormalizada === 'L') {
+          const nomeIng = ingrediente.produto_base_descricao?.toUpperCase() || '';
+          
+          // Se quantidade >= 10 LT E é molho/líquido → provavelmente é ML cadastrado errado
+          const ehMolhoOuLiquido = (
+            nomeIng.includes('MOLHO') || 
+            nomeIng.includes('SHOYU') || nomeIng.includes('SHOYO') ||
+            nomeIng.includes('VINAGRE') || 
+            nomeIng.includes('AZEITE') ||
+            nomeIng.includes('BARBECUE') || 
+            nomeIng.includes('INGLES') ||
+            nomeIng.includes('PIMENTA') || 
+            nomeIng.includes('ROTY')
+          );
+          
+          if (quantidadeNormalizada >= 10 && ehMolhoOuLiquido) {
+            const qtdOriginal = quantidadeNormalizada;
+            quantidadeNormalizada = quantidadeNormalizada / 1000; // Converte ML → L
+            console.log(`🔧 CORREÇÃO ML→L: ${nomeIng} ${qtdOriginal} LT → ${quantidadeNormalizada} L (corrigido de ML)`);
+            correcaoAplicada = `${qtdOriginal} LT → ${quantidadeNormalizada} L (era ML)`;
+          }
+          // Senão: valores < 10 LT são legítimos (ex: 0.5 LT de óleo)
         }
 
         // Converter para kg/L
