@@ -252,7 +252,7 @@ Deno.serve(async (req) => {
       const criterios = CRITERIOS_AVALIACAO[categoria];
       if (!criterios) return { valida: true, motivo: 'Categoria sem critérios definidos' };
 
-      const { custo_por_porcao, ingredientes_total, percentual_calculado, ingredientes } = dadosReceita;
+      const { custo_por_porcao, ingredientes_total, percentual_calculado, ingredientes, ingredientes_detalhes } = dadosReceita;
 
       // 1. Verificar número mínimo de ingredientes
       if (ingredientes_total < criterios.ingredientes_minimos) {
