@@ -257,6 +257,7 @@ class ShoppingListGeneratorFixed {
         .from('co_solicitacao_produto_listagem')
         .select('produto_base_id, descricao, preco, produto_base_quantidade_embalagem, apenas_valor_inteiro_sim_nao, em_promocao_sim_nao, unidade')
         .gt('preco', 0)
+        .order('produto_base_id')
         .order('preco');
       
       if (mercadoError) {
@@ -264,7 +265,17 @@ class ShoppingListGeneratorFixed {
         throw mercadoError;
       }
       
-      console.log(`🛍️ ${produtosMercado?.length || 0} produtos disponíveis no mercado`);
+      // 🔍 CORREÇÃO 1: Validação de Query do Mercado
+      if (!produtosMercado || produtosMercado.length === 0) {
+        console.error('⚠️ AVISO CRÍTICO: Nenhum produto retornado do mercado!');
+        console.error('   Verifique se co_solicitacao_produto_listagem tem dados com preco > 0');
+      } else {
+        console.log(`🛍️ ${produtosMercado.length} produtos disponíveis no mercado`);
+        console.log('📦 Amostra produtos mercado (primeiros 5):');
+        produtosMercado.slice(0, 5).forEach(p => {
+          console.log(`   - ID:${p.produto_base_id} (tipo: ${typeof p.produto_base_id}) | ${p.descricao} | R$ ${p.preco}`);
+        });
+      }
       
       // PASSO 5: Gerar lista de compras
       const listaCompras = [];
@@ -301,6 +312,11 @@ class ShoppingListGeneratorFixed {
           console.log(`✅ ${ingrediente.nome}: item placeholder criado - R$ ${valorItem.toFixed(2)}`);
           continue;
         }
+        
+        // 🔍 CORREÇÃO 2: Log Detalhado de Debug
+        console.log(`🔍 DEBUG Ingrediente: ${ingrediente.nome}`);
+        console.log(`   - produto_base_id: ${ingrediente.produto_base_id} (tipo: ${typeof ingrediente.produto_base_id})`);
+        console.log(`   - quantidade_total: ${ingrediente.quantidade_total} ${ingrediente.unidade_padrao}`);
         
         const resultado = this.processarIngredienteParaCompra(
           ingrediente, 
@@ -590,12 +606,38 @@ class ShoppingListGeneratorFixed {
   }
 
   processarIngredienteParaCompra(ingrediente: any, produtosMercado: any[]) {
-    // Buscar opções no mercado para este produto
-    const opcoes = produtosMercado.filter(p => 
-      p.produto_base_id === ingrediente.produto_base_id
-    );
+    // 🔍 CORREÇÃO 3: Buscar opções no mercado com comparação Type-Safe
+    const opcoes = produtosMercado.filter(p => {
+      const idMercado = Number(p.produto_base_id);
+      const idIngrediente = Number(ingrediente.produto_base_id);
+      
+      return !isNaN(idMercado) && 
+             !isNaN(idIngrediente) && 
+             idMercado === idIngrediente;
+    });
     
+    console.log(`   - Opções encontradas no mercado: ${opcoes.length}`);
+    if (opcoes.length > 0) {
+      console.log(`   - Primeiro match: ${opcoes[0].descricao} | R$ ${opcoes[0].preco}`);
+    }
+    
+    // 🔍 CORREÇÃO 4: Diagnóstico para IDs Não Encontrados
     if (opcoes.length === 0) {
+      console.warn(`⚠️ ${ingrediente.nome}: Nenhuma opção encontrada no mercado`);
+      console.warn(`   produto_base_id procurado: ${ingrediente.produto_base_id} (tipo: ${typeof ingrediente.produto_base_id})`);
+      console.warn(`   Total produtos no mercado: ${produtosMercado.length}`);
+      
+      // Verificar se existe produto com ID similar (manual fallback check)
+      const matchManual = produtosMercado.find(p => 
+        Number(p.produto_base_id) === Number(ingrediente.produto_base_id)
+      );
+      
+      if (matchManual) {
+        console.error(`   ❌ BUG DETECTADO: Produto existe mas filtro falhou!`);
+        console.error(`   Match manual encontrou: ${matchManual.descricao} (ID: ${matchManual.produto_base_id})`);
+        console.error(`   Comparação: ${matchManual.produto_base_id} (${typeof matchManual.produto_base_id}) vs ${ingrediente.produto_base_id} (${typeof ingrediente.produto_base_id})`);
+      }
+      
       return { encontrado: false };
     }
     
