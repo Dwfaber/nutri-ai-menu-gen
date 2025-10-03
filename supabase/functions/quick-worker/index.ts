@@ -383,7 +383,6 @@ Deno.serve(async (req) => {
         const precosKg = [];
         for (const produto of precosDesteProduto) {
           const descricao = produto.descricao || '';
-          let pesoKg = 1;
 
           // Produtos por unidade
           if (descricao.match(/copo|prato|talher|guardanapo|saco|embalagem/i)) {
