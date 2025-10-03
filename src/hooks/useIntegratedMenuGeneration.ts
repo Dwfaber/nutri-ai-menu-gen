@@ -48,6 +48,43 @@ interface UseIntegratedMenuGenerationReturn {
   loadSavedMenus: () => Promise<void>;
 }
 
+// Helper function to convert checkbox juice config to API format
+function mapJuiceConfigToTypes(juiceConfig: any): { 
+  tipo_primario: string; 
+  tipo_secundario: string | null 
+} {
+  // Priority: PRO_MIX > VITA_SUCO > DIET > NATURAL
+  const prioridade = [
+    { key: 'use_pro_mix', value: 'PRO_MIX' },
+    { key: 'use_vita_suco', value: 'VITA_SUCO' },
+    { key: 'use_suco_diet', value: 'DIET' },
+    { key: 'use_suco_natural', value: 'NATURAL' }
+  ];
+  
+  const tiposSelecionados = prioridade
+    .filter(p => juiceConfig?.[p.key] === true)
+    .map(p => p.value);
+  
+  // If none selected, use NATURAL as default
+  if (tiposSelecionados.length === 0) {
+    return { tipo_primario: 'NATURAL', tipo_secundario: null };
+  }
+  
+  // If only one selected, use the same for both
+  if (tiposSelecionados.length === 1) {
+    return { 
+      tipo_primario: tiposSelecionados[0], 
+      tipo_secundario: tiposSelecionados[0] 
+    };
+  }
+  
+  // If two or more, use the first two
+  return { 
+    tipo_primario: tiposSelecionados[0], 
+    tipo_secundario: tiposSelecionados[1] 
+  };
+}
+
 export function useIntegratedMenuGeneration(): UseIntegratedMenuGenerationReturn {
   const { isGenerating, generatedMenu, error, generateMenu, clearGeneratedMenu } = useSimplifiedMenuGeneration();
   const { violations, validateMenu, validateMenuAndSetViolations } = useMenuBusinessRules();
@@ -151,13 +188,23 @@ export function useIntegratedMenuGeneration(): UseIntegratedMenuGenerationReturn
   const generateMenuWithFormData = useCallback(async (formData: SimpleMenuFormData) => {
     const periodLabel = formData.period.label;
     const periodDays = formData.period.days;
+    
+    // Convert checkbox juice config to proper API format
+    const tiposSuco = mapJuiceConfigToTypes(formData.juiceConfig);
+    
+    console.log('🧃 Configuração de Sucos:', {
+      checkbox_config: formData.juiceConfig,
+      primario: tiposSuco.tipo_primario,
+      secundario: tiposSuco.tipo_secundario
+    });
+    
     const menu = await generateMenu(
       selectedClient,
       periodLabel,
       formData.mealsPerDay,
       [],
       formData.preferences || [],
-      formData.juiceConfig,
+      tiposSuco,
       formData.proteinGrams,
       periodDays,
       formData.budgetPerMeal
