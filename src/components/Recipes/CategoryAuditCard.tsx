@@ -52,6 +52,7 @@ export const CategoryAuditCard = ({ report }: CategoryAuditCardProps) => {
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
   const [expandedRecipes, setExpandedRecipes] = useState<Set<string>>(new Set());
+  const [severityFilter, setSeverityFilter] = useState<string>('all');
 
   // Safe fallbacks for undefined values
   const problematics = report?.receitas_problematicas ?? [];
@@ -68,11 +69,16 @@ export const CategoryAuditCard = ({ report }: CategoryAuditCardProps) => {
 
   const totalProblemas = Object.values(bySeverity).reduce((a, b) => a + b, 0);
 
+  // Filter by severity
+  const filteredProblematics = severityFilter === 'all' 
+    ? problematics 
+    : problematics.filter(r => r.validacao?.severidade === severityFilter);
+
   // Pagination logic
-  const totalPages = Math.ceil(problematics.length / itemsPerPage);
+  const totalPages = Math.ceil(filteredProblematics.length / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
   const endIndex = startIndex + itemsPerPage;
-  const currentProblematicRecipes = problematics.slice(startIndex, endIndex);
+  const currentProblematicRecipes = filteredProblematics.slice(startIndex, endIndex);
 
   const handlePageChange = (page: number) => {
     setCurrentPage(page);
@@ -82,6 +88,11 @@ export const CategoryAuditCard = ({ report }: CategoryAuditCardProps) => {
 
   const handleItemsPerPageChange = (value: string) => {
     setItemsPerPage(Number(value));
+    setCurrentPage(1); // Reset to first page
+  };
+
+  const handleSeverityFilterChange = (value: string) => {
+    setSeverityFilter(value);
     setCurrentPage(1); // Reset to first page
   };
 
@@ -237,11 +248,25 @@ export const CategoryAuditCard = ({ report }: CategoryAuditCardProps) => {
             {/* Receitas Problemáticas */}
             {problematics.length > 0 && (
               <div className="space-y-3" id="problematic-recipes-table">
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between flex-wrap gap-3">
                   <h4 className="font-semibold text-sm">
-                    Receitas Problemáticas ({problematics.length})
+                    Receitas Problemáticas ({filteredProblematics.length} de {problematics.length})
                   </h4>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-xs text-muted-foreground">Severidade:</span>
+                    <Select value={severityFilter} onValueChange={handleSeverityFilterChange}>
+                      <SelectTrigger className="w-[140px] h-8">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">Todas ({problematics.length})</SelectItem>
+                        <SelectItem value="critica">Crítica ({bySeverity.critica || 0})</SelectItem>
+                        <SelectItem value="alta">Alta ({bySeverity.alta || 0})</SelectItem>
+                        <SelectItem value="media">Média ({bySeverity.media || 0})</SelectItem>
+                        <SelectItem value="baixa">Baixa ({bySeverity.baixa || 0})</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    
                     <span className="text-xs text-muted-foreground">Mostrar:</span>
                     <Select value={itemsPerPage.toString()} onValueChange={handleItemsPerPageChange}>
                       <SelectTrigger className="w-[80px] h-8">
@@ -255,7 +280,7 @@ export const CategoryAuditCard = ({ report }: CategoryAuditCardProps) => {
                       </SelectContent>
                     </Select>
                     <span className="text-xs text-muted-foreground">
-                      Exibindo {startIndex + 1}-{Math.min(endIndex, problematics.length)} de {problematics.length}
+                      Exibindo {startIndex + 1}-{Math.min(endIndex, filteredProblematics.length)} de {filteredProblematics.length}
                     </span>
                   </div>
                 </div>
