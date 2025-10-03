@@ -819,6 +819,7 @@ Deno.serve(async (req) => {
         incluirFimSemana = false,
         incluirArrozIntegral = false,
         maxTentativasPorCategoria = 10,
+        budgetPerMeal = null, // 🔥 ORÇAMENTO POR REFEIÇÃO
         // NOVAS OPÇÕES DE SUCOS
         tipoSucoPrimario = 'PRO_MIX',
         tipoSucoSecundario = null,
@@ -835,6 +836,7 @@ Deno.serve(async (req) => {
       const estatisticas = {
         total_receitas_testadas: 0,
         receitas_rejeitadas_por_criterios: 0,
+        receitas_rejeitadas_por_orcamento: 0, // 🔥 NOVO
         motivos_rejeicao: {},
         sucos_selecionados: {
           tipo_primario: tipoSucoPrimario,
@@ -1019,6 +1021,36 @@ Deno.serve(async (req) => {
               continue;
             }
 
+            // 🔥 FILTRO DE ORÇAMENTO: Rejeitar receitas que ultrapassem limite
+            if (budgetPerMeal && categoria !== 'Arroz' && categoria !== 'Feijão') {
+              // Custos fixos conhecidos
+              const CUSTO_ARROZ = 0.64;
+              const CUSTO_FEIJAO = 0.46;
+              const custoFixo = CUSTO_ARROZ + CUSTO_FEIJAO;
+              
+              // Orçamento disponível para categorias dinâmicas (9 categorias: PP1, PP2, G, Salada1, Salada2, Sobremesa, Suco1, Suco2, Base)
+              const orcamentoDinamico = budgetPerMeal - custoFixo;
+              const orcamentoPorCategoria = orcamentoDinamico / 9;
+              
+              // Permitir 30% de flexibilidade (algumas podem custar mais, outras menos)
+              const limiteMaximo = orcamentoPorCategoria * 1.3;
+              
+              if (receitaCalculada.custo_por_porcao > limiteMaximo) {
+                console.log(
+                  `${categoria}: ${receitaCalculada.nome} REJEITADA POR ORÇAMENTO - ` +
+                  `R$ ${receitaCalculada.custo_por_porcao.toFixed(2)} > R$ ${limiteMaximo.toFixed(2)} (limite)`
+                );
+                
+                // Registrar estatística
+                estatisticas.receitas_rejeitadas_por_orcamento++;
+                
+                // Remover do pool
+                const index = receitasFiltradas.findIndex(r => r.receita_id_legado === receitaSelecionada.receita_id_legado);
+                if (index > -1) receitasFiltradas.splice(index, 1);
+                continue;
+              }
+            }
+
             // FILTROS ADICIONAIS ESPECÍFICOS POR CATEGORIA
             
             // Sobremesas: rejeitar se muito caras
@@ -1078,6 +1110,11 @@ Deno.serve(async (req) => {
         // Ordenar receitas por ordem
         receitasDia.sort((a, b) => (a.ordem || 20) - (b.ordem || 20));
 
+        // 🔥 VALIDAR ORÇAMENTO DO DIA
+        const orcamentoRespeitado = budgetPerMeal ? custoTotalDia <= budgetPerMeal * 1.1 : true; // Aceita até 10% acima
+        const alertaOrcamento = budgetPerMeal && custoTotalDia > budgetPerMeal;
+        const diferencaOrcamento = budgetPerMeal ? custoTotalDia - budgetPerMeal : 0;
+
         cardapio.push({
           dia: nomeDia,
           receitas: receitasDia,
@@ -1085,13 +1122,25 @@ Deno.serve(async (req) => {
           custo_por_porcao: custoTotalDia,
           total_receitas: receitasDia.length,
           receitas_validadas: receitasDia.filter(r => r.validacao?.valida).length,
+          // 🔥 NOVOS CAMPOS DE ORÇAMENTO
+          orcamento_filial: budgetPerMeal,
+          orcamento_respeitado: orcamentoRespeitado,
+          alerta_orcamento: alertaOrcamento,
+          diferenca_orcamento: diferencaOrcamento,
           sucos_info: {
             suco1_tipo: receitasDia.find(r => r.categoria === 'Suco 1')?.tipo_suco || 'Não selecionado',
             suco2_tipo: receitasDia.find(r => r.categoria === 'Suco 2')?.tipo_suco || 'Não selecionado'
           }
         });
 
-        console.log(`${nomeDia}: ${receitasDia.length} receitas, R$ ${custoTotalDia.toFixed(2)} por porção`);
+        // 🔥 LOG MELHORADO
+        const statusOrcamento = budgetPerMeal 
+          ? (alertaOrcamento 
+              ? `⚠️ ACIMA DO ORÇAMENTO (limite: R$ ${budgetPerMeal.toFixed(2)}, excedeu R$ ${diferencaOrcamento.toFixed(2)})` 
+              : `✅ DENTRO DO ORÇAMENTO (limite: R$ ${budgetPerMeal.toFixed(2)}, economizou R$ ${Math.abs(diferencaOrcamento).toFixed(2)})`)
+          : '';
+
+        console.log(`${nomeDia}: ${receitasDia.length} receitas, R$ ${custoTotalDia.toFixed(2)} por porção ${statusOrcamento}`);
       }
 
       return {
@@ -1101,9 +1150,16 @@ Deno.serve(async (req) => {
           porcoes_por_dia: porcoesPorDia,
           custo_medio_por_porcao: cardapio.reduce((acc, dia) => acc + dia.custo_por_porcao, 0) / cardapio.length,
           custo_total_periodo: cardapio.reduce((acc, dia) => acc + dia.custo_por_porcao * porcoesPorDia, 0),
+          // 🔥 NOVOS CAMPOS DE ORÇAMENTO
+          orcamento_configurado: budgetPerMeal,
+          dias_dentro_orcamento: budgetPerMeal ? cardapio.filter(d => d.orcamento_respeitado).length : null,
+          dias_acima_orcamento: budgetPerMeal ? cardapio.filter(d => d.alerta_orcamento).length : null,
+          economia_total: budgetPerMeal ? cardapio.reduce((sum, d) => sum + (d.diferenca_orcamento < 0 ? Math.abs(d.diferenca_orcamento) : 0), 0) : null,
+          excesso_total: budgetPerMeal ? cardapio.reduce((sum, d) => sum + (d.diferenca_orcamento > 0 ? d.diferenca_orcamento : 0), 0) : null,
           qualidade: {
             total_receitas_testadas: estatisticas.total_receitas_testadas,
             receitas_rejeitadas: estatisticas.receitas_rejeitadas_por_criterios,
+            receitas_rejeitadas_por_orcamento: estatisticas.receitas_rejeitadas_por_orcamento, // 🔥 NOVO
             taxa_aprovacao: ((estatisticas.total_receitas_testadas - estatisticas.receitas_rejeitadas_por_criterios) / estatisticas.total_receitas_testadas * 100).toFixed(1),
             motivos_rejeicao: estatisticas.motivos_rejeicao
           },
@@ -1127,6 +1183,7 @@ Deno.serve(async (req) => {
         incluirFimSemana: requestData.incluir_fim_semana || false,
         incluirArrozIntegral: requestData.incluir_arroz_integral || false,
         maxTentativasPorCategoria: requestData.max_tentativas || 10,
+        budgetPerMeal: requestData.orcamento_por_refeicao || null, // 🔥 ORÇAMENTO
         // NOVAS CONFIGURAÇÕES DE SUCOS
         tipoSucoPrimario: requestData.tipo_suco_primario || 'PRO_MIX',
         tipoSucoSecundario: requestData.tipo_suco_secundario || null,
