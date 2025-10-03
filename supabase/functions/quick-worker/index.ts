@@ -231,12 +231,12 @@ const PRODUTOS_PRE_PRONTOS = [
 // Distribuição realista de custos por categoria
 // Baseado em análise de custos reais de mercado
 const PESOS_ORCAMENTO = {
-  'Prato Principal 1': 0.30,  // 30% - Proteína principal (mais cara)
-  'Prato Principal 2': 0.25,  // 25% - Proteína secundária
-  'Guarnição': 0.15,          // 15% - Acompanhamentos quentes
+  'Prato Principal 1': 0.35,  // 35% - Proteína principal (mais cara) - AJUSTADO para realismo de mercado
+  'Prato Principal 2': 0.28,  // 28% - Proteína secundária - AJUSTADO para viabilidade
+  'Guarnição': 0.13,          // 13% - Acompanhamentos quentes - REDUZIDO
   'Salada 1': 0.08,           // 8%  - Salada principal
-  'Salada 2': 0.08,           // 8%  - Salada complementar
-  'Sobremesa': 0.14,          // 14% - Doce/fruta
+  'Salada 2': 0.06,           // 6%  - Salada complementar - REDUZIDO
+  'Sobremesa': 0.10,          // 10% - Doce/fruta - REDUZIDO
   'Suco 1': 0.00,             // 0%  - Custo fixo (pó)
   'Suco 2': 0.00,             // 0%  - Custo fixo (pó)
   'Base': 0.00                // 0%  - Custos incluídos em fixos
@@ -1126,8 +1126,8 @@ Deno.serve(async (req) => {
               const pesoCategoria = PESOS_ORCAMENTO[categoria] || 0.10;
               const limiteBase = orcamentoDinamico * pesoCategoria;
               
-              // Permitir 20% de flexibilidade para cada categoria
-              const limiteMaximo = limiteBase * 1.2;
+              // Permitir 30% de flexibilidade para cada categoria (ajustado para realismo de custos)
+              const limiteMaximo = limiteBase * 1.3;
               
               console.log(
                 `💰 Orçamento ${categoria}: Peso ${(pesoCategoria * 100).toFixed(0)}% | ` +
@@ -1293,7 +1293,7 @@ Deno.serve(async (req) => {
         proteinaGramas: requestData.proteina_gramas || '90',
         incluirFimSemana: requestData.incluir_fim_semana || false,
         incluirArrozIntegral: requestData.incluir_arroz_integral || false,
-        maxTentativasPorCategoria: requestData.max_tentativas || 10,
+        maxTentativasPorCategoria: requestData.max_tentativas || 25,
         budgetPerMeal: requestData.orcamento_por_refeicao || null, // 🔥 ORÇAMENTO
         // NOVAS CONFIGURAÇÕES DE SUCOS
         tipoSucoPrimario: requestData.tipo_suco_primario || 'PRO_MIX',
