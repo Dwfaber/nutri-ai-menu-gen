@@ -1397,9 +1397,10 @@ Deno.serve(async (req) => {
             custo_maximo: 0,
             custo_medio: 0,
             problemas_por_severidade: {
-              CRITICA: 0,
-              ALTA: 0,
-              MEDIA: 0
+              critica: 0,
+              alta: 0,
+              media: 0,
+              baixa: 0
             }
           }
         };
@@ -1414,9 +1415,9 @@ Deno.serve(async (req) => {
                 receita_id: receita.receita_id_legado,
                 nome: receita.nome,
                 problema: 'Erro no cálculo - receita sem dados válidos',
-                severidade: 'CRITICA'
+                severidade: 'critica'
               });
-              relatorioCategoria.estatisticas.problemas_por_severidade.CRITICA++;
+              relatorioCategoria.estatisticas.problemas_por_severidade.critica++;
               continue;
             }
             
@@ -1473,33 +1474,34 @@ Deno.serve(async (req) => {
             
             // 1. Validação básica
             if (!resultado.validacao.valida) {
+              const severidade = (resultado.validacao.severidade || 'media').toLowerCase();
               problemas.push({
                 tipo: 'validacao',
-                severidade: resultado.validacao.severidade || 'MEDIA',
+                severidade: severidade,
                 descricao: resultado.validacao.motivo
               });
-              relatorioCategoria.estatisticas.problemas_por_severidade[resultado.validacao.severidade || 'MEDIA']++;
+              relatorioCategoria.estatisticas.problemas_por_severidade[severidade]++;
             }
             
             // 2. Custo fora da faixa
             if (resultado.custo_por_porcao < criterios.custo_minimo) {
               problemas.push({
                 tipo: 'custo_baixo',
-                severidade: 'ALTA',
+                severidade: 'alta',
                 descricao: `Custo muito baixo: R$ ${resultado.custo_por_porcao.toFixed(2)} (mínimo R$ ${criterios.custo_minimo.toFixed(2)})`,
                 possivel_causa: 'Faltam ingredientes ou preços incorretos no banco'
               });
-              relatorioCategoria.estatisticas.problemas_por_severidade.ALTA++;
+              relatorioCategoria.estatisticas.problemas_por_severidade.alta++;
             }
             
             if (resultado.custo_por_porcao > criterios.custo_maximo) {
               problemas.push({
                 tipo: 'custo_alto',
-                severidade: 'MEDIA',
+                severidade: 'media',
                 descricao: `Custo muito alto: R$ ${resultado.custo_por_porcao.toFixed(2)} (máximo R$ ${criterios.custo_maximo.toFixed(2)})`,
                 possivel_causa: 'Preços inflacionados, unidades incorretas ou produtos prontos caros'
               });
-              relatorioCategoria.estatisticas.problemas_por_severidade.MEDIA++;
+              relatorioCategoria.estatisticas.problemas_por_severidade.media++;
             }
             
             // 3. Poucos ingredientes com preço
@@ -1523,12 +1525,12 @@ Deno.serve(async (req) => {
               if (!temObrigatorio) {
                 problemas.push({
                   tipo: 'ingrediente_faltando',
-                  severidade: 'CRITICA',
+                  severidade: 'critica',
                   descricao: `Falta ingrediente principal esperado para ${categoria}`,
                   possivel_causa: 'Receita incompleta ou mal categorizada',
                   ingredientes_esperados: criterios.ingredientes_obrigatorios.slice(0, 10)
                 });
-                relatorioCategoria.estatisticas.problemas_por_severidade.CRITICA++;
+                relatorioCategoria.estatisticas.problemas_por_severidade.critica++;
               }
             }
             
@@ -1543,11 +1545,11 @@ Deno.serve(async (req) => {
               if (apenasProblematicos) {
                 problemas.push({
                   tipo: 'apenas_temperos',
-                  severidade: 'CRITICA',
+                  severidade: 'critica',
                   descricao: 'Receita contém apenas temperos/condimentos básicos',
                   possivel_causa: 'Receita incompleta ou erro de cadastro'
                 });
-                relatorioCategoria.estatisticas.problemas_por_severidade.CRITICA++;
+                relatorioCategoria.estatisticas.problemas_por_severidade.critica++;
               }
             }
             
@@ -1565,9 +1567,9 @@ Deno.serve(async (req) => {
               receita_id: receita.receita_id_legado,
               nome: receita.nome,
               problema: `Erro na auditoria: ${error.message}`,
-              severidade: 'CRITICA'
+              severidade: 'critica'
             });
-            relatorioCategoria.estatisticas.problemas_por_severidade.CRITICA++;
+            relatorioCategoria.estatisticas.problemas_por_severidade.critica++;
           }
         }
         
