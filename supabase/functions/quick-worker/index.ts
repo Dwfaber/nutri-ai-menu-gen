@@ -206,6 +206,44 @@ const CATEGORIAS_BASE_FIXAS = [
   'MINI PILÃO PARA ACOMPANHAMENTO'
 ];
 
+// Produtos pré-prontos que naturalmente têm menos ingredientes
+const PRODUTOS_PRE_PRONTOS = [
+  'ALMONDEGA',
+  'ALMÔNDEGA',
+  'HAMBURGUER',
+  'HAMBÚRGUER',
+  'NUGGET',
+  'NUGGETS',
+  'KIBE',
+  'QUIBE',
+  'SALSICHA',
+  'LINGUIÇA DEFUMADA',
+  'EMPANADO',
+  'LASANHA PRONTA',
+  'NHOQUE PRONTO',
+  'RAVIOLI PRONTO',
+  'CANELONE PRONTO'
+];
+
+// ========================================
+// SISTEMA DE ORÇAMENTO PONDERADO
+// ========================================
+
+// Distribuição realista de custos por categoria
+// Baseado em análise de custos reais de mercado
+const PESOS_ORCAMENTO = {
+  'Prato Principal 1': 0.30,  // 30% - Proteína principal (mais cara)
+  'Prato Principal 2': 0.25,  // 25% - Proteína secundária
+  'Guarnição': 0.15,          // 15% - Acompanhamentos quentes
+  'Salada 1': 0.08,           // 8%  - Salada principal
+  'Salada 2': 0.08,           // 8%  - Salada complementar
+  'Sobremesa': 0.14,          // 14% - Doce/fruta
+  'Suco 1': 0.00,             // 0%  - Custo fixo (pó)
+  'Suco 2': 0.00,             // 0%  - Custo fixo (pó)
+  'Base': 0.00                // 0%  - Custos incluídos em fixos
+};
+// Total: 100% distribuído entre categorias com custo variável
+
 // Opções de arroz
 const OPCOES_ARROZ = [
   { nome: 'ARROZ', custo: 0.64, sempre: true },
@@ -243,6 +281,28 @@ Deno.serve(async (req) => {
     );
 
     console.log('Received request:', requestData);
+
+    // ========================================
+    // FUNÇÃO AUXILIAR: DETECTAR PRODUTOS PRÉ-PRONTOS
+    // ========================================
+
+    /**
+     * Detecta se receita usa produtos pré-prontos
+     * (produtos que já vêm preparados e têm menos ingredientes naturalmente)
+     */
+    function ehReceitaComPrePronto(ingredientes: any[]): boolean {
+      if (!ingredientes || ingredientes.length === 0) return false;
+      
+      return ingredientes.some(ing => {
+        const nome = (ing.nome || '').toUpperCase();
+        const descricao = (ing.produto_base_descricao || '').toUpperCase();
+        
+        return PRODUTOS_PRE_PRONTOS.some(prepPronto => 
+          nome.includes(prepPronto.toUpperCase()) || 
+          descricao.includes(prepPronto.toUpperCase())
+        );
+      });
+    }
 
     // ========================================
     // FUNÇÃO DE VALIDAÇÃO COM CRITÉRIOS DE AUDITORIA
@@ -1052,19 +1112,29 @@ Deno.serve(async (req) => {
               continue;
             }
 
-            // 🔥 FILTRO DE ORÇAMENTO: Rejeitar receitas que ultrapassem limite
+            // 🔥 FILTRO DE ORÇAMENTO: Rejeitar receitas que ultrapassem limite ponderado
             if (budgetPerMeal && categoria !== 'Arroz' && categoria !== 'Feijão') {
               // Custos fixos conhecidos
               const CUSTO_ARROZ = 0.64;
               const CUSTO_FEIJAO = 0.46;
-              const custoFixo = CUSTO_ARROZ + CUSTO_FEIJAO;
+              const CUSTO_SUCOS = 0.15;  // Sucos em pó custam ~R$ 0,15 total
+              const CUSTO_BASE = 0.35;   // Descartáveis, temperos, café
+              const custoFixo = CUSTO_ARROZ + CUSTO_FEIJAO + CUSTO_SUCOS + CUSTO_BASE;
               
-              // Orçamento disponível para categorias dinâmicas (9 categorias: PP1, PP2, G, Salada1, Salada2, Sobremesa, Suco1, Suco2, Base)
+              // Orçamento disponível para categorias dinâmicas
               const orcamentoDinamico = budgetPerMeal - custoFixo;
-              const orcamentoPorCategoria = orcamentoDinamico / 9;
               
-              // Permitir 30% de flexibilidade (algumas podem custar mais, outras menos)
-              const limiteMaximo = orcamentoPorCategoria * 1.3;
+              // Usar peso específico da categoria (sistema ponderado)
+              const pesoCategoria = PESOS_ORCAMENTO[categoria] || 0.10;
+              const limiteBase = orcamentoDinamico * pesoCategoria;
+              
+              // Permitir 20% de flexibilidade para cada categoria
+              const limiteMaximo = limiteBase * 1.2;
+              
+              console.log(
+                `💰 Orçamento ${categoria}: Peso ${(pesoCategoria * 100).toFixed(0)}% | ` +
+                `Base R$ ${limiteBase.toFixed(2)} | Limite R$ ${limiteMaximo.toFixed(2)}`
+              );
               
               if (receitaCalculada.custo_por_porcao > limiteMaximo) {
                 console.log(
@@ -1092,10 +1162,22 @@ Deno.serve(async (req) => {
 
             // Proteínas: verificações específicas de qualidade
             if (categoria.includes('Prato Principal')) {
+              // Verificar se é produto pré-pronto (tem menos ingredientes naturalmente)
+              const ehPrePronto = ehReceitaComPrePronto(receitaCalculada.ingredientes_detalhes || []);
+              const minimoIngredientes = ehPrePronto ? 3 : 4;
+              
               // Rejeitar se tem muito poucos ingredientes (receita incompleta)
-              if (receitaCalculada.ingredientes_total < 4) {
-                console.log(`${categoria}: ${receitaCalculada.nome} rejeitada - poucos ingredientes (${receitaCalculada.ingredientes_total})`);
+              if (receitaCalculada.ingredientes_total < minimoIngredientes) {
+                console.log(
+                  `${categoria}: ${receitaCalculada.nome} rejeitada - poucos ingredientes ` +
+                  `(${receitaCalculada.ingredientes_total}/${minimoIngredientes})${ehPrePronto ? ' [pré-pronto]' : ''}`
+                );
                 continue;
+              }
+
+              // Log para auditoria
+              if (ehPrePronto) {
+                console.log(`🍔 Produto pré-pronto detectado: mínimo ajustado para 3 ingredientes`);
               }
 
               // Rejeitar se custo muito baixo (falta proteína principal)
