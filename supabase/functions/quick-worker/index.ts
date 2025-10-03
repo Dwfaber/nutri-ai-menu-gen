@@ -345,18 +345,44 @@ Deno.serve(async (req) => {
       const nomeReceita = ingredientes[0].nome;
       const categoria = ingredientes[0].categoria_descricao;
 
-      // 2. Filtrar ingredientes problemáticos
+      // 2. Detectar se receita tem AMBOS tipos de carne moída
+      const temCarne1 = ingredientes.some(ing => 
+        (ing.produto_base_descricao || '').includes('CARNE') && 
+        (ing.produto_base_descricao || '').includes('1ª')
+      );
+      const temCarne2 = ingredientes.some(ing => 
+        (ing.produto_base_descricao || '').includes('CARNE') && 
+        (ing.produto_base_descricao || '').includes('2ª')
+      );
+      const temDuplicacaoCarne = temCarne1 && temCarne2;
+
+      if (temDuplicacaoCarne) {
+        console.log(`⚠️ Receita ${receitaId} (${nomeReceita}): CARNE MOÍDA duplicada detectada - removendo 1ª`);
+      }
+
+      // 3. Filtrar ingredientes problemáticos
       const ingredientesLimpos = ingredientes.filter(ing => {
         const descricao = ing.produto_base_descricao || '';
-        // Remover carne de 1ª e arroz emergência
-        if (descricao.includes('CARNE') && descricao.includes('1ª')) return false;
+        
+        // Remover CARNE MOÍDA 1ª APENAS se a receita tiver ambos tipos
+        if (temDuplicacaoCarne && descricao.includes('CARNE') && descricao.includes('1ª')) {
+          console.log(`  ❌ Removendo: ${descricao} (duplicação)`);
+          return false;
+        }
+        
+        // Remover ARROZ EMERGÊNCIA (produto_base_id: 38)
         if (ing.produto_base_id === 38) return false;
-        // Ignorar AGUA NATURAL no cálculo de percentual
+        
+        // Ignorar ÁGUA NATURAL no cálculo
         if (descricao.toUpperCase().includes('AGUA')) return false;
+        
         return true;
       });
 
-      console.log(`Ingredientes: ${ingredientes.length} → ${ingredientesLimpos.length} (após filtro)`);
+      console.log(
+        `Ingredientes: ${ingredientes.length} → ${ingredientesLimpos.length} (após filtro)\n` +
+        (temDuplicacaoCarne ? `  🔧 Deduplicação aplicada: CARNE MOÍDA 1ª removida\n` : '')
+      );
 
       // 3. Buscar preços (incluindo quantidade de embalagem)
       const produtoIds = [...new Set(ingredientesLimpos.map(ing => ing.produto_base_id))];
