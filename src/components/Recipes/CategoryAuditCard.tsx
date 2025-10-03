@@ -355,18 +355,18 @@ export const CategoryAuditCard = ({ report }: CategoryAuditCardProps) => {
                                           <div className="grid grid-cols-3 gap-2 text-sm">
                                             <div className="p-2 rounded bg-background border">
                                               <div className="text-muted-foreground text-xs">Total</div>
-                                              <div className="font-semibold">{receita.ingredientes.total}</div>
+                                              <div className="font-semibold">{receita.ingredientes?.total ?? 0}</div>
                                             </div>
                                             <div className="p-2 rounded bg-background border">
                                               <div className="text-muted-foreground text-xs">Com preço</div>
                                               <div className="font-semibold text-green-600">
-                                                {receita.ingredientes.com_preco}
+                                                {receita.ingredientes?.com_preco ?? 0}
                                               </div>
                                             </div>
                                             <div className="p-2 rounded bg-background border">
                                               <div className="text-muted-foreground text-xs">Sem preço</div>
                                               <div className="font-semibold text-destructive">
-                                                {receita.ingredientes.sem_preco}
+                                                {receita.ingredientes?.sem_preco ?? 0}
                                               </div>
                                             </div>
                                           </div>
@@ -374,7 +374,7 @@ export const CategoryAuditCard = ({ report }: CategoryAuditCardProps) => {
                                           <div>
                                             <p className="text-xs text-muted-foreground mb-2">Principais ingredientes:</p>
                                             <div className="flex flex-wrap gap-1">
-                                              {receita.ingredientes.principais.slice(0, 10).map((ing, idx) => (
+                                              {(receita.ingredientes?.principais ?? []).slice(0, 10).map((ing, idx) => (
                                                 <Badge 
                                                   key={idx} 
                                                   variant="secondary"
@@ -383,9 +383,9 @@ export const CategoryAuditCard = ({ report }: CategoryAuditCardProps) => {
                                                   {ing}
                                                 </Badge>
                                               ))}
-                                              {receita.ingredientes.principais.length > 10 && (
+                                              {(receita.ingredientes?.principais?.length ?? 0) > 10 && (
                                                 <Badge variant="outline" className="text-xs">
-                                                  +{receita.ingredientes.principais.length - 10} mais
+                                                  +{(receita.ingredientes?.principais?.length ?? 0) - 10} mais
                                                 </Badge>
                                               )}
                                             </div>
