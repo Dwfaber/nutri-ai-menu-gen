@@ -13,6 +13,22 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { useState } from 'react';
+import { 
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
+  Pagination,
+  PaginationContent,
+  PaginationEllipsis,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+} from '@/components/ui/pagination';
 
 interface CategoryAuditCardProps {
   report: CategoryAuditReport;
@@ -33,6 +49,8 @@ const getSeverityBadge = (severidade: string) => {
 export const CategoryAuditCard = ({ report }: CategoryAuditCardProps) => {
   const [isOpen, setIsOpen] = useState(false);
   const [showTerms, setShowTerms] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
 
   // Safe fallbacks for undefined values
   const problematics = report?.receitas_problematicas ?? [];
@@ -48,6 +66,23 @@ export const CategoryAuditCard = ({ report }: CategoryAuditCardProps) => {
     : 0;
 
   const totalProblemas = Object.values(bySeverity).reduce((a, b) => a + b, 0);
+
+  // Pagination logic
+  const totalPages = Math.ceil(problematics.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const currentProblematicRecipes = problematics.slice(startIndex, endIndex);
+
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page);
+    // Scroll to table top
+    document.getElementById('problematic-recipes-table')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  };
+
+  const handleItemsPerPageChange = (value: string) => {
+    setItemsPerPage(Number(value));
+    setCurrentPage(1); // Reset to first page
+  };
 
   return (
     <Collapsible open={isOpen} onOpenChange={setIsOpen}>
@@ -178,10 +213,30 @@ export const CategoryAuditCard = ({ report }: CategoryAuditCardProps) => {
 
             {/* Receitas Problemáticas */}
             {problematics.length > 0 && (
-              <div className="space-y-2">
-                <h4 className="font-semibold text-sm">
-                  Receitas Problemáticas ({problematics.length})
-                </h4>
+              <div className="space-y-3" id="problematic-recipes-table">
+                <div className="flex items-center justify-between">
+                  <h4 className="font-semibold text-sm">
+                    Receitas Problemáticas ({problematics.length})
+                  </h4>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-muted-foreground">Mostrar:</span>
+                    <Select value={itemsPerPage.toString()} onValueChange={handleItemsPerPageChange}>
+                      <SelectTrigger className="w-[80px] h-8">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="10">10</SelectItem>
+                        <SelectItem value="25">25</SelectItem>
+                        <SelectItem value="50">50</SelectItem>
+                        <SelectItem value="100">100</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <span className="text-xs text-muted-foreground">
+                      Exibindo {startIndex + 1}-{Math.min(endIndex, problematics.length)} de {problematics.length}
+                    </span>
+                  </div>
+                </div>
+
                 <div className="rounded-md border">
                   <Table>
                     <TableHeader>
@@ -193,7 +248,7 @@ export const CategoryAuditCard = ({ report }: CategoryAuditCardProps) => {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                       {problematics.slice(0, 10).map(receita => (
+                      {currentProblematicRecipes.map(receita => (
                         <TableRow key={receita.receita_id}>
                           <TableCell className="font-medium">{receita.nome}</TableCell>
                           <TableCell className="text-right">
@@ -212,10 +267,66 @@ export const CategoryAuditCard = ({ report }: CategoryAuditCardProps) => {
                     </TableBody>
                   </Table>
                 </div>
-                {problematics.length > 10 && (
-                  <p className="text-xs text-muted-foreground text-center">
-                    Mostrando 10 de {problematics.length} receitas problemáticas
-                  </p>
+
+                {totalPages > 1 && (
+                  <Pagination>
+                    <PaginationContent>
+                      <PaginationItem>
+                        <PaginationPrevious 
+                          onClick={() => currentPage > 1 && handlePageChange(currentPage - 1)}
+                          className={currentPage === 1 ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
+                        />
+                      </PaginationItem>
+                      
+                      {[...Array(Math.min(totalPages, 5))].map((_, i) => {
+                        let pageNum;
+                        if (totalPages <= 5) {
+                          pageNum = i + 1;
+                        } else if (currentPage <= 3) {
+                          pageNum = i + 1;
+                        } else if (currentPage >= totalPages - 2) {
+                          pageNum = totalPages - 4 + i;
+                        } else {
+                          pageNum = currentPage - 2 + i;
+                        }
+                        
+                        return (
+                          <PaginationItem key={pageNum}>
+                            <PaginationLink
+                              onClick={() => handlePageChange(pageNum)}
+                              isActive={currentPage === pageNum}
+                              className="cursor-pointer"
+                            >
+                              {pageNum}
+                            </PaginationLink>
+                          </PaginationItem>
+                        );
+                      })}
+                      
+                      {totalPages > 5 && currentPage < totalPages - 2 && (
+                        <>
+                          <PaginationItem>
+                            <PaginationEllipsis />
+                          </PaginationItem>
+                          <PaginationItem>
+                            <PaginationLink
+                              onClick={() => handlePageChange(totalPages)}
+                              className="cursor-pointer"
+                            >
+                              {totalPages}
+                            </PaginationLink>
+                          </PaginationItem>
+                        </>
+                      )}
+                      
+                      <PaginationItem>
+                        <PaginationNext 
+                          onClick={() => currentPage < totalPages && handlePageChange(currentPage + 1)}
+                          className={currentPage === totalPages ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
+                        />
+                      </PaginationItem>
+                    </PaginationContent>
+                  </Pagination>
                 )}
               </div>
             )}
