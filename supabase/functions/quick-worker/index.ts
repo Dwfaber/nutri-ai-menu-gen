@@ -391,7 +391,7 @@ Deno.serve(async (req) => {
           }
 
           // ========== DETECÇÃO INTELIGENTE DE EMBALAGEM ==========
-          // Ignora 90g/100g que são SEMPRE tamanhos de porção
+          // Ignora 90g/100g que são porções (não embalagens)
           let pesoKg = 1;
 
           // 1. Detectar meio kg: "0,500" ou "0.500"
