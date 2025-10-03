@@ -202,8 +202,7 @@ const CATEGORIAS_BASE_FIXAS = [
   'CAFÉ CORTESIA',
   'KIT DESCARTÁVEIS',
   'KIT LIMPEZA',
-  'KIT TEMPERO DE MESA',
-  'MINI PILÃO PARA ACOMPANHAMENTO'
+  'KIT TEMPERO DE MESA'
 ];
 
 // Produtos pré-prontos que naturalmente têm menos ingredientes
@@ -264,8 +263,7 @@ const RECEITAS_FIXAS_BASE = {
   'CAFÉ CORTESIA': { custo: 0.12, ordem: 10 },
   'KIT DESCARTÁVEIS': { custo: 0.16, ordem: 11 },
   'KIT LIMPEZA': { custo: 0.05, ordem: 12 },
-  'KIT TEMPERO DE MESA': { custo: 0.09, ordem: 13 },
-  'MINI PILÃO PARA ACOMPANHAMENTO': { custo: 0.06, ordem: 14 }
+  'KIT TEMPERO DE MESA': { custo: 0.09, ordem: 13 }
 };
 
 Deno.serve(async (req) => {
@@ -1118,7 +1116,7 @@ Deno.serve(async (req) => {
               const CUSTO_ARROZ = 0.64;
               const CUSTO_FEIJAO = 0.46;
               const CUSTO_SUCOS = 0.15;  // Sucos em pó custam ~R$ 0,15 total
-              const CUSTO_BASE = 0.35;   // Descartáveis, temperos, café
+              const CUSTO_BASE = 0.29;   // Descartáveis, temperos, café (sem mini pilão)
               const custoFixo = CUSTO_ARROZ + CUSTO_FEIJAO + CUSTO_SUCOS + CUSTO_BASE;
               
               // Orçamento disponível para categorias dinâmicas
