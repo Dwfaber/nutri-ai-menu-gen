@@ -64,12 +64,12 @@ export type Database = {
           user_id: string | null
         }
         Insert: {
-          action: string
+          action?: string
           created_at?: string
           entity_id?: string | null
-          entity_type: string
+          entity_type?: string
           error_message?: string | null
-          event_type: string
+          event_type?: string
           execution_time_ms?: number | null
           id?: string
           ip_address?: unknown | null
@@ -193,6 +193,66 @@ export type Database = {
           solicitacao_produto_categoria_id?: number | null
           solicitacao_produto_listagem_id?: number
           sync_at?: string
+          unidade?: string | null
+        }
+        Relationships: []
+      }
+      co_solicitacao_produto_listagem_backup: {
+        Row: {
+          apenas_valor_inteiro_sim_nao: boolean | null
+          arredondar_tipo: number | null
+          categoria_descricao: string | null
+          criado_em: string | null
+          descricao: string | null
+          em_promocao_sim_nao: boolean | null
+          grupo: string | null
+          per_capita: number | null
+          preco: number | null
+          produto_base_id: number | null
+          produto_base_quantidade_embalagem: number | null
+          produto_id: number | null
+          solicitacao_id: number | null
+          solicitacao_produto_categoria_id: number | null
+          solicitacao_produto_listagem_id: number | null
+          sync_at: string | null
+          unidade: string | null
+        }
+        Insert: {
+          apenas_valor_inteiro_sim_nao?: boolean | null
+          arredondar_tipo?: number | null
+          categoria_descricao?: string | null
+          criado_em?: string | null
+          descricao?: string | null
+          em_promocao_sim_nao?: boolean | null
+          grupo?: string | null
+          per_capita?: number | null
+          preco?: number | null
+          produto_base_id?: number | null
+          produto_base_quantidade_embalagem?: number | null
+          produto_id?: number | null
+          solicitacao_id?: number | null
+          solicitacao_produto_categoria_id?: number | null
+          solicitacao_produto_listagem_id?: number | null
+          sync_at?: string | null
+          unidade?: string | null
+        }
+        Update: {
+          apenas_valor_inteiro_sim_nao?: boolean | null
+          arredondar_tipo?: number | null
+          categoria_descricao?: string | null
+          criado_em?: string | null
+          descricao?: string | null
+          em_promocao_sim_nao?: boolean | null
+          grupo?: string | null
+          per_capita?: number | null
+          preco?: number | null
+          produto_base_id?: number | null
+          produto_base_quantidade_embalagem?: number | null
+          produto_id?: number | null
+          solicitacao_id?: number | null
+          solicitacao_produto_categoria_id?: number | null
+          solicitacao_produto_listagem_id?: number | null
+          sync_at?: string | null
           unidade?: string | null
         }
         Relationships: []
@@ -538,6 +598,39 @@ export type Database = {
         }
         Relationships: []
       }
+      produtos_pre_prontos: {
+        Row: {
+          categoria: string | null
+          created_at: string | null
+          id: string
+          nome_produto: string
+          notas: string | null
+          produto_base_id: number
+          tipo_preparo: string
+          updated_at: string | null
+        }
+        Insert: {
+          categoria?: string | null
+          created_at?: string | null
+          id?: string
+          nome_produto: string
+          notas?: string | null
+          produto_base_id: number
+          tipo_preparo: string
+          updated_at?: string | null
+        }
+        Update: {
+          categoria?: string | null
+          created_at?: string | null
+          id?: string
+          nome_produto?: string
+          notas?: string | null
+          produto_base_id?: number
+          tipo_preparo?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           avatar_url: string | null
@@ -689,6 +782,7 @@ export type Database = {
           receita_id_legado: string
           sync_at: string
           tempo_preparo: number | null
+          tipo_preparo: string | null
           usuario: string | null
         }
         Insert: {
@@ -707,6 +801,7 @@ export type Database = {
           receita_id_legado: string
           sync_at?: string
           tempo_preparo?: number | null
+          tipo_preparo?: string | null
           usuario?: string | null
         }
         Update: {
@@ -725,6 +820,7 @@ export type Database = {
           receita_id_legado?: string
           sync_at?: string
           tempo_preparo?: number | null
+          tipo_preparo?: string | null
           usuario?: string | null
         }
         Relationships: []
