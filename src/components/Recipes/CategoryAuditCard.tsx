@@ -265,6 +265,7 @@ export const CategoryAuditCard = ({ report }: CategoryAuditCardProps) => {
                     <TableHeader>
                       <TableRow>
                         <TableHead className="w-12"></TableHead>
+                        <TableHead className="w-[100px]">ID</TableHead>
                         <TableHead>Receita</TableHead>
                         <TableHead className="text-right">Custo</TableHead>
                         <TableHead className="text-center">Problemas</TableHead>
@@ -286,6 +287,9 @@ export const CategoryAuditCard = ({ report }: CategoryAuditCardProps) => {
                                   className={`h-4 w-4 transition-transform ${isExpanded ? 'rotate-180' : ''}`} 
                                 />
                               </TableCell>
+                              <TableCell className="font-mono text-xs text-muted-foreground">
+                                {receita.receita_id}
+                              </TableCell>
                               <TableCell className="font-medium">{receita.nome}</TableCell>
                               <TableCell className="text-right">
                                 R$ {(receita.custo_por_porcao ?? 0).toFixed(2)}
@@ -303,7 +307,7 @@ export const CategoryAuditCard = ({ report }: CategoryAuditCardProps) => {
                             {/* Detalhes expandidos da receita */}
                             {isExpanded && (
                               <TableRow>
-                                <TableCell colSpan={5} className="bg-muted/20 p-6">
+                                <TableCell colSpan={6} className="bg-muted/20 p-6">
                                   <div className="space-y-4">
                                     {/* Score de Qualidade */}
                                     <div className="space-y-2">
