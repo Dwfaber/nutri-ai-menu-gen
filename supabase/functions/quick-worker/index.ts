@@ -334,7 +334,7 @@ Deno.serve(async (req) => {
       // 1. Buscar ingredientes da receita
       const { data: ingredientes, error: errorIngredientes } = await supabase
         .from('receita_ingredientes')
-        .select('*')
+        .select('*, quantidade_refeicoes')
         .eq('receita_id_legado', receitaId);
 
       if (errorIngredientes || !ingredientes?.length) {
@@ -344,6 +344,11 @@ Deno.serve(async (req) => {
 
       const nomeReceita = ingredientes[0].nome;
       const categoria = ingredientes[0].categoria_descricao;
+
+      // Usar quantidade_refeicoes do banco (para quantas porções a receita foi criada)
+      // Fallback para 100 se não informado
+      const porcoesReceita = ingredientes[0]?.quantidade_refeicoes || 100;
+      console.log(`📊 Receita preparada para ${porcoesReceita} porções`);
 
       // 2. Detectar se receita tem AMBOS tipos de carne moída
       const temCarne1 = ingredientes.some(ing => 
@@ -605,8 +610,8 @@ Deno.serve(async (req) => {
           console.log(`CORREÇÃO ${unidadeNormalizada}: ${ingrediente.quantidade} → ${quantidadeNormalizada} por porção`);
         }
 
-        // CORREÇÃO CRÍTICA: Dividir por porções ANTES de calcular custo
-        const quantidadePorPorcao = quantidadeNormalizada / porcoes;
+        // CORREÇÃO CRÍTICA: Dividir por quantidade_refeicoes (porções da receita no banco)
+        const quantidadePorPorcao = quantidadeNormalizada / porcoesReceita;
         const custoPorPorcao = quantidadePorPorcao * precoMedio;
         const custoIngrediente = custoPorPorcao; // Já é o custo por porção
         
@@ -639,7 +644,7 @@ Deno.serve(async (req) => {
         categoria: categoria,
         custo_total: custoTotal,
         custo_por_porcao: custoPorPorcaoFinal,
-        porcoes: porcoes,
+        porcoes: porcoesReceita,
         ingredientes_total: ingredientesLimpos.length,
         ingredientes_originais: ingredientes.length,
         ingredientes_com_preco: ingredientesComPreco,
