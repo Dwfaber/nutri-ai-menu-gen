@@ -2,7 +2,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { ChevronDown, AlertTriangle, CheckCircle2, TrendingUp, TrendingDown } from 'lucide-react';
+import { ChevronDown, AlertTriangle, CheckCircle2, TrendingUp, TrendingDown, AlertCircle, Info } from 'lucide-react';
 import { CategoryAuditReport, ReceitaAuditada } from '@/hooks/useRecipeAuditor';
 import {
   Table,
@@ -51,6 +51,7 @@ export const CategoryAuditCard = ({ report }: CategoryAuditCardProps) => {
   const [showTerms, setShowTerms] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
+  const [expandedRecipes, setExpandedRecipes] = useState<Set<string>>(new Set());
 
   // Safe fallbacks for undefined values
   const problematics = report?.receitas_problematicas ?? [];
@@ -82,6 +83,28 @@ export const CategoryAuditCard = ({ report }: CategoryAuditCardProps) => {
   const handleItemsPerPageChange = (value: string) => {
     setItemsPerPage(Number(value));
     setCurrentPage(1); // Reset to first page
+  };
+
+  const toggleRecipeExpansion = (recipeId: string) => {
+    setExpandedRecipes(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(recipeId)) {
+        newSet.delete(recipeId);
+      } else {
+        newSet.add(recipeId);
+      }
+      return newSet;
+    });
+  };
+
+  const getSeverityIcon = (severidade: string) => {
+    switch (severidade) {
+      case 'critica': return <AlertTriangle className="h-4 w-4 text-destructive" />;
+      case 'alta': return <AlertCircle className="h-4 w-4 text-orange-500" />;
+      case 'media': return <AlertCircle className="h-4 w-4 text-yellow-500" />;
+      case 'baixa': return <Info className="h-4 w-4 text-blue-500" />;
+      default: return <Info className="h-4 w-4" />;
+    }
   };
 
   return (
@@ -241,6 +264,7 @@ export const CategoryAuditCard = ({ report }: CategoryAuditCardProps) => {
                   <Table>
                     <TableHeader>
                       <TableRow>
+                        <TableHead className="w-12"></TableHead>
                         <TableHead>Receita</TableHead>
                         <TableHead className="text-right">Custo</TableHead>
                         <TableHead className="text-center">Problemas</TableHead>
@@ -248,22 +272,134 @@ export const CategoryAuditCard = ({ report }: CategoryAuditCardProps) => {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {currentProblematicRecipes.map(receita => (
-                        <TableRow key={receita.receita_id}>
-                          <TableCell className="font-medium">{receita.nome}</TableCell>
-                          <TableCell className="text-right">
-                            R$ {(receita.custo_por_porcao ?? 0).toFixed(2)}
-                          </TableCell>
-                          <TableCell className="text-center">
-                            <Badge variant="outline">
-                              {receita.problemas_detectados?.length ?? 0}
-                            </Badge>
-                          </TableCell>
-                          <TableCell className="text-center">
-                            {getSeverityBadge(receita.validacao?.severidade ?? 'media')}
-                          </TableCell>
-                        </TableRow>
-                      ))}
+                      {currentProblematicRecipes.map(receita => {
+                        const isExpanded = expandedRecipes.has(receita.receita_id);
+                        return (
+                          <>
+                            <TableRow 
+                              key={receita.receita_id}
+                              className={`cursor-pointer hover:bg-muted/50 transition-colors ${isExpanded ? 'bg-muted/30' : ''}`}
+                              onClick={() => toggleRecipeExpansion(receita.receita_id)}
+                            >
+                              <TableCell>
+                                <ChevronDown 
+                                  className={`h-4 w-4 transition-transform ${isExpanded ? 'rotate-180' : ''}`} 
+                                />
+                              </TableCell>
+                              <TableCell className="font-medium">{receita.nome}</TableCell>
+                              <TableCell className="text-right">
+                                R$ {(receita.custo_por_porcao ?? 0).toFixed(2)}
+                              </TableCell>
+                              <TableCell className="text-center">
+                                <Badge variant="outline">
+                                  {receita.problemas_detectados?.length ?? 0}
+                                </Badge>
+                              </TableCell>
+                              <TableCell className="text-center">
+                                {getSeverityBadge(receita.validacao?.severidade ?? 'media')}
+                              </TableCell>
+                            </TableRow>
+                            
+                            {/* Detalhes expandidos da receita */}
+                            {isExpanded && (
+                              <TableRow>
+                                <TableCell colSpan={5} className="bg-muted/20 p-6">
+                                  <div className="space-y-4">
+                                    {/* Score de Qualidade */}
+                                    <div className="space-y-2">
+                                      <div className="flex items-center justify-between text-sm">
+                                        <span className="font-semibold">Score de Qualidade</span>
+                                        <span className="text-muted-foreground">
+                                          {receita.validacao?.score_qualidade ?? 0}/100
+                                        </span>
+                                      </div>
+                                      <Progress value={receita.validacao?.score_qualidade ?? 0} className="h-2" />
+                                    </div>
+
+                                    {/* Problemas Detectados */}
+                                    {receita.problemas_detectados && receita.problemas_detectados.length > 0 && (
+                                      <Card>
+                                        <CardHeader className="pb-3">
+                                          <CardTitle className="text-base flex items-center gap-2">
+                                            <AlertTriangle className="h-4 w-4 text-destructive" />
+                                            Problemas Detectados ({receita.problemas_detectados.length})
+                                          </CardTitle>
+                                        </CardHeader>
+                                        <CardContent className="space-y-2">
+                                          {receita.problemas_detectados.map((problema, idx) => (
+                                            <div 
+                                              key={idx} 
+                                              className="flex items-start gap-3 p-2 rounded-md bg-background border"
+                                            >
+                                              {getSeverityIcon(problema.severidade)}
+                                              <div className="flex-1">
+                                                <div className="flex items-center gap-2 mb-1">
+                                                  {getSeverityBadge(problema.severidade)}
+                                                  <span className="text-sm font-medium">{problema.tipo}</span>
+                                                </div>
+                                                <p className="text-sm text-muted-foreground">{problema.descricao}</p>
+                                              </div>
+                                            </div>
+                                          ))}
+                                        </CardContent>
+                                      </Card>
+                                    )}
+
+                                    {/* Ingredientes */}
+                                    {receita.ingredientes && receita.ingredientes.total > 0 && (
+                                      <Card>
+                                        <CardHeader className="pb-3">
+                                          <CardTitle className="text-base">📦 Ingredientes</CardTitle>
+                                        </CardHeader>
+                                        <CardContent className="space-y-3">
+                                          <div className="grid grid-cols-3 gap-2 text-sm">
+                                            <div className="p-2 rounded bg-background border">
+                                              <div className="text-muted-foreground text-xs">Total</div>
+                                              <div className="font-semibold">{receita.ingredientes.total}</div>
+                                            </div>
+                                            <div className="p-2 rounded bg-background border">
+                                              <div className="text-muted-foreground text-xs">Com preço</div>
+                                              <div className="font-semibold text-green-600">
+                                                {receita.ingredientes.com_preco}
+                                              </div>
+                                            </div>
+                                            <div className="p-2 rounded bg-background border">
+                                              <div className="text-muted-foreground text-xs">Sem preço</div>
+                                              <div className="font-semibold text-destructive">
+                                                {receita.ingredientes.sem_preco}
+                                              </div>
+                                            </div>
+                                          </div>
+                                          
+                                          <div>
+                                            <p className="text-xs text-muted-foreground mb-2">Principais ingredientes:</p>
+                                            <div className="flex flex-wrap gap-1">
+                                              {receita.ingredientes.principais.slice(0, 10).map((ing, idx) => (
+                                                <Badge 
+                                                  key={idx} 
+                                                  variant="secondary"
+                                                  className="text-xs"
+                                                >
+                                                  {ing}
+                                                </Badge>
+                                              ))}
+                                              {receita.ingredientes.principais.length > 10 && (
+                                                <Badge variant="outline" className="text-xs">
+                                                  +{receita.ingredientes.principais.length - 10} mais
+                                                </Badge>
+                                              )}
+                                            </div>
+                                          </div>
+                                        </CardContent>
+                                      </Card>
+                                    )}
+                                  </div>
+                                </TableCell>
+                              </TableRow>
+                            )}
+                          </>
+                        );
+                      })}
                     </TableBody>
                   </Table>
                 </div>
