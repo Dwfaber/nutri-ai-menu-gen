@@ -410,12 +410,27 @@ Deno.serve(async (req) => {
           }
 
           if (pesoKg <= 0) pesoKg = 1;
-          precosKg.push(produto.preco / pesoKg);
+          
+          // Calcular preço por kg ANTES de adicionar ao array
+          const precoPorKg = produto.preco / pesoKg;
+          
+          // Log detalhado para produtos específicos (ex: produto_base_id 103)
+          if (produtoId === 103) {
+            console.log(`💰 [Produto 103] ${descricao} | Preço: R$ ${produto.preco.toFixed(2)} | Peso: ${pesoKg}kg | R$/kg: ${precoPorKg.toFixed(2)}`);
+          }
+          
+          precosKg.push(precoPorKg);
         }
 
         if (precosKg.length > 0) {
           const media = precosKg.reduce((a, b) => a + b, 0) / precosKg.length;
           precosNormalizados.set(produtoId, media);
+          
+          // Log da média calculada para produtos específicos
+          if (produtoId === 103) {
+            console.log(`📊 [Produto 103] Média calculada: R$ ${media.toFixed(2)}/kg (${precosKg.length} preços normalizados)`);
+            console.log(`   Valores normalizados: ${precosKg.map(p => 'R$ ' + p.toFixed(2)).join(', ')}`);
+          }
         }
       }
 
