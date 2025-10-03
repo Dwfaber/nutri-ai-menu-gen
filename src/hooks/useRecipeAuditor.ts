@@ -103,7 +103,27 @@ export const useRecipeAuditor = () => {
       const payload = data?.auditoria ?? data;
       console.log('📊 Payload extraído:', payload);
 
-      const categoriasAuditadas = Array.isArray(payload?.categorias_auditadas) ? payload.categorias_auditadas : [];
+      // Normalizar categorias_auditadas com defaults
+      const categoriasAuditadas = Array.isArray(payload?.categorias_auditadas) 
+        ? payload.categorias_auditadas.map(cat => ({
+            ...cat,
+            receitas_problematicas: cat.receitas_problematicas ?? [],
+            receitas_validas: cat.receitas_validas ?? [],
+            termos_extraidos: {
+              ingredientes_principais: cat.termos_extraidos?.ingredientes_principais ?? [],
+              palavras_chave: cat.termos_extraidos?.palavras_chave ?? []
+            },
+            estatisticas: {
+              ...cat.estatisticas,
+              problemas_por_severidade: {
+                critica: cat.estatisticas?.problemas_por_severidade?.critica ?? 0,
+                alta: cat.estatisticas?.problemas_por_severidade?.alta ?? 0,
+                media: cat.estatisticas?.problemas_por_severidade?.media ?? 0,
+                baixa: cat.estatisticas?.problemas_por_severidade?.baixa ?? 0
+              }
+            }
+          }))
+        : [];
 
       // Construir resumo_geral (com fallback se não vier do backend)
       const resumoGeral = payload?.resumo_geral ?? {
@@ -178,9 +198,9 @@ export const useRecipeAuditor = () => {
           cat.categoria,
           rec.nome,
           (rec.custo_por_porcao ?? 0).toFixed(2),
-          rec.validacao.valida ? 'Válida' : 'Problemática',
-          rec.problemas_detectados.length.toString(),
-          rec.validacao.severidade
+          rec.validacao?.valida ? 'Válida' : 'Problemática',
+          (rec.problemas_detectados?.length ?? 0).toString(),
+          rec.validacao?.severidade ?? 'media'
         ]);
       });
     });

@@ -34,11 +34,20 @@ export const CategoryAuditCard = ({ report }: CategoryAuditCardProps) => {
   const [isOpen, setIsOpen] = useState(false);
   const [showTerms, setShowTerms] = useState(false);
 
+  // Safe fallbacks for undefined values
+  const problematics = report?.receitas_problematicas ?? [];
+  const valids = report?.receitas_validas ?? [];
+  const terms = {
+    ingredientes_principais: report?.termos_extraidos?.ingredientes_principais ?? [],
+    palavras_chave: report?.termos_extraidos?.palavras_chave ?? []
+  };
+  const bySeverity = report?.estatisticas?.problemas_por_severidade ?? { critica: 0, alta: 0, media: 0, baixa: 0 };
+
   const percentualValidas = report.receitas_testadas > 0
-    ? (report.receitas_validas.length / report.receitas_testadas) * 100
+    ? (valids.length / report.receitas_testadas) * 100
     : 0;
 
-  const totalProblemas = Object.values(report.estatisticas.problemas_por_severidade).reduce((a, b) => a + b, 0);
+  const totalProblemas = Object.values(bySeverity).reduce((a, b) => a + b, 0);
 
   return (
     <Collapsible open={isOpen} onOpenChange={setIsOpen}>
@@ -49,7 +58,7 @@ export const CategoryAuditCard = ({ report }: CategoryAuditCardProps) => {
               <div className="flex items-center gap-3">
                 <ChevronDown className={`h-5 w-5 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
                 <CardTitle className="text-lg">{report.categoria}</CardTitle>
-                {report.receitas_problematicas.length === 0 ? (
+                {problematics.length === 0 ? (
                   <CheckCircle2 className="h-5 w-5 text-green-500" />
                 ) : (
                   <AlertTriangle className="h-5 w-5 text-destructive" />
@@ -119,7 +128,7 @@ export const CategoryAuditCard = ({ report }: CategoryAuditCardProps) => {
               <div className="space-y-2">
                 <h4 className="font-semibold text-sm">Problemas por Severidade</h4>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                  {Object.entries(report.estatisticas.problemas_por_severidade).map(([sev, count]) => (
+                  {Object.entries(bySeverity).map(([sev, count]) => (
                     count > 0 && (
                       <div key={sev} className="flex items-center gap-2 text-sm">
                         {getSeverityBadge(sev)}
@@ -137,7 +146,7 @@ export const CategoryAuditCard = ({ report }: CategoryAuditCardProps) => {
                 <button className="w-full text-left">
                   <h4 className="font-semibold text-sm flex items-center gap-2 hover:text-primary transition-colors">
                     <ChevronDown className={`h-4 w-4 transition-transform ${showTerms ? 'rotate-180' : ''}`} />
-                    Termos Extraídos ({report.termos_extraidos.palavras_chave.length} palavras-chave)
+                    Termos Extraídos ({terms.palavras_chave.length} palavras-chave)
                   </h4>
                 </button>
               </CollapsibleTrigger>
@@ -146,7 +155,7 @@ export const CategoryAuditCard = ({ report }: CategoryAuditCardProps) => {
                   <div>
                     <p className="text-xs text-muted-foreground mb-2">Ingredientes Principais:</p>
                     <div className="flex flex-wrap gap-1">
-                      {report.termos_extraidos.ingredientes_principais.slice(0, 20).map(ing => (
+                      {terms.ingredientes_principais.slice(0, 20).map(ing => (
                         <Badge key={ing} variant="secondary" className="text-xs">
                           {ing}
                         </Badge>
@@ -156,7 +165,7 @@ export const CategoryAuditCard = ({ report }: CategoryAuditCardProps) => {
                   <div>
                     <p className="text-xs text-muted-foreground mb-2">Palavras-Chave (Top 30):</p>
                     <div className="flex flex-wrap gap-1">
-                      {report.termos_extraidos.palavras_chave.slice(0, 30).map(palavra => (
+                      {terms.palavras_chave.slice(0, 30).map(palavra => (
                         <Badge key={palavra} variant="outline" className="text-xs">
                           {palavra}
                         </Badge>
@@ -168,10 +177,10 @@ export const CategoryAuditCard = ({ report }: CategoryAuditCardProps) => {
             </Collapsible>
 
             {/* Receitas Problemáticas */}
-            {report.receitas_problematicas.length > 0 && (
+            {problematics.length > 0 && (
               <div className="space-y-2">
                 <h4 className="font-semibold text-sm">
-                  Receitas Problemáticas ({report.receitas_problematicas.length})
+                  Receitas Problemáticas ({problematics.length})
                 </h4>
                 <div className="rounded-md border">
                   <Table>
@@ -184,7 +193,7 @@ export const CategoryAuditCard = ({ report }: CategoryAuditCardProps) => {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                       {report.receitas_problematicas.slice(0, 10).map(receita => (
+                       {problematics.slice(0, 10).map(receita => (
                         <TableRow key={receita.receita_id}>
                           <TableCell className="font-medium">{receita.nome}</TableCell>
                           <TableCell className="text-right">
@@ -192,29 +201,29 @@ export const CategoryAuditCard = ({ report }: CategoryAuditCardProps) => {
                           </TableCell>
                           <TableCell className="text-center">
                             <Badge variant="outline">
-                              {receita.problemas_detectados.length}
+                              {receita.problemas_detectados?.length ?? 0}
                             </Badge>
                           </TableCell>
                           <TableCell className="text-center">
-                            {getSeverityBadge(receita.validacao.severidade)}
+                            {getSeverityBadge(receita.validacao?.severidade ?? 'media')}
                           </TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
                   </Table>
                 </div>
-                {report.receitas_problematicas.length > 10 && (
+                {problematics.length > 10 && (
                   <p className="text-xs text-muted-foreground text-center">
-                    Mostrando 10 de {report.receitas_problematicas.length} receitas problemáticas
+                    Mostrando 10 de {problematics.length} receitas problemáticas
                   </p>
                 )}
               </div>
             )}
 
             {/* Receitas Válidas (resumo) */}
-            {report.receitas_validas.length > 0 && (
+            {valids.length > 0 && (
               <div className="text-sm text-muted-foreground">
-                ✅ {report.receitas_validas.length} receita(s) válida(s) encontrada(s)
+                ✅ {valids.length} receita(s) válida(s) encontrada(s)
               </div>
             )}
           </CardContent>

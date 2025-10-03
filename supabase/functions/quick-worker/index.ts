@@ -1414,8 +1414,23 @@ Deno.serve(async (req) => {
               relatorioCategoria.receitas_problematicas.push({
                 receita_id: receita.receita_id_legado,
                 nome: receita.nome,
-                problema: 'Erro no cálculo - receita sem dados válidos',
-                severidade: 'critica'
+                custo_por_porcao: 0,
+                validacao: {
+                  valida: false,
+                  score_qualidade: 0,
+                  severidade: 'critica'
+                },
+                problemas_detectados: [{
+                  tipo: 'erro',
+                  descricao: 'Erro no cálculo - receita sem dados válidos',
+                  severidade: 'critica'
+                }],
+                ingredientes: {
+                  total: 0,
+                  com_preco: 0,
+                  sem_preco: 0,
+                  principais: []
+                }
               });
               relatorioCategoria.estatisticas.problemas_por_severidade.critica++;
               continue;
@@ -1566,8 +1581,23 @@ Deno.serve(async (req) => {
             relatorioCategoria.receitas_problematicas.push({
               receita_id: receita.receita_id_legado,
               nome: receita.nome,
-              problema: `Erro na auditoria: ${error.message}`,
-              severidade: 'critica'
+              custo_por_porcao: 0,
+              validacao: {
+                valida: false,
+                score_qualidade: 0,
+                severidade: 'critica'
+              },
+              problemas_detectados: [{
+                tipo: 'erro',
+                descricao: `Erro na auditoria: ${error.message}`,
+                severidade: 'critica'
+              }],
+              ingredientes: {
+                total: 0,
+                com_preco: 0,
+                sem_preco: 0,
+                principais: []
+              }
             });
             relatorioCategoria.estatisticas.problemas_por_severidade.critica++;
           }
