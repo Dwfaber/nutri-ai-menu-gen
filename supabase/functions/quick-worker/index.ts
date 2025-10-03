@@ -392,57 +392,50 @@ Deno.serve(async (req) => {
           }
 
           // ========== DETECÇÃO INTELIGENTE DE EMBALAGEM ==========
-          // Prioridade: 0,500 > (KG) > N KG > MAIOR gramas > líquidos
-          
-          // 1. Detectar padrão "0,500" ou "0.500" (meio kg comum)
-          const matchMeioKg = descricao.match(/0[.,]5(?:00)?\s*(?:KG|G)/i);
+          // Ignora 90g/100g que são SEMPRE tamanhos de porção
+          let pesoKg = 1;
+
+          // 1. Detectar meio kg: "0,500" ou "0.500"
+          const matchMeioKg = descricao.match(/0[.,]5(?:00)?\s*(?:KG|G)?/i);
           if (matchMeioKg) {
             pesoKg = 0.5;
-            if (produtoId === 103) console.log(`✅ Embalagem 500g: ${descricao}`);
+            if (produtoId === 103) console.log(`✅ 500g detectado: ${descricao}`);
           }
-          // 2. Detectar "(KG)" no final = 1kg
+          // 2. Detectar "(KG)" = 1kg
           else if (descricao.match(/\(KG\)/i)) {
             pesoKg = 1;
-            if (produtoId === 103) console.log(`✅ Embalagem 1kg (KG): ${descricao}`);
+            if (produtoId === 103) console.log(`✅ 1kg (KG) detectado: ${descricao}`);
           }
-          // 3. Número explícito + KG
-          else {
+          // 3. Número + KG explícito
+          else if (descricao.match(/(\d+(?:[.,]\d+)?)\s*KG/i)) {
             const matchKg = descricao.match(/(\d+(?:[.,]\d+)?)\s*KG/i);
-            if (matchKg) {
-              pesoKg = parseFloat(matchKg[1].replace(',', '.'));
-              if (produtoId === 103) console.log(`✅ Peso explícito: ${pesoKg}kg em ${descricao}`);
-            }
-            // 4. Múltiplos valores em gramas → pegar o MAIOR (embalagem)
-            else {
-              const todosGramas = descricao.match(/(\d+(?:[.,]\d+)?)\s*G(?:R|RAMA)?/gi);
-              if (todosGramas && todosGramas.length > 0) {
-                const valores = todosGramas.map(g => {
-                  const num = parseFloat(g.match(/(\d+(?:[.,]\d+)?)/)[1].replace(',', '.'));
-                  return num;
-                });
-                const maiorValor = Math.max(...valores);
-                
-                // Se maior valor >= 400g, é embalagem (não porção)
-                if (maiorValor >= 400) {
-                  pesoKg = maiorValor / 1000;
-                  if (produtoId === 103) console.log(`✅ Embalagem detectada (maior): ${maiorValor}g em ${descricao}`);
-                } else {
-                  pesoKg = valores[0] / 1000;
-                  if (produtoId === 103) console.log(`⚠️ Usando primeiro valor: ${valores[0]}g em ${descricao}`);
-                }
+            pesoKg = parseFloat(matchKg[1].replace(',', '.'));
+            if (produtoId === 103) console.log(`✅ ${pesoKg}kg explícito: ${descricao}`);
+          }
+          // 4. Gramas (IGNORANDO 90g/100g de porções)
+          else {
+            const matchGr = descricao.match(/(\d+(?:[.,]\d+)?)\s*G(?:R|RAMA|RS)?/gi);
+            if (matchGr) {
+              const valores = matchGr
+                .map(g => parseFloat(g.match(/(\d+(?:[.,]\d+)?)/)[1].replace(',', '.')))
+                .filter(v => v !== 90 && v !== 100); // 🔥 FILTRO CRÍTICO
+              
+              if (valores.length > 0) {
+                pesoKg = Math.max(...valores) / 1000;
+                if (produtoId === 103) console.log(`✅ Embalagem ${pesoKg * 1000}g (filtrado 90/100): ${descricao}`);
+              } else if (produtoId === 103) {
+                console.log(`⚠️ Apenas porções (90/100g) encontradas: ${descricao}`);
               }
-              // 5. Líquidos (ML/L)
-              else {
-                const matchL = descricao.match(/(\d+(?:[.,]\d+)?)\s*L(?:T|ITRO)?(?:S)?(?:\s|$)/i);
-                const matchMl = descricao.match(/(\d+(?:[.,]\d+)?)\s*ML/i);
-                
-                if (matchL) {
-                  pesoKg = parseFloat(matchL[1].replace(',', '.'));
-                  if (produtoId === 103) console.log(`✅ Líquido (L): ${pesoKg}L em ${descricao}`);
-                } else if (matchMl) {
-                  pesoKg = parseFloat(matchMl[1].replace(',', '.')) / 1000;
-                  if (produtoId === 103) console.log(`✅ Líquido (ML): ${pesoKg}L em ${descricao}`);
-                }
+            }
+            // 5. Líquidos (fallback)
+            else {
+              const matchL = descricao.match(/(\d+(?:[.,]\d+)?)\s*L(?:T|ITRO)?/i);
+              const matchMl = descricao.match(/(\d+(?:[.,]\d+)?)\s*ML/i);
+              
+              if (matchL) {
+                pesoKg = parseFloat(matchL[1].replace(',', '.'));
+              } else if (matchMl) {
+                pesoKg = parseFloat(matchMl[1].replace(',', '.')) / 1000;
               }
             }
           }
