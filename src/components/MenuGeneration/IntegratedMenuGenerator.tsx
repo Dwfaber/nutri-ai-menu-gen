@@ -442,9 +442,9 @@ const IntegratedMenuGenerator = () => {
                           <span className="font-semibold">{menu.totalRecipes}</span>
                         </div>
                         <div className="flex justify-between text-sm">
-                          <span className="text-gray-600">Custo/Refeição:</span>
+                          <span className="text-gray-600">Custo Total:</span>
                           <span className="font-semibold text-green-600">
-                            R$ {menu.costPerMeal.toFixed(2)}
+                            R$ {menu.totalCost.toFixed(2)}
                           </span>
                         </div>
                         <div className="flex justify-between text-sm">
