@@ -56,7 +56,7 @@ function mapJuiceConfigToTypes(juiceConfig: any): {
   // Priority: PRO_MIX > VITA_SUCO > DIET > NATURAL
   const prioridade = [
     { key: 'use_pro_mix', value: 'PRO_MIX' },
-    { key: 'use_vita_suco', value: 'VITA_SUCO' },
+    { key: 'use_pro_vita', value: 'VITA_SUCO' },
     { key: 'use_suco_diet', value: 'DIET' },
     { key: 'use_suco_natural', value: 'NATURAL' }
   ];

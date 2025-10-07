@@ -605,6 +605,63 @@ class ShoppingListGeneratorFixed {
     }
   }
 
+  /**
+   * Calcula melhor combinação de embalagens para minimizar sobra e custo
+   */
+  private calcularMelhorCombinacao(
+    qtdNecessaria: number,
+    opcoes: any[]
+  ): { pacotes: any[], sobra: number, custoTotal: number } {
+    
+    // Calcular custo por kg e ordenar
+    const embalagensSorted = opcoes
+      .map(o => ({
+        ...o,
+        tamanho: parseFloat(o.produto_base_quantidade_embalagem) || 1,
+        custo_por_kg: parseFloat(o.preco) / (parseFloat(o.produto_base_quantidade_embalagem) || 1)
+      }))
+      .sort((a, b) => {
+        // Prioridade 1: Custo por kg (mais barato primeiro)
+        const custoDiff = a.custo_por_kg - b.custo_por_kg;
+        if (Math.abs(custoDiff) > 0.1) return custoDiff;
+        
+        // Prioridade 2: Tamanho (maior primeiro em caso de empate)
+        return b.tamanho - a.tamanho;
+      });
+    
+    let restante = qtdNecessaria;
+    const pacotes = [];
+    
+    // Algoritmo greedy: usar maiores embalagens primeiro
+    for (const emb of embalagensSorted) {
+      if (restante <= 0) break;
+      
+      const qtd = Math.floor(restante / emb.tamanho);
+      if (qtd > 0) {
+        pacotes.push({ opcao: emb, quantidade: qtd });
+        restante -= qtd * emb.tamanho;
+      }
+    }
+    
+    // Se sobrou resto, pegar 1 unidade da menor embalagem que cobre
+    if (restante > 0) {
+      const menorQueCobre = [...embalagensSorted]
+        .reverse()
+        .find(e => e.tamanho >= restante);
+      
+      if (menorQueCobre) {
+        pacotes.push({ opcao: menorQueCobre, quantidade: 1 });
+        restante = menorQueCobre.tamanho - restante;
+      }
+    }
+    
+    const custoTotal = pacotes.reduce((sum, p) => 
+      sum + (p.quantidade * parseFloat(p.opcao.preco)), 0
+    );
+    
+    return { pacotes, sobra: restante, custoTotal };
+  }
+
   processarIngredienteParaCompra(ingrediente: any, produtosMercado: any[]) {
     // 🔍 CORREÇÃO 3: Buscar opções no mercado com comparação Type-Safe
     const opcoes = produtosMercado.filter(p => {
@@ -644,24 +701,28 @@ class ShoppingListGeneratorFixed {
     // Selecionar melhor opção (promoção ou mais barato)
     const melhorOpcao = opcoes.find(o => o.em_promocao_sim_nao) || opcoes[0];
     
-    // Calcular quantidade para compra
-    const qtdNecessaria = ingrediente.quantidade_total;
-    const embalagem = parseFloat(melhorOpcao.produto_base_quantidade_embalagem) || 1;
-    const somenteInteiro = melhorOpcao.apenas_valor_inteiro_sim_nao === true;
-    const precoUnitario = parseFloat(melhorOpcao.preco);
-    
-    let qtdComprar, custoTotal, sobra = 0;
-    
-    if (somenteInteiro) {
-      const embalagensPrecisas = Math.ceil(qtdNecessaria / embalagem);
-      qtdComprar = embalagensPrecisas * embalagem;
-      custoTotal = embalagensPrecisas * precoUnitario;
-      sobra = qtdComprar - qtdNecessaria;
-    } else {
-      qtdComprar = qtdNecessaria;
-      // Corrigido: preço unitário já é por embalagem, multiplicamos direto pela quantidade
-      custoTotal = qtdNecessaria * precoUnitario;
+    // 🎯 Otimização de embalagens
+    const { pacotes, sobra, custoTotal } = this.calcularMelhorCombinacao(
+      ingrediente.quantidade_total,
+      opcoes
+    );
+
+    // Calcular quantidade total comprada
+    const qtdComprar = pacotes.reduce((sum, p) => 
+      sum + (p.quantidade * parseFloat(p.opcao.produto_base_quantidade_embalagem)), 0
+    );
+
+    // Log de otimização
+    console.log(`📦 ${ingrediente.nome}: ${ingrediente.quantidade_total.toFixed(2)} ${ingrediente.unidade_padrao}`);
+    pacotes.forEach(p => {
+      console.log(`   ${p.quantidade}× ${p.opcao.produto_base_quantidade_embalagem}${p.opcao.produto_base_unidade_medida || ingrediente.unidade_padrao} (R$ ${parseFloat(p.opcao.preco).toFixed(2)})`);
+    });
+    if (sobra > 0) {
+      console.log(`   Sobra: ${sobra.toFixed(2)} ${ingrediente.unidade_padrao}`);
     }
+
+    const embalagem = parseFloat(melhorOpcao.produto_base_quantidade_embalagem) || 1;
+    const precoUnitario = parseFloat(melhorOpcao.preco);
     
     // Economia em promoção (estimar 10%)
     const economiaPromocao = melhorOpcao.em_promocao_sim_nao ? custoTotal * 0.1 : 0;
@@ -675,7 +736,7 @@ class ShoppingListGeneratorFixed {
         quantidade_necessaria: qtdNecessaria.toFixed(3),
         quantidade_comprar: qtdComprar.toFixed(3),
         unidade: ingrediente.unidade_padrao,
-        preco_unitario: (precoUnitario / embalagem).toFixed(2), // Preço por unidade individual
+        preco_unitario: (custoTotal / qtdComprar).toFixed(2), // Preço médio por unidade
         custo_total_compra: custoTotal.toFixed(2),
         sobra: sobra.toFixed(3),
         percentual_sobra: qtdComprar > 0 ? ((sobra / qtdComprar) * 100).toFixed(1) : '0.0',
