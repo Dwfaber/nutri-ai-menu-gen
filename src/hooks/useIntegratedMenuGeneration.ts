@@ -98,13 +98,30 @@ export function useIntegratedMenuGeneration(): UseIntegratedMenuGenerationReturn
     let recipes = row.recipes || [];
     if ((!recipes || recipes.length === 0) && row.receitas_adaptadas) {
       recipes = Array.isArray(row.receitas_adaptadas) ? row.receitas_adaptadas.map((r: any, idx: number) => ({
-        id: r.receita_id || idx,
+        id: r.receita_id || r.receita_id_legado || idx,
         name: r.nome || r.name || 'Item',
-        category: r.categoria || r.category || 'Outros',
-        day: r.day || 'Segunda-feira',
-        cost: Number(r.custo_por_porcao || r.cost || 0),
+        category: r.categoria || r.category || r.categoria_descricao || 'Outros',
+        day: r.day || r.dia || 'Segunda-feira',
+        cost: Number(r.custo_por_porcao || r.custo_por_refeicao || r.cost || 0),
         servings: Number(r.porcoes_calculadas || r.servings || 1)
       })) : [];
+    }
+
+    // Try to parse from menu_data.dias if still no recipes
+    if (!recipes || recipes.length === 0) {
+      if (row.menu_data?.dias && Array.isArray(row.menu_data.dias)) {
+        recipes = row.menu_data.dias.flatMap((dia: any, dayIdx: number) => {
+          const dayName = dia.dia_semana || dia.dia || `Dia ${dayIdx + 1}`;
+          return (dia.receitas || []).map((r: any, recipeIdx: number) => ({
+            id: r.receita_id || `${dayIdx}-${recipeIdx}`,
+            name: r.nome || r.name || 'Item',
+            category: r.categoria || r.category || 'Outros',
+            day: dayName,
+            cost: Number(r.custo_por_refeicao || r.custo_por_porcao || r.cost || 0),
+            servings: Number(r.porcoes || r.servings || row.meals_per_day || 50)
+          }));
+        });
+      }
     }
 
     // Calculate costs from recipes or menu_data.dias if total_cost is 0 or missing

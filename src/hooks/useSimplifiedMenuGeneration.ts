@@ -215,7 +215,9 @@ export function useSimplifiedMenuGeneration() {
             allRecipesRaw.push({
               ...receita,
               dia: dia.dia || dia.dia_semana || dia.data || 'Dia Único',
-              custo: receita.custo || receita.cost
+              custo: receita.custo || receita.cost,
+              // Garantir que a categoria sempre seja incluída
+              categoria: receita.categoria || receita.category || 'Não definido'
             });
           });
         });
@@ -238,7 +240,7 @@ export function useSimplifiedMenuGeneration() {
 
       // Normalização de receitas
       const allRecipes = allRecipesRaw.map((r: any, idx: number) => {
-        const custo = Number(r.custo || r.cost || 0);
+        const custo = Number(r.custo || r.cost || r.custo_por_refeicao || 0);
         const warnings: string[] = [];
 
         if (r.warning) {
@@ -252,6 +254,12 @@ export function useSimplifiedMenuGeneration() {
         }
 
         const categoriaOriginal = r.categoria || r.category || 'Outros';
+        
+        // Log para debug - identificar receitas sem categoria
+        if (!r.categoria && !r.category) {
+          console.warn('⚠️ Receita sem categoria:', r.nome || r.name, r);
+        }
+        
         const categoriaUI = mapCategory(categoriaOriginal, r.codigo);
         
         const codigo = (() => {
