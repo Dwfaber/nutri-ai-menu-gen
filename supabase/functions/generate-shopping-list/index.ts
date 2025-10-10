@@ -733,7 +733,7 @@ class ShoppingListGeneratorFixed {
         produto_base_id: ingrediente.produto_base_id,
         nome_ingrediente: ingrediente.nome,
         produto_mercado: melhorOpcao.descricao,
-        quantidade_necessaria: qtdNecessaria.toFixed(3),
+        quantidade_necessaria: ingrediente.quantidade_total.toFixed(3),
         quantidade_comprar: qtdComprar.toFixed(3),
         unidade: ingrediente.unidade_padrao,
         preco_unitario: (custoTotal / qtdComprar).toFixed(2), // Preço médio por unidade
