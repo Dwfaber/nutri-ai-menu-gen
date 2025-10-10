@@ -203,6 +203,9 @@ export const useShoppingList = () => {
       // Reload lists from database to get the actual saved data
       await loadShoppingLists();
 
+      // Broadcast to other app sections
+      window.dispatchEvent(new CustomEvent('shopping-lists-changed'));
+
       showToast(
         "Lista de Compras Gerada!",
         `Lista gerada com sucesso!`
@@ -498,6 +501,9 @@ export const useShoppingList = () => {
 
       // Recarregar listas
       await loadShoppingLists();
+
+      // Broadcast to other app sections
+      window.dispatchEvent(new CustomEvent('shopping-lists-changed'));
 
       showToast(
         "Itens Regenerados!",

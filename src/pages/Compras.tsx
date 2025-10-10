@@ -52,6 +52,13 @@ const Compras = () => {
     loadShoppingLists();
   }, [loadShoppingLists]);
 
+  // Listen for cross-page shopping list updates
+  useEffect(() => {
+    const handler = () => loadShoppingLists();
+    window.addEventListener('shopping-lists-changed', handler);
+    return () => window.removeEventListener('shopping-lists-changed', handler);
+  }, [loadShoppingLists]);
+
   const handleSelectList = useCallback(async (list: ShoppingList) => {
     if (selectedList?.id === list.id) return; // Prevent reloading same list
     
