@@ -606,60 +606,132 @@ class ShoppingListGeneratorFixed {
   }
 
   /**
-   * Calcula melhor combinação de embalagens para minimizar sobra e custo
+   * Calcula melhor combinação de embalagens com otimização inteligente
    */
   private calcularMelhorCombinacao(
     qtdNecessaria: number,
     opcoes: any[]
   ): { pacotes: any[], sobra: number, custoTotal: number } {
     
-    // Calcular custo por kg e ordenar
-    const embalagensSorted = opcoes
-      .map(o => ({
-        ...o,
-        tamanho: parseFloat(o.produto_base_quantidade_embalagem) || 1,
-        custo_por_kg: parseFloat(o.preco) / (parseFloat(o.produto_base_quantidade_embalagem) || 1)
-      }))
-      .sort((a, b) => {
-        // Prioridade 1: Custo por kg (mais barato primeiro)
-        const custoDiff = a.custo_por_kg - b.custo_por_kg;
-        if (Math.abs(custoDiff) > 0.1) return custoDiff;
+    // Configuração de otimização inteligente
+    const config = {
+      prioridade_promocao: 'alta' as const,
+      tolerancia_sobra_percentual: 15, // Aceitar até 15% de sobra
+      preferir_produtos_integrais: true,
+      maximo_tipos_embalagem_por_produto: 3,
+      considerar_custo_compra: false
+    };
+
+    // Transformar opções no formato esperado
+    const opcoesFormatadas = opcoes.map(o => ({
+      produto_id: o.solicitacao_produto_listagem_id || 0,
+      produto_base_id: o.produto_base_id,
+      descricao: o.descricao || 'Sem descrição',
+      quantidade_embalagem: parseFloat(o.produto_base_quantidade_embalagem) || 1,
+      unidade: o.unidade || 'UN',
+      preco: parseFloat(o.preco) || 0,
+      preco_compra: parseFloat(o.preco) || 0,
+      promocao: o.em_promocao_sim_nao || false,
+      em_promocao: o.em_promocao_sim_nao || false,
+      apenas_valor_inteiro: o.apenas_valor_inteiro_sim_nao || false,
+      disponivel: true
+    }));
+
+    // Filtrar opções disponíveis
+    const opcoesDisponiveis = opcoesFormatadas.filter(o => o.disponivel && o.quantidade_embalagem > 0);
+    
+    if (opcoesDisponiveis.length === 0) {
+      return { pacotes: [], sobra: qtdNecessaria, custoTotal: 0 };
+    }
+
+    // Ordenar por prioridade: promoção, custo por unidade, tamanho
+    const opcoesOrdenadas = [...opcoesDisponiveis].sort((a, b) => {
+      // 1. Priorizar promoções
+      if (config.prioridade_promocao === 'alta') {
+        if (a.promocao && !b.promocao) return -1;
+        if (!a.promocao && b.promocao) return 1;
+      }
+      
+      // 2. Comparar custo por unidade
+      const custoUnitarioA = a.preco / a.quantidade_embalagem;
+      const custoUnitarioB = b.preco / b.quantidade_embalagem;
+      
+      return custoUnitarioA - custoUnitarioB;
+    });
+
+    const pacotes: any[] = [];
+    let quantidadeRestante = qtdNecessaria;
+
+    // Algoritmo inteligente para seleção de embalagens
+    for (const opcao of opcoesOrdenadas) {
+      if (quantidadeRestante <= 0) break;
+      if (pacotes.length >= config.maximo_tipos_embalagem_por_produto) break;
+
+      const preco = opcao.preco;
+      
+      // Se o produto só aceita valores inteiros
+      if (opcao.apenas_valor_inteiro) {
+        const pacotesNecessarios = Math.ceil(quantidadeRestante / opcao.quantidade_embalagem);
+        const quantidadeTotal = pacotesNecessarios * opcao.quantidade_embalagem;
+        const sobra = quantidadeTotal - quantidadeRestante;
+        const sobraPercentual = (sobra / qtdNecessaria) * 100;
         
-        // Prioridade 2: Tamanho (maior primeiro em caso de empate)
-        return b.tamanho - a.tamanho;
-      });
-    
-    let restante = qtdNecessaria;
-    const pacotes = [];
-    
-    // Algoritmo greedy: usar maiores embalagens primeiro
-    for (const emb of embalagensSorted) {
-      if (restante <= 0) break;
-      
-      const qtd = Math.floor(restante / emb.tamanho);
-      if (qtd > 0) {
-        pacotes.push({ opcao: emb, quantidade: qtd });
-        restante -= qtd * emb.tamanho;
+        // Verificar se a sobra está dentro da tolerância
+        if (sobraPercentual <= config.tolerancia_sobra_percentual) {
+          pacotes.push({
+            opcao: opcao,
+            quantidade: pacotesNecessarios,
+            motivo_selecao: this.getSelectionReason(opcao, config, sobraPercentual)
+          });
+          
+          quantidadeRestante = 0;
+          console.log(`   ✅ Selecionado (INTEGRAL): ${pacotesNecessarios}× ${opcao.quantidade_embalagem}${opcao.unidade} | Sobra: ${sobra.toFixed(2)} (${sobraPercentual.toFixed(1)}%)`);
+        } else {
+          console.log(`   ⚠️ Rejeitado (SOBRA ALTA): sobra de ${sobraPercentual.toFixed(1)}% excede tolerância`);
+        }
+      } else {
+        // Produto pode ser fracionado
+        const quantidadeDesejada = Math.min(quantidadeRestante, opcao.quantidade_embalagem * 10);
+        const pacotesNecessarios = Math.ceil(quantidadeDesejada / opcao.quantidade_embalagem);
+        
+        pacotes.push({
+          opcao: opcao,
+          quantidade: pacotesNecessarios,
+          motivo_selecao: this.getSelectionReason(opcao, config, 0)
+        });
+        
+        quantidadeRestante -= pacotesNecessarios * opcao.quantidade_embalagem;
+        console.log(`   ✅ Selecionado (FRACIONADO): ${pacotesNecessarios}× ${opcao.quantidade_embalagem}${opcao.unidade}`);
       }
     }
-    
-    // Se sobrou resto, pegar 1 unidade da menor embalagem que cobre
-    if (restante > 0) {
-      const menorQueCobre = [...embalagensSorted]
-        .reverse()
-        .find(e => e.tamanho >= restante);
-      
-      if (menorQueCobre) {
-        pacotes.push({ opcao: menorQueCobre, quantidade: 1 });
-        restante = menorQueCobre.tamanho - restante;
-      }
-    }
-    
+
     const custoTotal = pacotes.reduce((sum, p) => 
-      sum + (p.quantidade * parseFloat(p.opcao.preco)), 0
+      sum + (p.quantidade * p.opcao.preco), 0
     );
     
-    return { pacotes, sobra: restante, custoTotal };
+    const sobra = Math.max(0, -quantidadeRestante);
+    
+    return { pacotes, sobra, custoTotal };
+  }
+
+  private getSelectionReason(opcao: any, config: any, sobraPercentual: number): string {
+    const reasons: string[] = [];
+    
+    if (opcao.promocao || opcao.em_promocao) {
+      reasons.push("em promoção");
+    }
+    
+    if (opcao.apenas_valor_inteiro) {
+      reasons.push("produto integral");
+      if (sobraPercentual > 0) {
+        reasons.push(`sobra de ${sobraPercentual.toFixed(1)}%`);
+      }
+    }
+    
+    const custoUnitario = opcao.preco / opcao.quantidade_embalagem;
+    reasons.push(`R$ ${custoUnitario.toFixed(2)}/unidade`);
+    
+    return reasons.join(", ");
   }
 
   processarIngredienteParaCompra(ingrediente: any, produtosMercado: any[]) {
