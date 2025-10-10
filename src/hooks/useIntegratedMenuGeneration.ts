@@ -280,12 +280,12 @@ export function useIntegratedMenuGeneration(): UseIntegratedMenuGenerationReturn
           return 0;
         });
         
-        const costPerMeal = dayTotals.length > 0 ? dayTotals.reduce((sum: number, day: number) => sum + day, 0) / dayTotals.length : 0;
-        budgetPredicted = costPerMeal * (menu.mealsPerDay || 50);
+        const totalWeeklyCost = dayTotals.length > 0 ? dayTotals.reduce((sum: number, day: number) => sum + day, 0) : 0;
+        budgetPredicted = totalWeeklyCost;
         
         console.log('💰 Shopping list budget calculated from dias:', {
           dayTotals,
-          costPerMeal: costPerMeal.toFixed(2),
+          totalWeeklyCost: totalWeeklyCost.toFixed(2),
           budgetPredicted: budgetPredicted.toFixed(2)
         });
       }
