@@ -89,7 +89,7 @@ export function useIntegratedMenuGeneration(): UseIntegratedMenuGenerationReturn
   const { isGenerating, generatedMenu, error, generateMenu, clearGeneratedMenu } = useSimplifiedMenuGeneration();
   const { violations, validateMenu, validateMenuAndSetViolations } = useMenuBusinessRules();
   const { selectedClient } = useSelectedClient();
-  const { generateShoppingList } = useShoppingList();
+  const { generateShoppingList, loadShoppingLists } = useShoppingList();
 
   const [savedMenus, setSavedMenus] = useState<GeneratedMenu[]>([]);
 
@@ -299,7 +299,10 @@ export function useIntegratedMenuGeneration(): UseIntegratedMenuGenerationReturn
     
     console.log('🛒 Generating shopping list with budget:', budgetPredicted.toFixed(2));
     await generateShoppingList(menu.id, menu.clientName, budgetPredicted, menu.mealsPerDay || 50);
-  }, [generateShoppingList]);
+    
+    // Reload shopping lists after generation to update UI
+    await loadShoppingLists();
+  }, [generateShoppingList, loadShoppingLists]);
 
   return {
     isGenerating,
