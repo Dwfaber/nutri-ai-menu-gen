@@ -45,9 +45,17 @@ const MenuApprovalPanel: React.FC<MenuApprovalPanelProps> = ({
 
   const handleApprove = async () => {
     if (canApprove) {
+      // Salvar observações no campo violation_notes
+      if (nutritionistNotes.trim()) {
+        await onEdit({ 
+          violation_notes: nutritionistNotes.trim() 
+        });
+      }
+      
       await onApprove(approverName.trim(), approvalNotes.trim() || undefined);
       setApproverName('');
       setApprovalNotes('');
+      setNutritionistNotes('');
     }
   };
 
@@ -282,6 +290,19 @@ const MenuApprovalPanel: React.FC<MenuApprovalPanelProps> = ({
               </div>
             </div>
 
+            {/* Campo de Observações da Nutricionista - Sempre visível */}
+            <div>
+              <Label htmlFor="nutritionistNotesApproval">Observações da Nutricionista</Label>
+              <Textarea
+                id="nutritionistNotesApproval"
+                placeholder="Adicione observações, ajustes ou orientações especiais para este cardápio..."
+                value={nutritionistNotes}
+                onChange={(e) => setNutritionistNotes(e.target.value)}
+                className="mt-1"
+                rows={3}
+              />
+            </div>
+
             <div className="flex flex-wrap gap-3">
               <Button
                 onClick={handleApprove}
@@ -343,6 +364,12 @@ const MenuApprovalPanel: React.FC<MenuApprovalPanelProps> = ({
               <div className="text-xs text-green-600 mt-1">
                 Criado em {new Date(menu.createdAt).toLocaleString()}
               </div>
+              {menu.violation_notes && (
+                <div className="mt-2 p-2 bg-blue-50 rounded text-sm">
+                  <p className="font-medium text-blue-800">Observações da Nutricionista:</p>
+                  <p className="text-blue-700">{menu.violation_notes}</p>
+                </div>
+              )}
             </AlertDescription>
           </Alert>
         )}

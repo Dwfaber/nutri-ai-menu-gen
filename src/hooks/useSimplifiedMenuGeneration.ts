@@ -25,6 +25,7 @@ export interface GeneratedMenu {
   menu?: any;
   warnings?: string[];
   juiceMenu?: any;
+  violation_notes?: string;
 }
 
 export function useSimplifiedMenuGeneration() {
