@@ -96,9 +96,21 @@ const IntegratedMenuGenerator = () => {
     }
   };
 
-  const handleGenerateShoppingList = async () => {
-    if (generatedMenu) {
-      await generateShoppingListFromMenu(generatedMenu);
+  const handleGenerateShoppingList = async (menuToUse?: any) => {
+    const menu = menuToUse || generatedMenu;
+    if (menu) {
+      await generateShoppingListFromMenu(menu);
+      toast({
+        title: "Lista de Compras Gerada",
+        description: "A lista de compras foi gerada com sucesso",
+        variant: "default"
+      });
+    } else {
+      toast({
+        title: "Erro",
+        description: "Nenhum cardápio selecionado para gerar lista de compras",
+        variant: "destructive"
+      });
     }
   };
 
@@ -404,7 +416,7 @@ const IntegratedMenuGenerator = () => {
                 <Separator />
 
                 <div className="flex gap-3">
-                  <Button onClick={() => handleGenerateShoppingList()} className="flex-1">
+                  <Button onClick={() => handleGenerateShoppingList(selectedSavedMenu)} className="flex-1">
                     <ShoppingCart className="w-4 h-4 mr-2" />
                     Gerar Lista de Compras
                   </Button>
