@@ -8,6 +8,23 @@ import { CheckCircle, Clock, Code, Database, Cpu, GitBranch, Zap, Bug, Plus, Cal
 export default function Updates() {
   const recentUpdates = [
     {
+      date: "13/10/2025",
+      title: "Sistema de Seleção de Sucos Simplificado",
+      description: "Refatoração completa da lógica de busca de sucos por categorias corretas",
+      type: "bug-fix",
+      impact: "crítico",
+      details: [
+        "Removida toda complexidade de TIPOS_SUCO_CONFIG e filtros de texto",
+        "Busca direta por categoria: PRÓ MIX e VITA SUCO em 'Suco 1'/'Suco 2'",
+        "NATURAL em categoria 'Bebidas' com filtro 'SUCO NATURAL'",
+        "DIET em categoria 'Suco Diet' (todos os itens)",
+        "Uso nativo de .ilike() para busca case-insensitive",
+        "Eliminação de código de fallback desnecessário",
+        "Remoção de duplicatas por receita_id_legado",
+        "Código 10x mais simples e confiável"
+      ]
+    },
+    {
       date: "17/09/2025",
       title: "Sistema de Listas de Compras Corrigido",
       description: "Correção completa de listas vazias e normalização de IDs de receitas",
@@ -111,6 +128,12 @@ export default function Updates() {
   const completeHistory = {
     backend: [
       {
+        date: "13/10/2025",
+        title: "Quick-Worker: Refatoração de Busca de Sucos",
+        description: "Simplificação da lógica com queries diretas por categoria",
+        status: "concluído"
+      },
+      {
         date: "17/09/2025",
         title: "Edge Function Generate-Shopping-List Corrigida",
         description: "Normalização de IDs e correção de listas vazias",
@@ -161,6 +184,12 @@ export default function Updates() {
     ],
     frontend: [
       {
+        date: "13/10/2025",
+        title: "Hook de Geração: Logging Aprimorado",
+        description: "Logs detalhados de configuração de sucos para debugging",
+        status: "concluído"
+      },
+      {
         date: "17/09/2025",
         title: "Interface de Listas de Compras Aprimorada",
         description: "Botão 'Corrigir Itens' e indicadores de disponibilidade",
@@ -204,6 +233,12 @@ export default function Updates() {
       }
     ],
     ai: [
+      {
+        date: "13/10/2025",
+        title: "Busca Inteligente de Sucos Otimizada",
+        description: "Switch direto por tipo eliminando complexidade de regex e filtros",
+        status: "concluído"
+      },
       {
         date: "07/09/2025",
         title: "Eliminação de Classificação por Regex",
