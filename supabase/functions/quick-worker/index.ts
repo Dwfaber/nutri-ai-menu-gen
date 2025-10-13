@@ -731,28 +731,40 @@ Deno.serve(async (req) => {
         throw new Error(`Tipo de suco inválido: ${tipoSuco}`);
       }
 
-      console.log(`Buscando sucos do tipo: ${config.nome_display}`);
+      console.log(`🧃 Buscando sucos do tipo: ${config.nome_display}`);
+      console.log(`   Categorias: ${config.categorias_busca.join(', ')}`);
+      console.log(`   Filtro nome: ${config.filtro_nome || 'nenhum'}`);
       
       let query = supabase
         .from('receita_ingredientes')
         .select('receita_id_legado, nome, categoria_descricao')
         .in('categoria_descricao', config.categorias_busca);
 
-      // Aplicar filtro específico por nome se necessário
       if (config.filtro_nome) {
-        // Para Pro Mix e Vita Suco, filtrar pelo nome
         const { data: receitas, error } = await query;
         
         if (error) {
-          console.error(`Erro ao buscar receitas ${config.nome_display}:`, error);
+          console.error(`❌ Erro ao buscar receitas ${config.nome_display}:`, error);
           return [];
         }
 
-        // Filtrar por nome e remover duplicatas
-        const receitasFiltradas = receitas?.filter(receita => 
-          receita.nome.toUpperCase().includes(config.filtro_nome)
-        ) || [];
+        console.log(`   Total de receitas encontradas (antes filtro): ${receitas?.length || 0}`);
+        
+        // Filtrar por nome (case-insensitive)
+        const receitasFiltradas = receitas?.filter(receita => {
+          const nomeUpper = receita.nome.toUpperCase();
+          const match = nomeUpper.includes(config.filtro_nome.toUpperCase());
+          
+          if (match) {
+            console.log(`   ✅ Match: ${receita.nome} (ID: ${receita.receita_id_legado})`);
+          }
+          
+          return match;
+        }) || [];
 
+        console.log(`   Total após filtro por nome: ${receitasFiltradas.length}`);
+
+        // Remover duplicatas
         const receitasUnicas = new Map();
         receitasFiltradas.forEach(receita => {
           if (!receitasUnicas.has(receita.receita_id_legado)) {
@@ -760,17 +772,21 @@ Deno.serve(async (req) => {
           }
         });
 
-        return Array.from(receitasUnicas.values());
+        const resultado = Array.from(receitasUnicas.values());
+        console.log(`   🎯 Receitas únicas retornadas: ${resultado.length}`);
+        
+        return resultado;
       } else {
-        // Para Natural e Diet, usar apenas categoria
+        // Para Natural e Diet (sem filtro de nome)
         const { data: receitas, error } = await query;
         
         if (error) {
-          console.error(`Erro ao buscar receitas ${config.nome_display}:`, error);
+          console.error(`❌ Erro ao buscar receitas ${config.nome_display}:`, error);
           return [];
         }
 
-        // Remover duplicatas
+        console.log(`   Total de receitas encontradas: ${receitas?.length || 0}`);
+
         const receitasUnicas = new Map();
         receitas?.forEach(receita => {
           if (!receitasUnicas.has(receita.receita_id_legado)) {
@@ -778,18 +794,31 @@ Deno.serve(async (req) => {
           }
         });
 
-        return Array.from(receitasUnicas.values());
+        const resultado = Array.from(receitasUnicas.values());
+        console.log(`   🎯 Receitas únicas retornadas: ${resultado.length}`);
+        
+        return resultado;
       }
     }
 
     // Função para selecionar sucos para cardápio baseado na escolha do usuário
     async function selecionarSucosParaCardapio(tipoEscolhido, tipoSecundario = null) {
-      console.log(`Selecionando sucos: Primário=${tipoEscolhido}, Secundário=${tipoSecundario || 'mesmo tipo'}`);
+      console.log(`🧃 Selecionando sucos: Primário=${tipoEscolhido}, Secundário=${tipoSecundario || 'mesmo tipo'}`);
 
-      const suco1Opcoes = await buscarSucosPorTipo(tipoEscolhido);
+      let suco1Opcoes = await buscarSucosPorTipo(tipoEscolhido);
+      let tipoUsado = tipoEscolhido;
       
+      // ✨ FALLBACK: se não encontrou receitas do tipo escolhido, tentar NATURAL
       if (suco1Opcoes.length === 0) {
-        throw new Error(`Nenhuma receita encontrada para ${TIPOS_SUCO_CONFIG[tipoEscolhido].nome_display}`);
+        console.warn(`⚠️ Nenhuma receita encontrada para ${TIPOS_SUCO_CONFIG[tipoEscolhido].nome_display}`);
+        console.log(`   🔄 Usando NATURAL como fallback`);
+        
+        tipoUsado = 'NATURAL';
+        suco1Opcoes = await buscarSucosPorTipo('NATURAL');
+        
+        if (suco1Opcoes.length === 0) {
+          throw new Error(`Nenhuma receita de suco disponível (tentou ${tipoEscolhido} e NATURAL)`);
+        }
       }
 
       // Seleção do Suco 1
@@ -818,16 +847,19 @@ Deno.serve(async (req) => {
         }
       }
 
+      console.log(`   Suco 1: ${suco1Selecionado.nome} (${suco1Selecionado.receita_id_legado})`);
+      console.log(`   Suco 2: ${suco2Selecionado?.nome || suco1Selecionado.nome} (${suco2Selecionado?.receita_id_legado || suco1Selecionado.receita_id_legado})`);
+
       return {
         suco1: {
           receita: suco1Selecionado,
-          tipo: tipoEscolhido,
-          tipo_display: TIPOS_SUCO_CONFIG[tipoEscolhido].nome_display
+          tipo: tipoUsado,
+          tipo_display: TIPOS_SUCO_CONFIG[tipoUsado].nome_display
         },
         suco2: {
           receita: suco2Selecionado || suco1Selecionado,
-          tipo: tipoSecundario || tipoEscolhido,
-          tipo_display: TIPOS_SUCO_CONFIG[tipoSecundario || tipoEscolhido].nome_display
+          tipo: tipoSecundario || tipoUsado,
+          tipo_display: TIPOS_SUCO_CONFIG[tipoSecundario || tipoUsado].nome_display
         }
       };
     }

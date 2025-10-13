@@ -215,7 +215,13 @@ export function useIntegratedMenuGeneration(): UseIntegratedMenuGenerationReturn
     console.log('🧃 Configuração de Sucos:', {
       checkbox_config: formData.juiceConfig,
       primario: tiposSuco.tipo_primario,
-      secundario: tiposSuco.tipo_secundario
+      secundario: tiposSuco.tipo_secundario,
+      raw_checkboxes: {
+        pro_mix: formData.juiceConfig?.use_pro_mix,
+        pro_vita: formData.juiceConfig?.use_pro_vita,
+        diet: formData.juiceConfig?.use_suco_diet,
+        natural: formData.juiceConfig?.use_suco_natural
+      }
     });
     
     const menu = await generateMenu(
