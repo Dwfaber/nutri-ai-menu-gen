@@ -30,6 +30,90 @@ class ShoppingListGeneratorFixed {
 
   constructor(private supabase: any) {}
 
+  /**
+   * Calcula orçamento previsto a partir dos dados do cardápio
+   */
+  private computeBudget(menuData: any, servingsPerDay: number): number {
+    console.log('💰 === CALCULANDO ORÇAMENTO PREVISTO ===');
+    
+    // Prioridade 1: Se total_cost está preenchido e válido
+    if (menuData.total_cost && menuData.total_cost > 0) {
+      console.log(`✅ Usando total_cost: R$ ${menuData.total_cost.toFixed(2)}`);
+      return menuData.total_cost;
+    }
+    
+    // Prioridade 2: Calcular a partir de menu_data.dias
+    if (menuData.menu_data?.dias && Array.isArray(menuData.menu_data.dias)) {
+      console.log(`🔍 Calculando de menu_data.dias (${menuData.menu_data.dias.length} dias)...`);
+      
+      let weeklyTotal = 0;
+      const dailyCosts: number[] = [];
+      
+      for (let i = 0; i < menuData.menu_data.dias.length; i++) {
+        const day = menuData.menu_data.dias[i];
+        let dayCost = 0;
+        
+        // Se dia tem custo_total_dia direto
+        if (day.custo_total_dia && day.custo_total_dia > 0) {
+          dayCost = day.custo_total_dia;
+          console.log(`   Dia ${i + 1}: R$ ${dayCost.toFixed(2)} (via custo_total_dia)`);
+        }
+        // Senão, somar das receitas do dia
+        else if (day.receitas && Array.isArray(day.receitas)) {
+          for (const receita of day.receitas) {
+            // custo_total_receita é o custo total dessa receita para o dia
+            if (receita.custo_total_receita && receita.custo_total_receita > 0) {
+              dayCost += receita.custo_total_receita;
+            }
+            // Senão, usar custo_por_refeicao
+            else if (receita.custo_por_refeicao) {
+              const custoReceita = Number(receita.custo_por_refeicao);
+              
+              // Se custo_por_refeicao é "custo por pessoa" (valor relativamente baixo)
+              // Multiplicar pelo número de porções
+              if (custoReceita < 30) {
+                const porcoes = receita.porcoes || servingsPerDay;
+                dayCost += custoReceita * porcoes;
+                console.log(`     ${receita.nome || 'Receita'}: R$ ${custoReceita.toFixed(2)} × ${porcoes} porções`);
+              } else {
+                // Caso contrário, é o custo total da receita
+                dayCost += custoReceita;
+              }
+            }
+            // Fallback para custo_por_porcao
+            else if (receita.custo_por_porcao) {
+              const porcoes = receita.porcoes || servingsPerDay;
+              dayCost += receita.custo_por_porcao * porcoes;
+            }
+          }
+          console.log(`   Dia ${i + 1}: R$ ${dayCost.toFixed(2)} (soma de receitas)`);
+        }
+        
+        dailyCosts.push(dayCost);
+        weeklyTotal += dayCost;
+      }
+      
+      console.log(`📊 Resumo semanal:`);
+      console.log(`   Custos diários: ${dailyCosts.map(c => `R$ ${c.toFixed(2)}`).join(', ')}`);
+      console.log(`   Total semanal: R$ ${weeklyTotal.toFixed(2)}`);
+      
+      if (weeklyTotal > 0) {
+        return weeklyTotal;
+      }
+    }
+    
+    // Prioridade 3: Usar cost_per_meal * meals_per_day * dias
+    if (menuData.cost_per_meal && menuData.cost_per_meal > 0) {
+      const numDays = menuData.menu_data?.dias?.length || 5; // Default 5 dias úteis
+      const totalEstimated = menuData.cost_per_meal * numDays;
+      console.log(`📊 Calculado via cost_per_meal: R$ ${menuData.cost_per_meal.toFixed(2)} × ${numDays} dias = R$ ${totalEstimated.toFixed(2)}`);
+      return totalEstimated;
+    }
+    
+    console.warn('⚠️ Nenhum método de cálculo funcionou, retornando 0');
+    return 0;
+  }
+
   async gerarListaComprasCorrigida(menuId: string, clientName: string, budgetPredicted: number, servingsPerDay: number, existingListId?: string) {
     console.log(`🛒 === GERAÇÃO DE LISTA CORRIGIDA ===`);
     console.log(`📋 Menu ID: ${menuId}`);
@@ -43,7 +127,7 @@ class ShoppingListGeneratorFixed {
       
       const { data: menuData, error: menuError } = await this.supabase
         .from('generated_menus')
-        .select('id, client_name, receitas_adaptadas, receitas_ids, created_at')
+        .select('id, client_name, receitas_adaptadas, receitas_ids, created_at, total_cost, cost_per_meal, meals_per_day, menu_data')
         .eq('id', menuId)
         .maybeSingle();
 
@@ -70,6 +154,10 @@ class ShoppingListGeneratorFixed {
       console.log(`✅ Cardápio encontrado: ${menuData.client_name}`);
       console.log(`📅 Criado em: ${menuData.created_at}`);
       console.log(`🍽️ Receitas adaptadas: ${menuData.receitas_adaptadas?.length || 0} receitas`);
+      
+      // CALCULAR ORÇAMENTO PREVISTO CORRETO
+      const computedBudget = this.computeBudget(menuData, servingsPerDay);
+      console.log(`💰 Orçamento calculado: R$ ${computedBudget.toFixed(2)}`);
       
       // ESTRATÉGIA EM CASCATA: receitas_adaptadas → receitas_ids → erro
       let receitasAdaptadas = menuData.receitas_adaptadas || [];
@@ -386,10 +474,11 @@ class ShoppingListGeneratorFixed {
       let shoppingList;
       
       if (existingListId) {
-        // Atualizar lista existente
+        // Atualizar lista existente (incluindo budget_predicted recalculado)
         const { data, error: updateError } = await this.supabase
           .from('shopping_lists')
           .update({
+            budget_predicted: computedBudget,
             cost_actual: custoTotal,
             status: 'generated'
           })
@@ -412,13 +501,13 @@ class ShoppingListGeneratorFixed {
           
         console.log(`🔄 Lista atualizada: ${existingListId}`);
       } else {
-        // Criar nova lista
+        // Criar nova lista (com orçamento calculado corretamente)
         const { data, error: listError } = await this.supabase
           .from('shopping_lists')
           .insert({
             menu_id: menuId,
             client_name: clientName,
-            budget_predicted: budgetPredicted || 0,
+            budget_predicted: computedBudget,
             cost_actual: custoTotal,
             status: 'generated'
           })
@@ -489,10 +578,10 @@ class ShoppingListGeneratorFixed {
           ingredientes_nao_encontrados: ingredientesNaoEncontrados,
           
           resumo_orcamento: {
-            orcamento_previsto: budgetPredicted || 0,
+            orcamento_previsto: computedBudget,
             custo_real: custoTotal,
-            diferenca: (budgetPredicted || 0) - custoTotal,
-            status_orcamento: custoTotal <= (budgetPredicted || 0) ? 'dentro_limite' : 'acima_limite'
+            diferenca: computedBudget - custoTotal,
+            status_orcamento: custoTotal <= computedBudget ? 'dentro_limite' : 'acima_limite'
           },
           
           observacoes: {
