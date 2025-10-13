@@ -134,6 +134,7 @@ export function useIntegratedMenuGeneration(): UseIntegratedMenuGenerationReturn
         const dayTotals = row.menu_data.dias.map((day: any) => {
           if (day.receitas && Array.isArray(day.receitas)) {
             return day.receitas.reduce((daySum: number, receita: any) => {
+              // custo_por_refeicao JÁ É O CUSTO TOTAL DO DIA (per capita * meals_per_day)
               const cost = Number(receita.custo_por_refeicao || receita.cost || receita.custo || 0);
               return daySum + cost;
             }, 0);
@@ -141,13 +142,15 @@ export function useIntegratedMenuGeneration(): UseIntegratedMenuGenerationReturn
           return 0;
         });
         
-        costPerMeal = dayTotals.length > 0 ? dayTotals.reduce((sum: number, day: number) => sum + day, 0) / dayTotals.length : 0;
-        totalCost = costPerMeal * (Number(row.meals_per_day || 50));
+        // Soma dos custos de todos os dias para obter o custo total da semana
+        totalCost = dayTotals.length > 0 ? dayTotals.reduce((sum: number, day: number) => sum + day, 0) : 0;
+        costPerMeal = totalCost / dayTotals.length;
         
         console.log('💰 Cost calculated from dias for menu:', row.id, {
-          dayTotals,
+          dayTotals: dayTotals.map(t => t.toFixed(2)),
+          totalWeeklyCost: totalCost.toFixed(2),
           costPerMeal: costPerMeal.toFixed(2),
-          totalCost: totalCost.toFixed(2)
+          totalDays: dayTotals.length
         });
       }
       // Fallback to recipes array
@@ -281,43 +284,48 @@ export function useIntegratedMenuGeneration(): UseIntegratedMenuGenerationReturn
   }, [loadSavedMenus, generatedMenu]);
 
   const generateShoppingListFromMenu = useCallback(async (menu: GeneratedMenu) => {
-    // Calculate budget fallback from menu_data.dias or recipes if totalCost is 0
+    // Calculate budget from menu_data.dias or recipes if totalCost is 0
     let budgetPredicted = menu.totalCost || 0;
     
-    if (budgetPredicted === 0) {
+    if (budgetPredicted === 0 || budgetPredicted < 1000) {
       // First try from menu_data.dias (most reliable source)
       if (menu.menu?.dias && Array.isArray(menu.menu.dias)) {
-        const dayTotals = menu.menu.dias.map((day: any) => {
+        budgetPredicted = menu.menu.dias.reduce((total: number, day: any) => {
           if (day.receitas && Array.isArray(day.receitas)) {
-            return day.receitas.reduce((daySum: number, receita: any) => {
-              const cost = Number(receita.custo_por_refeicao || receita.cost || receita.custo || 0);
-              return daySum + cost;
+            const dayCost = day.receitas.reduce((daySum: number, receita: any) => {
+              // custo_por_refeicao JÁ É O CUSTO TOTAL DO DIA
+              return daySum + Number(receita.custo_por_refeicao || receita.cost || receita.custo || 0);
             }, 0);
+            return total + dayCost;
           }
-          return 0;
-        });
+          return total;
+        }, 0);
         
-        const totalWeeklyCost = dayTotals.length > 0 ? dayTotals.reduce((sum: number, day: number) => sum + day, 0) : 0;
-        budgetPredicted = totalWeeklyCost;
-        
-        console.log('💰 Shopping list budget calculated from dias:', {
-          dayTotals,
-          totalWeeklyCost: totalWeeklyCost.toFixed(2),
+        console.log('💰 Budget calculado de menu.dias:', {
+          totalDays: menu.menu.dias.length,
           budgetPredicted: budgetPredicted.toFixed(2)
         });
       }
-      // Fallback to recipes array
+      // Fallback: agrupar recipes por dia e somar
       else if (menu.recipes && menu.recipes.length > 0) {
-        budgetPredicted = menu.recipes.reduce((sum: number, recipe: any) => {
-          return sum + (Number(recipe.cost || recipe.custo || recipe.custo_por_refeicao || 0));
+        const recipesByDay = menu.recipes.reduce((acc: Record<string, any[]>, recipe: any) => {
+          const day = recipe.day || 'default';
+          if (!acc[day]) acc[day] = [];
+          acc[day].push(recipe);
+          return acc;
+        }, {});
+        
+        budgetPredicted = (Object.values(recipesByDay) as any[][]).reduce((total: number, dayRecipes: any[]) => {
+          const dayCost = dayRecipes.reduce((sum: number, recipe: any) => {
+            return sum + Number(recipe.cost || recipe.custo || 0);
+          }, 0);
+          return total + dayCost;
         }, 0);
       }
     }
     
-    console.log('🛒 Generating shopping list with budget:', budgetPredicted.toFixed(2));
+    console.log('🛒 Gerando lista com orçamento correto:', budgetPredicted.toFixed(2));
     await generateShoppingList(menu.id, menu.clientName, budgetPredicted, menu.mealsPerDay || 50);
-    
-    // Reload shopping lists after generation to update UI
     await loadShoppingLists();
   }, [generateShoppingList, loadShoppingLists]);
 
