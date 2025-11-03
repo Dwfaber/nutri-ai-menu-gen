@@ -17,7 +17,7 @@ export type Database = {
       access_logs: {
         Row: {
           id: string
-          ip_address: unknown | null
+          ip_address: unknown
           operation: string
           table_name: string
           timestamp: string | null
@@ -26,7 +26,7 @@ export type Database = {
         }
         Insert: {
           id?: string
-          ip_address?: unknown | null
+          ip_address?: unknown
           operation: string
           table_name: string
           timestamp?: string | null
@@ -35,7 +35,7 @@ export type Database = {
         }
         Update: {
           id?: string
-          ip_address?: unknown | null
+          ip_address?: unknown
           operation?: string
           table_name?: string
           timestamp?: string | null
@@ -54,7 +54,7 @@ export type Database = {
           event_type: string
           execution_time_ms: number | null
           id: string
-          ip_address: unknown | null
+          ip_address: unknown
           metadata: Json | null
           module: string | null
           session_id: string | null
@@ -72,7 +72,7 @@ export type Database = {
           event_type?: string
           execution_time_ms?: number | null
           id?: string
-          ip_address?: unknown | null
+          ip_address?: unknown
           metadata?: Json | null
           module?: string | null
           session_id?: string | null
@@ -90,7 +90,7 @@ export type Database = {
           event_type?: string
           execution_time_ms?: number | null
           id?: string
-          ip_address?: unknown | null
+          ip_address?: unknown
           metadata?: Json | null
           module?: string | null
           session_id?: string | null
@@ -1050,12 +1050,9 @@ export type Database = {
         }
         Returns: Json
       }
-      cleanup_old_product_versions: {
-        Args: Record<PropertyKey, never>
-        Returns: undefined
-      }
+      cleanup_old_product_versions: { Args: never; Returns: undefined }
       contar_receitas_completo: {
-        Args: Record<PropertyKey, never>
+        Args: never
         Returns: {
           amostra_ids: string[]
           categoria: string
