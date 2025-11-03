@@ -73,6 +73,40 @@ serve(async (req) => {
     console.log(`Hybrid Sync Manager - Action: ${action}, Table: ${targetTable}`);
 
     switch (action) {
+      case 'bulk_sync_all':
+        // Sincronizar múltiplas tabelas de uma vez - SUPER OTIMIZADO
+        const tables = await req.json().then(body => body.tables || {});
+        const results = [];
+        
+        console.log(`🚀 BULK SYNC de ${Object.keys(tables).length} tabelas simultâneas`);
+        
+        for (const [tableName, tableData] of Object.entries(tables)) {
+          try {
+            console.log(`Processando tabela ${tableName} com ${Array.isArray(tableData) ? tableData.length : 0} registros`);
+            const result = await syncTable(supabaseClient, tableName, tableData as any[], syncConfig);
+            const resultData = await result.json();
+            results.push(resultData);
+          } catch (error) {
+            console.error(`❌ Erro sincronizando tabela ${tableName}:`, error);
+            results.push({
+              success: false,
+              tableName,
+              error: error.message,
+            });
+          }
+        }
+        
+        return new Response(JSON.stringify({
+          success: true,
+          results,
+          totalTables: Object.keys(tables).length,
+          successfulTables: results.filter(r => r.success).length,
+          failedTables: results.filter(r => !r.success).length,
+        }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 200,
+        });
+      
       case 'sync_table':
         return await syncTable(supabaseClient, targetTable, data, syncConfig);
       case 'create_backup':
