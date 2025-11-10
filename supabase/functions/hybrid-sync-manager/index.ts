@@ -516,13 +516,28 @@ async function upsertData(supabaseClient: any, tableName: string, data: any[], b
   
   let processedRecords = 0;
   
-  // Configurar opções de conflito baseado na tabela
-  let upsertOptions: any = {};
+  // Configurar opções de conflito baseado na tabela com TODAS as constraints
+  let upsertOptions: any = { ignoreDuplicates: false }; // Força update em vez de ignorar
   
-  if (tableName === 'receitas_legado' && uniqueColumns?.includes('receita_id_legado')) {
-    upsertOptions.onConflict = 'receita_id_legado';
-  } else if (tableName === 'receita_ingredientes') {
-    upsertOptions.onConflict = 'receita_id_legado,produto_base_id';
+  // Mapear tabelas para suas colunas únicas
+  const conflictColumns: Record<string, string> = {
+    'receitas_legado': 'receita_id_legado',
+    'receita_ingredientes': 'receita_produto_id',
+    'produtos_base': 'produto_base_id',
+    'custos_filiais': 'solicitacao_filial_custo_id',
+    'co_solicitacao_produto_listagem': 'solicitacao_produto_listagem_id',
+    'contratos_corporativos': 'empresa_id_legado,filial_id_legado',
+    'guarnicoes_disponiveis': 'produto_base_id',
+    'proteinas_disponiveis': 'produto_base_id,subcategoria',
+    'saladas_disponiveis': 'produto_base_id',
+    'sucos_disponiveis': 'produto_base_id'
+  };
+  
+  if (conflictColumns[tableName]) {
+    upsertOptions.onConflict = conflictColumns[tableName];
+    console.log(`✅ Usando onConflict para ${tableName}: ${conflictColumns[tableName]}`);
+  } else {
+    console.warn(`⚠️ Nenhuma constraint definida para ${tableName}, upsert pode falhar!`);
   }
   
   for (let i = 0; i < data.length; i += batchSize) {
