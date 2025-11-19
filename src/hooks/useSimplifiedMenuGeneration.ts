@@ -54,7 +54,7 @@ export function useSimplifiedMenuGeneration() {
           client_id: menu.clientId,
           client_name: menu.clientName,
           week_period: menu.weekPeriod,
-          status: menu.status,
+          status: 'pending_approval', // 🔥 FORÇAR STATUS CORRETO
           total_cost: menu.totalCost,
           cost_per_meal: menu.costPerMeal,
           total_recipes: menu.totalRecipes,
@@ -69,6 +69,8 @@ export function useSimplifiedMenuGeneration() {
         .maybeSingle();
 
       if (error) throw error;
+      
+      console.log('✅ Menu salvo com status pending_approval, ID:', data?.id);
       return data?.id || null;
     } catch (error) {
       console.error('Error saving menu:', error);

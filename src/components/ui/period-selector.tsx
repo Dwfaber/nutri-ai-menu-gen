@@ -1,5 +1,6 @@
 import React from 'react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './select';
+import { Input } from './input';
 import { Label } from './label';
 import { Card } from './card';
 import { Calendar, Clock, Users } from 'lucide-react';
@@ -156,22 +157,22 @@ export function PeriodSelector({
               <Users className="w-4 h-4" />
               Refeições por Dia
             </Label>
-            <Select 
-              value={mealsPerDay.toString()} 
-              onValueChange={(value) => handleMealsChange(parseInt(value))}
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="25">25 refeições/dia</SelectItem>
-                <SelectItem value="50">50 refeições/dia</SelectItem>
-                <SelectItem value="75">75 refeições/dia</SelectItem>
-                <SelectItem value="100">100 refeições/dia</SelectItem>
-                <SelectItem value="150">150 refeições/dia</SelectItem>
-                <SelectItem value="200">200 refeições/dia</SelectItem>
-              </SelectContent>
-            </Select>
+            <Input
+              id="mealsPerDay"
+              type="number"
+              min={1}
+              max={500}
+              value={mealsPerDay}
+              onChange={(e) => {
+                const value = parseInt(e.target.value) || 1;
+                handleMealsChange(Math.min(Math.max(value, 1), 500));
+              }}
+              placeholder="Ex: 47, 53, 100..."
+              className="w-full"
+            />
+            <p className="text-xs text-muted-foreground mt-1">
+              Digite qualquer quantidade entre 1 e 500
+            </p>
           </div>
 
           {value && (
