@@ -358,6 +358,34 @@ Deno.serve(async (req) => {
     async function calcularCustoReceita(receitaId, porcoes = 100) {
       console.log(`Calculando custo da receita ${receitaId} para ${porcoes} porções`);
 
+      // 🔥 PRIORIDADE 1: Usar custo já calculado da receita
+      const { data: receitaData, error: errorReceita } = await supabase
+        .from('receitas_legado')
+        .select('custo_total, porcoes, quantidade_refeicoes, nome_receita, categoria_descricao')
+        .eq('receita_id_legado', receitaId)
+        .single();
+      
+      if (receitaData?.custo_total && receitaData.custo_total > 0) {
+        const porcoes = receitaData.porcoes || receitaData.quantidade_refeicoes || 1;
+        const custoPorPorcao = receitaData.custo_total / porcoes;
+        console.log(`✅ Usando custo pré-calculado: R$ ${custoPorPorcao.toFixed(2)}`);
+        
+        return {
+          receita_id: receitaId,
+          nome: receitaData.nome_receita,
+          categoria: receitaData.categoria_descricao,
+          custo_por_porcao: custoPorPorcao,
+          custo_total: receitaData.custo_total,
+          ingredientes_total: 0,
+          ingredientes_com_preco: 0,
+          percentual_calculado: 100,
+          validacao: { valida: true, motivo: 'Custo pré-calculado validado' }
+        };
+      }
+      
+      console.log(`⚠️ Custo não encontrado, calculando em tempo real...`);
+
+      // 🔥 FALLBACK: Calcular em tempo real apenas se não houver custo
       // 1. Buscar ingredientes da receita
       const { data: ingredientes, error: errorIngredientes } = await supabase
         .from('receita_ingredientes')
@@ -888,12 +916,42 @@ Deno.serve(async (req) => {
         incluirFimSemana = false,
         incluirArrozIntegral = false,
         maxTentativasPorCategoria = 10,
-        budgetPerMeal = null, // 🔥 ORÇAMENTO POR REFEIÇÃO
-        // NOVAS OPÇÕES DE SUCOS
-        tipoSucoPrimario = 'PRO_MIX',
+        budgetPerMeal = null,
+        filialId = null, // ID do cliente para buscar configuração
+        // NOVAS OPÇÕES DE SUCOS - Usar configuração do cliente se não especificado
+        tipoSucoPrimario = null,
         tipoSucoSecundario = null,
         variarSucosPorDia = true
       } = config;
+      
+      // 🔥 BUSCAR CONFIGURAÇÃO DE SUCOS DO CLIENTE SE NÃO ESPECIFICADO
+      let tipoSucoPrimarioFinal = tipoSucoPrimario;
+      let tipoSucoSecundarioFinal = tipoSucoSecundario;
+      
+      if (!tipoSucoPrimarioFinal && filialId) {
+        console.log('🔍 Buscando configuração de sucos do cliente...');
+        const { data: clientConfig } = await supabase
+          .from('contratos_corporativos')
+          .select('use_pro_mix, use_pro_vita, use_suco_diet, use_suco_natural')
+          .eq('filial_id_legado', filialId)
+          .single();
+        
+        if (clientConfig) {
+          // Determinar tipo primário baseado na config (prioridade)
+          if (clientConfig.use_pro_mix) tipoSucoPrimarioFinal = 'PRO_MIX';
+          else if (clientConfig.use_pro_vita) tipoSucoPrimarioFinal = 'VITA_SUCO';
+          else if (clientConfig.use_suco_diet) tipoSucoPrimarioFinal = 'DIET';
+          else if (clientConfig.use_suco_natural) tipoSucoPrimarioFinal = 'NATURAL';
+          else tipoSucoPrimarioFinal = 'NATURAL'; // Fallback
+          
+          console.log(`✅ Tipo de suco configurado: ${tipoSucoPrimarioFinal}`, clientConfig);
+        } else {
+          tipoSucoPrimarioFinal = 'NATURAL'; // Fallback se não encontrar config
+          console.log('⚠️ Config não encontrada, usando NATURAL como padrão');
+        }
+      } else if (!tipoSucoPrimarioFinal) {
+        tipoSucoPrimarioFinal = 'NATURAL'; // Fallback final
+      }
 
       const diasSemana = incluirFimSemana
         ? ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado', 'Domingo']
@@ -975,8 +1033,8 @@ Deno.serve(async (req) => {
 
         // 4. SUCOS INTELIGENTES COM VALIDAÇÃO
         try {
-          console.log(`Selecionando sucos para ${nomeDia}...`);
-          const sucosEscolhidos = await selecionarSucosParaCardapio(tipoSucoPrimario, tipoSucoSecundario);
+          console.log(`Selecionando sucos para ${nomeDia} - Tipo: ${tipoSucoPrimarioFinal}...`);
+          const sucosEscolhidos = await selecionarSucosParaCardapio(tipoSucoPrimarioFinal, tipoSucoSecundarioFinal);
           
           // Processar Suco 1
           if (sucosEscolhidos.suco1?.receita) {

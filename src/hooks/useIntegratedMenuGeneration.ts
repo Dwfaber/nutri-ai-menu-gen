@@ -290,49 +290,51 @@ export function useIntegratedMenuGeneration(): UseIntegratedMenuGenerationReturn
   }, [loadSavedMenus, generatedMenu]);
 
   const generateShoppingListFromMenu = useCallback(async (menu: GeneratedMenu) => {
-    // Calculate budget from menu_data.dias or recipes if totalCost is 0
-    let budgetPredicted = menu.totalCost || 0;
-    
-    if (budgetPredicted === 0 || budgetPredicted < 1000) {
-      // First try from menu_data.dias (most reliable source)
-      if (menu.menu?.dias && Array.isArray(menu.menu.dias)) {
-        budgetPredicted = menu.menu.dias.reduce((total: number, day: any) => {
+    try {
+      console.log('🛒 Gerando lista de compras do menu:', menu.id);
+      
+      // Extrair receitas do menu (adaptar à estrutura real)
+      let receitasIds: string[] = [];
+      
+      // Tentar estrutura nova primeiro (menu_data.cardapio)
+      if (menu.menu?.cardapio && Array.isArray(menu.menu.cardapio)) {
+        console.log('📋 Usando estrutura nova (menu_data.cardapio)');
+        receitasIds = menu.menu.cardapio.flatMap((dia: any) => 
+          (dia.receitas || []).map((r: any) => r.receita_id || r.receita_id_legado)
+        ).filter(Boolean);
+      } 
+      // Fallback: estrutura antiga (recipes array)
+      else if (menu.recipes && Array.isArray(menu.recipes)) {
+        console.log('📋 Usando estrutura antiga (recipes)');
+        receitasIds = menu.recipes.map((r: any) => r.receita_id_legado || r.id).filter(Boolean);
+      }
+      
+      if (receitasIds.length === 0) {
+        throw new Error('Nenhuma receita encontrada no cardápio para gerar lista de compras');
+      }
+      
+      console.log('📋 Receitas para lista:', receitasIds.length, 'receitas');
+      
+      // Calculate budget from menu data
+      let budgetPredicted = menu.totalCost || 0;
+      
+      if (budgetPredicted === 0 && menu.menu?.cardapio && Array.isArray(menu.menu.cardapio)) {
+        budgetPredicted = menu.menu.cardapio.reduce((total: number, day: any) => {
           if (day.receitas && Array.isArray(day.receitas)) {
             const dayCost = day.receitas.reduce((daySum: number, receita: any) => {
-              // custo_por_refeicao JÁ É O CUSTO TOTAL DO DIA
               return daySum + Number(receita.custo_por_refeicao || receita.cost || receita.custo || 0);
             }, 0);
-            return total + dayCost;
+            return total + dayCost * (menu.mealsPerDay || 50);
           }
           return total;
         }, 0);
-        
-        console.log('💰 Budget calculado de menu.dias:', {
-          totalDays: menu.menu.dias.length,
-          budgetPredicted: budgetPredicted.toFixed(2)
-        });
       }
-      // Fallback: agrupar recipes por dia e somar
-      else if (menu.recipes && menu.recipes.length > 0) {
-        const recipesByDay = menu.recipes.reduce((acc: Record<string, any[]>, recipe: any) => {
-          const day = recipe.day || 'default';
-          if (!acc[day]) acc[day] = [];
-          acc[day].push(recipe);
-          return acc;
-        }, {});
-        
-        budgetPredicted = (Object.values(recipesByDay) as any[][]).reduce((total: number, dayRecipes: any[]) => {
-          const dayCost = dayRecipes.reduce((sum: number, recipe: any) => {
-            return sum + Number(recipe.cost || recipe.custo || 0);
-          }, 0);
-          return total + dayCost;
-        }, 0);
-      }
+      
+      await generateShoppingList(menu.id, menu.clientName, budgetPredicted, menu.mealsPerDay || 50);
+      await loadShoppingLists();
+    } catch (error) {
+      console.error('❌ Erro ao gerar lista:', error);
     }
-    
-    console.log('🛒 Gerando lista com orçamento correto:', budgetPredicted.toFixed(2));
-    await generateShoppingList(menu.id, menu.clientName, budgetPredicted, menu.mealsPerDay || 50);
-    await loadShoppingLists();
   }, [generateShoppingList, loadShoppingLists]);
 
   return {
