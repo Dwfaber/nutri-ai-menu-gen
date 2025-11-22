@@ -1090,6 +1090,9 @@ Deno.serve(async (req) => {
         }
 
         // 5. OUTRAS CATEGORIAS COM VALIDAÇÃO RIGOROSA (exceto sucos já processados)
+        // 🔥 TRACK DE PROTEÍNAS DO DIA PARA GARANTIR VARIEDADE
+        const proteinasUsadasHoje = new Set();
+        
         for (const categoria of CATEGORIAS_CARDAPIO) {
           // Pular categorias já cobertas
           if (['Arroz', 'Feijão', 'Suco 1', 'Suco 2'].includes(categoria)) continue;
@@ -1100,7 +1103,7 @@ Deno.serve(async (req) => {
           // Buscar receitas da categoria
           const receitasDisponiveis = await buscarReceitasPorCategoria(categoria);
           if (receitasDisponiveis.length === 0) {
-            console.log(`${categoria}: Nenhuma receita encontrada no banco`);
+            console.log(`${categoria}: ❌ NENHUMA RECEITA ENCONTRADA NO BANCO`);
             continue;
           }
 
@@ -1196,7 +1199,7 @@ Deno.serve(async (req) => {
               continue;
             }
 
-            // Proteínas: verificações específicas de qualidade
+            // 🔥 PROTEÍNAS: GARANTIR QUE SEJAM DIFERENTES
             if (categoria.includes('Prato Principal')) {
               // Verificar se é produto pré-pronto (tem menos ingredientes naturalmente)
               const ehPrePronto = ehReceitaComPrePronto(receitaCalculada.ingredientes_detalhes || []);
@@ -1221,6 +1224,44 @@ Deno.serve(async (req) => {
                 console.log(`${categoria}: ${receitaCalculada.nome} rejeitada - custo muito baixo, falta proteína principal`);
                 continue;
               }
+              
+              // 🔥 GARANTIR PROTEÍNAS DIFERENTES NO MESMO DIA
+              // Detectar tipo de proteína (frango, carne, peixe, etc)
+              const nomeUpper = receitaCalculada.nome.toUpperCase();
+              let tipoProteina = 'OUTRA';
+              
+              if (nomeUpper.includes('FRANGO') || nomeUpper.includes('GALINHA') || nomeUpper.includes('PEITO') || 
+                  nomeUpper.includes('COXA') || nomeUpper.includes('SOBRECOXA') || nomeUpper.includes('ASA')) {
+                tipoProteina = 'FRANGO';
+              } else if (nomeUpper.includes('BOVINA') || nomeUpper.includes('CARNE') || nomeUpper.includes('BIFE') ||
+                         nomeUpper.includes('ALCATRA') || nomeUpper.includes('PATINHO') || nomeUpper.includes('CUPIM') ||
+                         nomeUpper.includes('COSTELA') || nomeUpper.includes('MOÍDA')) {
+                tipoProteina = 'BOVINA';
+              } else if (nomeUpper.includes('PEIXE') || nomeUpper.includes('TILÁPIA') || nomeUpper.includes('MERLUZA') ||
+                         nomeUpper.includes('PESCADA') || nomeUpper.includes('SALMÃO')) {
+                tipoProteina = 'PEIXE';
+              } else if (nomeUpper.includes('PORCO') || nomeUpper.includes('SUÍNO') || nomeUpper.includes('LOMBO') ||
+                         nomeUpper.includes('PERNIL') || nomeUpper.includes('BISTECA') || nomeUpper.includes('COSTELINHA')) {
+                tipoProteina = 'PORCO';
+              } else if (nomeUpper.includes('OVO')) {
+                tipoProteina = 'OVO';
+              }
+              
+              // Se já temos uma proteína deste tipo hoje, rejeitar
+              if (proteinasUsadasHoje.has(tipoProteina)) {
+                console.log(
+                  `${categoria}: ${receitaCalculada.nome} REJEITADA - ` +
+                  `proteína ${tipoProteina} já usada hoje (PP1 e PP2 devem ser diferentes)`
+                );
+                
+                // Remover do pool para não tentar novamente
+                const index = receitasFiltradas.findIndex(r => r.receita_id_legado === receitaSelecionada.receita_id_legado);
+                if (index > -1) receitasFiltradas.splice(index, 1);
+                continue;
+              }
+              
+              // Se passou, registrar tipo de proteína
+              console.log(`${categoria}: ${receitaCalculada.nome} - Tipo de proteína: ${tipoProteina}`);
             }
 
             // Guarnições: verificar se não é apenas tempero
@@ -1232,6 +1273,32 @@ Deno.serve(async (req) => {
             // Se chegou até aqui, receita é válida
             receitaValida = receitaCalculada;
             receitasUsadas.add(receitaSelecionada.receita_id_legado);
+            
+            // 🔥 REGISTRAR TIPO DE PROTEÍNA SE FOR PRATO PRINCIPAL
+            if (categoria.includes('Prato Principal')) {
+              const nomeUpper = receitaCalculada.nome.toUpperCase();
+              let tipoProteina = 'OUTRA';
+              
+              if (nomeUpper.includes('FRANGO') || nomeUpper.includes('GALINHA') || nomeUpper.includes('PEITO') || 
+                  nomeUpper.includes('COXA') || nomeUpper.includes('SOBRECOXA') || nomeUpper.includes('ASA')) {
+                tipoProteina = 'FRANGO';
+              } else if (nomeUpper.includes('BOVINA') || nomeUpper.includes('CARNE') || nomeUpper.includes('BIFE') ||
+                         nomeUpper.includes('ALCATRA') || nomeUpper.includes('PATINHO') || nomeUpper.includes('CUPIM') ||
+                         nomeUpper.includes('COSTELA') || nomeUpper.includes('MOÍDA')) {
+                tipoProteina = 'BOVINA';
+              } else if (nomeUpper.includes('PEIXE') || nomeUpper.includes('TILÁPIA') || nomeUpper.includes('MERLUZA') ||
+                         nomeUpper.includes('PESCADA') || nomeUpper.includes('SALMÃO')) {
+                tipoProteina = 'PEIXE';
+              } else if (nomeUpper.includes('PORCO') || nomeUpper.includes('SUÍNO') || nomeUpper.includes('LOMBO') ||
+                         nomeUpper.includes('PERNIL') || nomeUpper.includes('BISTECA') || nomeUpper.includes('COSTELINHA')) {
+                tipoProteina = 'PORCO';
+              } else if (nomeUpper.includes('OVO')) {
+                tipoProteina = 'OVO';
+              }
+              
+              proteinasUsadasHoje.add(tipoProteina);
+            }
+            
             break;
           }
 
@@ -1255,14 +1322,31 @@ Deno.serve(async (req) => {
             console.log(`${categoria}: ❌ Nenhuma receita válida encontrada após ${tentativas} tentativas`);
           }
         }
+        
+        // 🔥 VALIDAÇÃO CRÍTICA: GARANTIR QUE TODAS AS CATEGORIAS FORAM GERADAS
+        const categoriasObrigatorias = [
+          'Prato Principal 1', 'Prato Principal 2', 
+          'Guarnição', 'Salada 1', 'Salada 2', 
+          'Sobremesa', 'Suco 1', 'Suco 2'
+        ];
+        
+        const categoriasFaltando = categoriasObrigatorias.filter(cat => 
+          !receitasDia.some(r => r.categoria === cat)
+        );
+        
+        if (categoriasFaltando.length > 0) {
+          console.error(`❌❌❌ FALHA CRÍTICA - CATEGORIAS FALTANDO em ${nomeDia}:`, categoriasFaltando);
+          throw new Error(
+            `Dia incompleto: ${nomeDia} está sem ${categoriasFaltando.join(', ')}. ` +
+            `Verifique se há receitas suficientes no banco para estas categorias.`
+          );
+        }
 
         // Ordenar receitas por ordem
         receitasDia.sort((a, b) => (a.ordem || 20) - (b.ordem || 20));
 
-        // 🔥 VALIDAR ORÇAMENTO DO DIA
-        const orcamentoRespeitado = budgetPerMeal ? custoTotalDia <= budgetPerMeal * 1.1 : true; // Aceita até 10% acima
-        const alertaOrcamento = budgetPerMeal && custoTotalDia > budgetPerMeal;
-        const diferencaOrcamento = budgetPerMeal ? custoTotalDia - budgetPerMeal : 0;
+        // 🔥 INFO DO DIA (não validar orçamento por dia, apenas informar)
+        const diferencaOrcamentoDia = budgetPerMeal ? custoTotalDia - budgetPerMeal : 0;
 
         cardapio.push({
           dia: nomeDia,
@@ -1271,11 +1355,9 @@ Deno.serve(async (req) => {
           custo_por_porcao: custoTotalDia,
           total_receitas: receitasDia.length,
           receitas_validadas: receitasDia.filter(r => r.validacao?.valida).length,
-          // 🔥 NOVOS CAMPOS DE ORÇAMENTO
-          orcamento_filial: budgetPerMeal,
-          orcamento_respeitado: orcamentoRespeitado,
-          alerta_orcamento: alertaOrcamento,
-          diferenca_orcamento: diferencaOrcamento,
+          // Info de orçamento diário (apenas para referência, não bloqueia)
+          orcamento_referencia_dia: budgetPerMeal,
+          diferenca_orcamento_dia: diferencaOrcamentoDia,
           sucos_info: {
             suco1_tipo: receitasDia.find(r => r.categoria === 'Suco 1')?.tipo_suco || 'Não selecionado',
             suco2_tipo: receitasDia.find(r => r.categoria === 'Suco 2')?.tipo_suco || 'Não selecionado'
@@ -1283,13 +1365,38 @@ Deno.serve(async (req) => {
         });
 
         // 🔥 LOG MELHORADO
-        const statusOrcamento = budgetPerMeal 
-          ? (alertaOrcamento 
-              ? `⚠️ ACIMA DO ORÇAMENTO (limite: R$ ${budgetPerMeal.toFixed(2)}, excedeu R$ ${diferencaOrcamento.toFixed(2)})` 
-              : `✅ DENTRO DO ORÇAMENTO (limite: R$ ${budgetPerMeal.toFixed(2)}, economizou R$ ${Math.abs(diferencaOrcamento).toFixed(2)})`)
+        const statusInfo = budgetPerMeal 
+          ? `(ref. orçamento dia: R$ ${budgetPerMeal.toFixed(2)}, diferença: R$ ${diferencaOrcamentoDia > 0 ? '+' : ''}${diferencaOrcamentoDia.toFixed(2)})` 
           : '';
 
-        console.log(`${nomeDia}: ${receitasDia.length} receitas, R$ ${custoTotalDia.toFixed(2)} por porção ${statusOrcamento}`);
+        console.log(`${nomeDia}: ${receitasDia.length} receitas, R$ ${custoTotalDia.toFixed(2)} por porção ${statusInfo}`);
+      }
+      
+      // 🔥 VALIDAÇÃO DE ORÇAMENTO TOTAL DO PERÍODO (NÃO POR DIA)
+      const custoTotalPeriodo = cardapio.reduce((sum, dia) => 
+        sum + (dia.custo_total_dia * porcoesPorDia), 0
+      );
+      
+      const orcamentoTotalPeriodo = budgetPerMeal 
+        ? budgetPerMeal * porcoesPorDia * cardapio.length 
+        : null;
+      
+      const dentroOrcamentoTotal = orcamentoTotalPeriodo 
+        ? custoTotalPeriodo <= orcamentoTotalPeriodo 
+        : true;
+      
+      const diferencaOrcamentoTotal = orcamentoTotalPeriodo 
+        ? custoTotalPeriodo - orcamentoTotalPeriodo 
+        : 0;
+      
+      // 🔥 LOG DE ORÇAMENTO TOTAL
+      if (budgetPerMeal) {
+        console.log('\n=== VALIDAÇÃO DE ORÇAMENTO TOTAL DO PERÍODO ===');
+        console.log(`Orçamento Total: R$ ${orcamentoTotalPeriodo?.toFixed(2)}`);
+        console.log(`Custo Total: R$ ${custoTotalPeriodo.toFixed(2)}`);
+        console.log(`Diferença: R$ ${diferencaOrcamentoTotal > 0 ? '+' : ''}${diferencaOrcamentoTotal.toFixed(2)}`);
+        console.log(`Status: ${dentroOrcamentoTotal ? '✅ DENTRO DO ORÇAMENTO' : '⚠️ ACIMA DO ORÇAMENTO'}`);
+        console.log('===============================================\n');
       }
 
       return {
@@ -1298,17 +1405,24 @@ Deno.serve(async (req) => {
           dias_gerados: cardapio.length,
           porcoes_por_dia: porcoesPorDia,
           custo_medio_por_porcao: cardapio.reduce((acc, dia) => acc + dia.custo_por_porcao, 0) / cardapio.length,
-          custo_total_periodo: cardapio.reduce((acc, dia) => acc + dia.custo_por_porcao * porcoesPorDia, 0),
-          // 🔥 NOVOS CAMPOS DE ORÇAMENTO
-          orcamento_configurado: budgetPerMeal,
-          dias_dentro_orcamento: budgetPerMeal ? cardapio.filter(d => d.orcamento_respeitado).length : null,
-          dias_acima_orcamento: budgetPerMeal ? cardapio.filter(d => d.alerta_orcamento).length : null,
-          economia_total: budgetPerMeal ? cardapio.reduce((sum, d) => sum + (d.diferenca_orcamento < 0 ? Math.abs(d.diferenca_orcamento) : 0), 0) : null,
-          excesso_total: budgetPerMeal ? cardapio.reduce((sum, d) => sum + (d.diferenca_orcamento > 0 ? d.diferenca_orcamento : 0), 0) : null,
+          // 🔥 ORÇAMENTO TOTAL DO PERÍODO (PRINCIPAL)
+          orcamento_total_periodo: orcamentoTotalPeriodo,
+          custo_total_periodo: custoTotalPeriodo,
+          dentro_orcamento_total: dentroOrcamentoTotal,
+          diferenca_orcamento_total: diferencaOrcamentoTotal,
+          // Detalhamento diário (para referência)
+          detalhamento_diario: cardapio.map(d => ({
+            dia: d.dia,
+            custo: d.custo_total_dia,
+            receitas: d.receitas.length,
+            diferenca_referencia: d.diferenca_orcamento_dia
+          })),
+          // Info adicional
+          orcamento_configurado_por_refeicao: budgetPerMeal,
           qualidade: {
             total_receitas_testadas: estatisticas.total_receitas_testadas,
             receitas_rejeitadas: estatisticas.receitas_rejeitadas_por_criterios,
-            receitas_rejeitadas_por_orcamento: estatisticas.receitas_rejeitadas_por_orcamento, // 🔥 NOVO
+            receitas_rejeitadas_por_orcamento: estatisticas.receitas_rejeitadas_por_orcamento,
             taxa_aprovacao: ((estatisticas.total_receitas_testadas - estatisticas.receitas_rejeitadas_por_criterios) / estatisticas.total_receitas_testadas * 100).toFixed(1),
             motivos_rejeicao: estatisticas.motivos_rejeicao
           },
