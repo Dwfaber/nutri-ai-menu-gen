@@ -3,6 +3,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { ConnectivityTest } from '@/components/Monitoring/ConnectivityTest';
+import { MenuGenerationTestRunner } from '@/components/Testing/MenuGenerationTestRunner';
 import { CheckCircle, Clock, Code, Database, Cpu, GitBranch, Zap, Bug, Plus, Calendar, Activity, AlertTriangle } from "lucide-react";
 
 export default function Updates() {
@@ -449,6 +450,8 @@ export default function Updates() {
 
         <TabsContent value="monitoring" className="space-y-6">
           <div className="grid gap-6">
+            <MenuGenerationTestRunner />
+            
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
