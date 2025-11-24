@@ -149,6 +149,34 @@ const CRITERIOS_AVALIACAO = {
 // SISTEMA DE SUCOS - BUSCA SIMPLIFICADA
 // ========================================
 
+// Configuração dos tipos de suco disponíveis
+const TIPOS_SUCO_CONFIG = {
+  'PRO_MIX': {
+    nome_display: 'Suco em Pó Pró Mix',
+    caracteristicas: ['Em pó', 'Diversas vitaminas', 'Fácil preparo', 'Longa validade'],
+    custo_esperado: { min: 0.20, max: 0.50 },
+    palavras_chave: ['PRÓ MIX', 'PRO MIX', 'PROMIX']
+  },
+  'VITA_SUCO': {
+    nome_display: 'Vita Suco',
+    caracteristicas: ['Concentrado', 'Sabor intenso', 'Boa relação custo-benefício'],
+    custo_esperado: { min: 0.15, max: 0.45 },
+    palavras_chave: ['VITA SUCO', 'VITASUCO', 'VITA']
+  },
+  'DIET': {
+    nome_display: 'Suco Diet',
+    caracteristicas: ['Sem açúcar', 'Para diabéticos', 'Baixa caloria'],
+    custo_esperado: { min: 0.25, max: 0.60 },
+    palavras_chave: ['DIET', 'LIGHT', 'ZERO']
+  },
+  'NATURAL': {
+    nome_display: 'Suco Natural',
+    caracteristicas: ['Feito com polpa', 'Mais natural', 'Maior frescor'],
+    custo_esperado: { min: 0.30, max: 0.70 },
+    palavras_chave: ['NATURAL', 'POLPA', 'FRUTA']
+  }
+};
+
 // ========================================
 // CONFIGURAÇÕES DO CARDÁPIO
 // ========================================
