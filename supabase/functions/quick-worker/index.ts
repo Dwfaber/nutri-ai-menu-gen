@@ -829,13 +829,13 @@ Deno.serve(async (req) => {
       return {
         suco1: {
           receita: suco1Selecionado,
-          tipo: tipoUsado,
-          tipo_display: TIPOS_SUCO_CONFIG[tipoUsado].nome_display
+          tipo: tipoPrimario,
+          tipo_display: TIPOS_SUCO_CONFIG[tipoPrimario].nome_display
         },
         suco2: {
           receita: suco2Selecionado || suco1Selecionado,
-          tipo: tipoSecundario || tipoUsado,
-          tipo_display: TIPOS_SUCO_CONFIG[tipoSecundario || tipoUsado].nome_display
+          tipo: tipoSecundario || tipoPrimario,
+          tipo_display: TIPOS_SUCO_CONFIG[tipoSecundario || tipoPrimario].nome_display
         }
       };
     }
