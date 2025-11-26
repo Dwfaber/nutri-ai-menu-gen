@@ -177,6 +177,14 @@ const TIPOS_SUCO_CONFIG = {
   }
 };
 
+// Sistema de fallback automático para tipos de suco sem receitas
+const FALLBACK_SUCOS = {
+  'PRO_MIX': 'VITA_SUCO',
+  'DIET': 'VITA_SUCO',
+  'NATURAL': 'VITA_SUCO',
+  'VITA_SUCO': null // já é o tipo base
+};
+
 // ========================================
 // CONFIGURAÇÕES DO CARDÁPIO
 // ========================================
@@ -749,131 +757,83 @@ Deno.serve(async (req) => {
     // SISTEMA DE SUCOS INTEGRADO
     // ========================================
 
-    // Função simplificada para buscar sucos por tipo
+    // Função CORRIGIDA para buscar sucos por tipo usando JOIN
     async function buscarSucosPorTipo(tipo: string) {
       console.log(`🧃 Buscando sucos do tipo: ${tipo}`);
       
-      // Buscar primeiro nas receitas, depois usar ingredientes como fallback
-      let query;
-      let usandoFallback = false;
-      
-      switch(tipo) {
-        case 'PRO_MIX':
-          // Tentar buscar diretamente nas receitas
-          query = supabase
-            .from('receitas_legado')
-            .select('receita_id_legado, nome_receita, categoria_descricao')
-            .in('categoria_descricao', ['Suco 1', 'Suco 2'])
-            .ilike('nome_receita', '%PRÓ MIX%')
-            .eq('inativa', false);
-          break;
-          
-        case 'VITA_SUCO':
-          query = supabase
-            .from('receitas_legado')
-            .select('receita_id_legado, nome_receita, categoria_descricao')
-            .in('categoria_descricao', ['Suco 1', 'Suco 2'])
-            .ilike('nome_receita', '%VITA SUCO%')
-            .eq('inativa', false);
-          break;
-          
-        case 'NATURAL':
-          query = supabase
-            .from('receitas_legado')
-            .select('receita_id_legado, nome_receita, categoria_descricao')
-            .in('categoria_descricao', ['Suco 1', 'Suco 2', 'Bebidas'])
-            .ilike('nome_receita', '%SUCO NATURAL%')
-            .eq('inativa', false);
-          break;
-          
-        case 'DIET':
-          query = supabase
-            .from('receitas_legado')
-            .select('receita_id_legado, nome_receita, categoria_descricao')
-            .eq('categoria_descricao', 'Suco Diet')
-            .eq('inativa', false);
-          break;
-          
-        default:
-          throw new Error(`Tipo de suco inválido: ${tipo}`);
-      }
-      
-      let { data, error } = await query;
-      
-      // Se não encontrou nas receitas, tentar fallback via ingredientes
-      if ((!data || data.length === 0) && !error) {
-        console.log(`   ⚠️ Nenhum suco encontrado em receitas_legado, tentando fallback via ingredientes...`);
-        usandoFallback = true;
-        
-        let ingredientesQuery;
-        switch(tipo) {
-          case 'PRO_MIX':
-            ingredientesQuery = supabase
-              .from('receita_ingredientes')
-              .select('receita_id_legado, nome, categoria_descricao')
-              .in('categoria_descricao', ['Suco 1', 'Suco 2'])
-              .ilike('nome', '%PRÓ MIX%');
-            break;
-          case 'VITA_SUCO':
-            ingredientesQuery = supabase
-              .from('receita_ingredientes')
-              .select('receita_id_legado, nome, categoria_descricao')
-              .in('categoria_descricao', ['Suco 1', 'Suco 2'])
-              .ilike('nome', '%VITA SUCO%');
-            break;
-          case 'NATURAL':
-            ingredientesQuery = supabase
-              .from('receita_ingredientes')
-              .select('receita_id_legado, nome, categoria_descricao')
-              .ilike('nome', '%SUCO NATURAL%');
-            break;
-          case 'DIET':
-            ingredientesQuery = supabase
-              .from('receita_ingredientes')
-              .select('receita_id_legado, nome, categoria_descricao')
-              .eq('categoria_descricao', 'Suco Diet');
-            break;
-        }
-        
-        const result = await ingredientesQuery;
-        data = result.data;
-        error = result.error;
-      }
-      
-      if (error) {
-        console.error(`❌ Erro ao buscar sucos ${tipo}:`, error);
+      // Construir padrão de busca baseado no tipo
+      const palavrasChave = TIPOS_SUCO_CONFIG[tipo]?.palavras_chave || [];
+      if (palavrasChave.length === 0) {
+        console.error(`❌ Tipo de suco inválido: ${tipo}`);
         return [];
       }
+
+      // Query com JOIN entre receita_ingredientes e receitas_legado
+      const { data: ingredientesData, error: errorIngredientes } = await supabase
+        .from('receita_ingredientes')
+        .select('receita_id_legado, nome, categoria_descricao')
+        .in('categoria_descricao', ['Suco 1', 'Suco 2']);
+
+      if (errorIngredientes) {
+        console.error(`❌ Erro ao buscar ingredientes de sucos:`, errorIngredientes);
+        return [];
+      }
+
+      // Filtrar por tipo de suco usando palavras-chave
+      const ingredientesFiltrados = ingredientesData?.filter(ing => {
+        const nomeUpper = (ing.nome || '').toUpperCase();
+        return palavrasChave.some(palavra => nomeUpper.includes(palavra.toUpperCase()));
+      }) || [];
+
+      if (ingredientesFiltrados.length === 0) {
+        console.log(`   ⚠️ Nenhum ingrediente encontrado para ${tipo}`);
+        return [];
+      }
+
+      // Buscar receitas válidas correspondentes
+      const receitasIds = [...new Set(ingredientesFiltrados.map(ing => ing.receita_id_legado))];
       
-      console.log(`   Total de receitas encontradas${usandoFallback ? ' (via ingredientes)' : ''}: ${data?.length || 0}`);
-      
-      // Remover duplicatas por receita_id_legado
-      const unicos = new Map();
-      data?.forEach(receita => {
-        if (!unicos.has(receita.receita_id_legado)) {
-          // Normalizar estrutura (nome_receita ou nome)
-          unicos.set(receita.receita_id_legado, {
-            receita_id_legado: receita.receita_id_legado,
-            nome: receita.nome_receita || receita.nome,
-            categoria_descricao: receita.categoria_descricao
-          });
-        }
-      });
-      
-      const resultado = Array.from(unicos.values());
-      console.log(`   🎯 Receitas únicas: ${resultado.length}`);
-      
-      return resultado;
+      const { data: receitasData, error: errorReceitas } = await supabase
+        .from('receitas_legado')
+        .select('receita_id_legado, nome_receita, categoria_descricao, inativa')
+        .in('receita_id_legado', receitasIds)
+        .eq('inativa', false);
+
+      if (errorReceitas) {
+        console.error(`❌ Erro ao buscar receitas:`, errorReceitas);
+        return [];
+      }
+
+      const receitasValidas = receitasData?.map(r => ({
+        receita_id_legado: r.receita_id_legado,
+        nome: r.nome_receita,
+        categoria_descricao: r.categoria_descricao
+      })) || [];
+
+      console.log(`   ✅ ${tipo}: ${receitasValidas.length} receitas válidas encontradas`);
+      return receitasValidas;
     }
 
-    // Função para selecionar sucos para cardápio
+    // Função para selecionar sucos com FALLBACK automático
     async function selecionarSucosParaCardapio(tipoPrimario: string, tipoSecundario: string | null = null) {
       console.log(`🧃 Selecionando sucos: Primário=${tipoPrimario}, Secundário=${tipoSecundario || 'mesmo tipo'}`);
 
-      const suco1Opcoes = await buscarSucosPorTipo(tipoPrimario);
+      // Tentar buscar tipo primário
+      let suco1Opcoes = await buscarSucosPorTipo(tipoPrimario);
+      let tipoEfetivo = tipoPrimario;
       
+      // Se não encontrou, usar fallback
       if (suco1Opcoes.length === 0) {
-        throw new Error(`Nenhum suco encontrado para o tipo: ${tipoPrimario}`);
+        const fallbackTipo = FALLBACK_SUCOS[tipoPrimario];
+        if (fallbackTipo) {
+          console.log(`   ⚠️ ${tipoPrimario} não tem receitas, usando fallback: ${fallbackTipo}`);
+          suco1Opcoes = await buscarSucosPorTipo(fallbackTipo);
+          tipoEfetivo = fallbackTipo;
+        }
+      }
+
+      if (suco1Opcoes.length === 0) {
+        throw new Error(`Nenhum suco encontrado para o tipo ${tipoPrimario} (nem fallback ${FALLBACK_SUCOS[tipoPrimario] || 'N/A'})`);
       }
 
       // Seleção do Suco 1
@@ -881,14 +841,27 @@ Deno.serve(async (req) => {
 
       // Seleção do Suco 2
       let suco2Selecionado;
+      let tipoEfetivoSuco2 = tipoSecundario || tipoEfetivo;
       
       if (tipoSecundario && tipoSecundario !== tipoPrimario) {
         // Dois tipos diferentes
-        const suco2Opcoes = await buscarSucosPorTipo(tipoSecundario);
+        let suco2Opcoes = await buscarSucosPorTipo(tipoSecundario);
+        
+        // Fallback para suco 2 também
+        if (suco2Opcoes.length === 0) {
+          const fallbackTipo = FALLBACK_SUCOS[tipoSecundario];
+          if (fallbackTipo) {
+            console.log(`   ⚠️ ${tipoSecundario} não tem receitas, usando fallback: ${fallbackTipo}`);
+            suco2Opcoes = await buscarSucosPorTipo(fallbackTipo);
+            tipoEfetivoSuco2 = fallbackTipo;
+          }
+        }
+        
         if (suco2Opcoes.length > 0) {
           suco2Selecionado = suco2Opcoes[Math.floor(Math.random() * suco2Opcoes.length)];
         } else {
           suco2Selecionado = suco1Selecionado;
+          tipoEfetivoSuco2 = tipoEfetivo;
         }
       } else {
         // Mesmo tipo, tentar sabor diferente
@@ -903,19 +876,19 @@ Deno.serve(async (req) => {
         }
       }
 
-      console.log(`   Suco 1: ${suco1Selecionado.nome} (${suco1Selecionado.receita_id_legado})`);
-      console.log(`   Suco 2: ${suco2Selecionado?.nome || suco1Selecionado.nome} (${suco2Selecionado?.receita_id_legado || suco1Selecionado.receita_id_legado})`);
+      console.log(`   Suco 1: ${suco1Selecionado.nome} (${suco1Selecionado.receita_id_legado}) [${tipoEfetivo}]`);
+      console.log(`   Suco 2: ${suco2Selecionado?.nome || suco1Selecionado.nome} (${suco2Selecionado?.receita_id_legado || suco1Selecionado.receita_id_legado}) [${tipoEfetivoSuco2}]`);
 
       return {
         suco1: {
           receita: suco1Selecionado,
-          tipo: tipoPrimario,
-          tipo_display: TIPOS_SUCO_CONFIG[tipoPrimario].nome_display
+          tipo: tipoEfetivo,
+          tipo_display: TIPOS_SUCO_CONFIG[tipoEfetivo].nome_display
         },
         suco2: {
           receita: suco2Selecionado || suco1Selecionado,
-          tipo: tipoSecundario || tipoPrimario,
-          tipo_display: TIPOS_SUCO_CONFIG[tipoSecundario || tipoPrimario].nome_display
+          tipo: tipoEfetivoSuco2,
+          tipo_display: TIPOS_SUCO_CONFIG[tipoEfetivoSuco2].nome_display
         }
       };
     }

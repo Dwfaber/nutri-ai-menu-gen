@@ -525,7 +525,7 @@ async function upsertData(supabaseClient: any, tableName: string, data: any[], b
     'receita_ingredientes': 'receita_produto_id',
     'produtos_base': 'produto_base_id',
     'custos_filiais': 'solicitacao_filial_custo_id',
-    'co_solicitacao_produto_listagem': 'solicitacao_produto_listagem_id',
+    'co_solicitacao_produto_listagem': 'solicitacao_id,produto_base_id',
     'contratos_corporativos': 'empresa_id_legado,filial_id_legado',
     'guarnicoes_disponiveis': 'produto_base_id',
     'proteinas_disponiveis': 'produto_base_id,subcategoria',
